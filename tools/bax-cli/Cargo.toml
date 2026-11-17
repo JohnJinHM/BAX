@@ -1,0 +1,29 @@
+[package]
+name = "bax-cli"
+description = "BAX 的开发与验证命令行：日志回放、接口探测、无界面运行"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "bax"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+bax-batrace.workspace = true
+bax-core.workspace = true
+bax-engine.workspace = true
+bax-gamelog.workspace = true
+bax-store.workspace = true
+clap.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
