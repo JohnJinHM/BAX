@@ -10,9 +10,13 @@ BAX 自身采用 MIT 许可（见 [LICENSE](LICENSE)）。BAX 中移植自原型
 
 移植或实质性改写原型代码时，在这里登记。
 
-| BAX 文件 | 原型来源 | 说明 |
+| BAX 文件 | 原型来源（`src/ba_elo_overlay.py`） | 说明 |
 |---|---|---|
-| — | — | 尚未移植任何代码 |
+| `crates/bax-gamelog/src/discovery.rs` | `_steam_library_dirs`、`find_game_logs` | 注册表与 `libraryfolders.vdf` 定位 Steam 库，候选目录与兜底路径 |
+| `crates/bax-gamelog/src/parse.rs` | `LogWatcher` 及其正则 `RE_FIGHT`、`RE_CLIENT`、`RE_PLAYER`、`RE_PERSONA` | 改为按记录解析并带时间；保留空名字；增加生命周期、加载、场景就绪、结束与重连 |
+| `crates/bax-gamelog/src/tail.rs` | `LogWatcher.run`、`_latest` | 按偏移量增量读取最新日志；改为按字节切行并处理截断与换文件 |
+| `crates/bax-batrace/src/client.rs` | `fetch_json` | 接口路径、请求头、默认不走代理、检查返回的是 JSON |
+| `crates/bax-engine/src/session.rs`、`config.rs` | `EloService`、`_warm`、`_fill_levels`，常量 `WORKERS`、`INFO_TIMEOUT` | 5 路并发、单人请求 8 秒超时、旧资料兜底、换局后丢弃旧结果、12 秒与 24 秒后重试 |
 
 ### 许可全文
 

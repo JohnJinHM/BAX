@@ -8,17 +8,14 @@
 | [architecture/overview.md](architecture/overview.md) | 总体架构：模块、数据流、仓库结构、存储与通信 | 系统怎么组成 |
 | [adr/](adr/README.md) | 架构决策记录 | 为什么这样定 |
 | [validation/](validation/README.md) | 可行性验证的进度与记录 | 实测结果如何，影响了哪些设计 |
+| [reference/gamelog.md](reference/gamelog.md) | 游戏日志：文件、记录格式、事件与取值 | 日志里写了什么，怎么读 |
+| [reference/batrace-api.md](reference/batrace-api.md) | BATrace 接口：路径、错误分类、字段含义与特殊取值 | 接口返回什么，哪些值要特殊对待 |
+| [guides/development.md](guides/development.md) | 开发环境、构建、测试与命令行工具 | 怎么在本机把项目跑起来 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 分支、提交、版本与发布约定 | 怎么提交改动 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 变更日志 | 每个版本变了什么 |
 | [../NOTICE.md](../NOTICE.md) | 原型来源与许可声明 | 复用了谁的代码 |
 
-以下目录在有内容时创建：
-
-| 位置 | 内容 |
-|---|---|
-| `reference/` | 外部数据的字段级说明：游戏日志事件、BATrace 接口响应、统计口径 |
-| `guides/` | 操作说明：开发环境、构建与发布、实机验收清单 |
-| `assets/` | 文档引用的图片 |
+`reference/` 之后还会加入统计口径；`guides/` 之后还会加入构建发布与实机验收清单。`assets/`（文档引用的图片）在有内容时创建。
 
 ## 每个事实只写在一处
 
