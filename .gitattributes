@@ -1,0 +1,28 @@
+# 仓库内统一 LF，工作区也检出为 LF
+* text=auto eol=lf
+
+# Windows 脚本必须保持 CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 测试样本按原始字节保存：日志解析要测 CRLF、半行和 UTF-8 边界，不能被换行规范化改写
+/fixtures/** -text
+
+# 二进制
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.woff2 binary
+*.ttf binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+
+# 锁文件不参与逐行审阅
+Cargo.lock linguist-generated=true
+pnpm-lock.yaml linguist-generated=true -diff

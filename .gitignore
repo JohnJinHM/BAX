@@ -1,0 +1,40 @@
+# Rust
+target/
+
+# 前端
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Tauri 生成物（capabilities 自动补全用的 schema）
+src-tauri/gen/schemas/
+
+# 本地数据：数据库、原始抓取、真实日志，可能包含他人玩家 ID 与名称
+/.local/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# 日志。游戏日志本身就是 .log，脱敏后的样本放在 fixtures/ 下需要入库
+*.log
+!/fixtures/**/*.log
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 系统与编辑器
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code 本机设置
+.claude/settings.local.json
