@@ -153,6 +153,7 @@ dependencies = [
  "bax-gamelog",
  "bax-store",
  "clap",
+ "rusqlite",
  "serde_json",
  "tokio",
  "tracing",

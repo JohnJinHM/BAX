@@ -1,0 +1,701 @@
+//! 引擎的端到端测试：真实的日志文件、本地模拟的 BATrace、手动拨动的时钟。
+
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use bax_batrace::{ClientConfig, ErrorKind};
+use bax_core::{
+    BattleClock, ClockSource, LogEvent, MatchId, Phase, PlayerId, RoomKind, RoomStatus,
+    RosterEntry, Team, Timestamp, Tracker,
+};
+use bax_engine::{Engine, EngineConfig, FetchState, ManualClock, PlayerView, Snapshot};
+use bax_gamelog::{LogTime, LogZone};
+use bax_store::{ProfileUpdate, Store};
+use wiremock::matchers::{method, path, query_param};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
+
+const LOG_FILE: &str = "Gamelog__2026_11_16__18_51.log";
+const UTC: LogZone = LogZone::Fixed { offset_seconds: 0 };
+const ME: u64 = 500;
+
+/// 按玩家 ID 生成资料：名字 `API-<id>`，ELO 为 1000 + ID。
+#[derive(Debug, Clone, Default)]
+struct ProfileResponder {
+    delay: Duration,
+}
+
+impl Respond for ProfileResponder {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let id: u64 = request
+            .url
+            .query_pairs()
+            .find(|(k, _)| k == "stbid")
+            .and_then(|(_, v)| v.parse().ok())
+            .unwrap_or(0);
+        let body = serde_json::json!({
+            "info": {
+                "id": id,
+                "name": format!("API-{id}"),
+                "level": 10,
+                "rating": 1000.0 + id as f64,
+                "rank": 5,
+                "ratingGames": 20
+            },
+            "statInfo": {
+                "fightsCountRt": 20,
+                "winCountRt": 12,
+                "lossCountRt": 8,
+                "leaveCountRt": 0,
+                "unitsKilledCountRt": 300,
+                "unitsLostCountRt": 200
+            },
+            "last_fights_data": []
+        });
+        ResponseTemplate::new(200)
+            .set_body_raw(body.to_string(), "application/json")
+            .set_delay(self.delay)
+    }
+}
+
+struct Fixture {
+    dir: tempfile::TempDir,
+    logs: PathBuf,
+    server: MockServer,
+    clock: ManualClock,
+}
+
+impl Fixture {
+    async fn new() -> Fixture {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let logs = dir.path().join("GameLogs");
+        std::fs::create_dir_all(&logs).expect("建日志目录");
+        Fixture {
+            dir,
+            logs,
+            server: MockServer::start().await,
+            clock: ManualClock::new(ts("18:55:00.000")),
+        }
+    }
+
+    async fn serve_profiles(&self) {
+        Mock::given(method("GET"))
+            .and(path("/api/players/info"))
+            .respond_with(ProfileResponder::default())
+            .mount(&self.server)
+            .await;
+    }
+
+    fn store_path(&self) -> PathBuf {
+        bax_engine::store_path(self.dir.path())
+    }
+
+    fn config(&self) -> EngineConfig {
+        let mut config = EngineConfig::new(self.dir.path());
+        config.log_dir = Some(self.logs.clone());
+        config.api = ClientConfig {
+            base_url: self.server.uri(),
+            timeout: Duration::from_secs(3),
+            player_info_timeout: Duration::from_secs(3),
+            ..ClientConfig::default()
+        };
+        config.log_zone = UTC;
+        config.log_poll_interval = Duration::from_millis(20);
+        config.tick_interval = Duration::from_millis(20);
+        config.retry_delays = vec![Duration::from_secs(5)];
+        config
+    }
+
+    fn start(&self) -> Engine {
+        self.start_with(self.config())
+    }
+
+    fn start_with(&self, config: EngineConfig) -> Engine {
+        Engine::start(config, Arc::new(self.clock.clone())).expect("引擎启动")
+    }
+
+    fn append(&self, text: &str) {
+        append_to(&self.logs.join(LOG_FILE), text);
+    }
+
+    /// 每名玩家被请求了几次，按 ID 排序。
+    async fn requests(&self) -> Vec<(u64, usize)> {
+        let mut counts = std::collections::BTreeMap::new();
+        for request in self.server.received_requests().await.unwrap_or_default() {
+            let id: u64 = request
+                .url
+                .query_pairs()
+                .find(|(k, _)| k == "stbid")
+                .and_then(|(_, v)| v.parse().ok())
+                .unwrap_or(0);
+            *counts.entry(id).or_default() += 1;
+        }
+        counts.into_iter().collect()
+    }
+}
+
+fn append_to(path: &Path, text: &str) {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("打开日志");
+    file.write_all(text.as_bytes()).expect("写入日志");
+}
+
+/// 2026-11-16 当天的时刻，按 UTC 换算。
+fn ts(time: &str) -> Timestamp {
+    LogTime::parse_bracketed(&format!("[2026-11-16 {time}]"))
+        .expect("合法时间")
+        .to_utc(UTC)
+}
+
+fn rec(time: &str, message: &str) -> String {
+    format!("[2026-11-16 {time}]\n{message}\n\n")
+}
+
+fn entered(id: u64, room: &str, status: &str, time: &str) -> String {
+    rec(
+        time,
+        &format!(
+            "Log: [NET_ROOM] Network lifecycle | Stage=Game | Action=Entered | Route=Direct | RoomType={room} | FightId={id} | Status={status}"
+        ),
+    )
+}
+
+fn waiting_room(id: u64, time: &str) -> String {
+    entered(id, "WaitingRoom", "WaitClients", time)
+        + &rec(
+            time,
+            &format!("Log: [NET_ROOM] WaitingRoom entered, fight id: {id}"),
+        )
+}
+
+fn early_client(id: u64, name: &str, time: &str) -> String {
+    rec(
+        time,
+        &format!("Log: Room: (WaitingRoom|1), Client: ({name}|{id})"),
+    )
+}
+
+fn player_list(time: &str, roster: &[(u64, &str, &str)]) -> String {
+    let mut text = format!("[2026-11-16 {time}]\nLog: Player list: \n");
+    for (id, name, team) in roster {
+        text += &format!("ID: {id}, Name: {name}, Team: {team}\n");
+    }
+    text + "\n"
+}
+
+fn game_room(id: u64, time: &str, roster: &[(u64, &str, &str)]) -> String {
+    rec(
+        time,
+        "Log: Start loading battle... map: Airport, scenario: - Airport_network",
+    ) + &rec(
+        time,
+        &format!("Log: FID:{id} v1.2.2.1 - Me (2026-11-17 02:52)"),
+    ) + &entered(id, "GameRoom", "WaitClients", time)
+        + &player_list(time, roster)
+}
+
+fn scenario_loaded(time: &str) -> String {
+    rec(time, "Log: Scenario controller loaded")
+}
+
+fn match_ended(id: u64, time: &str) -> String {
+    rec(
+        time,
+        &format!(
+            "Log: [NET_ROOM] Network traffic history | Cause=MatchEnded | FightId={id} | Samples=27"
+        ),
+    )
+}
+
+const ROSTER: [(u64, &str, &str); 4] = [
+    (101, "Ash", "Alpha"),
+    (102, "", "Alpha"),
+    (201, "Dune", "Bravo"),
+    (ME, "Me", "Bravo"),
+];
+
+fn finished_match(id: u64) -> String {
+    waiting_room(id, "18:52:05.318")
+        + &game_room(id, "18:53:01.979", &ROSTER)
+        + &scenario_loaded("18:53:33.861")
+        + &match_ended(id, "19:06:20.100")
+}
+
+async fn wait_for(
+    engine: &Engine,
+    what: &str,
+    predicate: impl Fn(&Snapshot) -> bool,
+) -> Arc<Snapshot> {
+    let mut rx = engine.subscribe();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let snapshot = rx.borrow_and_update().clone();
+        if predicate(&snapshot) {
+            return snapshot;
+        }
+        if tokio::time::timeout_at(deadline, rx.changed())
+            .await
+            .is_err()
+        {
+            panic!("等待超时：{what}\n最后的快照：{snapshot:#?}");
+        }
+    }
+}
+
+fn player(snapshot: &Snapshot, id: u64) -> Option<&PlayerView> {
+    snapshot
+        .current
+        .as_ref()?
+        .players
+        .iter()
+        .find(|p| p.id == PlayerId(id))
+}
+
+fn is_current_profile(snapshot: &Snapshot, id: u64) -> bool {
+    player(snapshot, id).is_some_and(|p| p.profile_current)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn backfill_of_a_finished_match_makes_no_requests() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    let m = snapshot.current.as_ref().expect("有当前比赛");
+    assert_eq!(m.match_id, MatchId(9_000_001));
+    assert_eq!(m.phase, Phase::Ended);
+    assert!(m.roster_known);
+    assert_eq!(m.map.as_deref(), Some("Airport"));
+    assert_eq!(m.self_team, Some(Team::Bravo));
+    let names: Vec<Option<&str>> = m.players.iter().map(|p| p.name.as_deref()).collect();
+    assert_eq!(names, vec![Some("Ash"), None, Some("Dune"), Some("Me")]);
+    assert!(m.players.iter().all(|p| p.fetch == FetchState::Idle));
+    assert_eq!(snapshot.self_id, Some(PlayerId(ME)));
+    assert!(
+        snapshot
+            .log
+            .file
+            .as_deref()
+            .is_some_and(|f| f.ends_with(LOG_FILE))
+    );
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(fx.requests().await.is_empty(), "已经结束的历史比赛不发请求");
+    engine.shutdown().await;
+
+    let store = Store::open(&fx.store_path()).expect("打开长期库");
+    let record = store
+        .match_record(MatchId(9_000_001))
+        .expect("读取")
+        .expect("比赛已记录");
+    assert_eq!(record.phase, Phase::Ended);
+    assert_eq!(
+        store.setting::<PlayerId>("self.playerId").expect("读取"),
+        Some(PlayerId(ME)),
+        "记住了本机玩家"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_live_match_fetches_each_player_once() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    let engine = fx.start();
+    wait_for(&engine, "空目录补读完成", |s| s.log.ready).await;
+
+    // 等待室里先到的两个人立即开始查
+    fx.append(
+        &(waiting_room(9_000_001, "18:52:05.318")
+            + &early_client(101, "Ash", "18:52:20.000")
+            + &early_client(201, "Dune", "18:52:21.000")),
+    );
+    let snapshot = wait_for(&engine, "先到的玩家查完", |s| {
+        is_current_profile(s, 101) && is_current_profile(s, 201)
+    })
+    .await;
+    let m = snapshot.current.as_ref().expect("有当前比赛");
+    assert!(!m.roster_known);
+    assert_eq!(m.phase, Phase::WaitingRoom);
+
+    // 名单到了，只补查剩下的人
+    fx.append(&(game_room(9_000_001, "18:53:01.979", &ROSTER) + &scenario_loaded("18:53:33.861")));
+    let snapshot = wait_for(&engine, "全部玩家查完并进入对局", |s| {
+        ROSTER.iter().all(|(id, _, _)| is_current_profile(s, *id))
+            && s.current
+                .as_ref()
+                .is_some_and(|m| m.phase == Phase::InBattle)
+    })
+    .await;
+    assert_eq!(
+        fx.requests().await,
+        vec![(101, 1), (102, 1), (201, 1), (ME, 1)],
+        "每人只查一次"
+    );
+
+    let m = snapshot.current.as_ref().expect("有当前比赛");
+    assert_eq!(
+        m.clock,
+        Some(BattleClock {
+            start_at: ts("18:54:33.861"),
+            source: ClockSource::LogEstimate
+        })
+    );
+    let ash = player(&snapshot, 101).expect("有 Ash");
+    assert_eq!(ash.name.as_deref(), Some("API-101"), "接口资料里的名字优先");
+    assert_eq!(ash.log_name.as_deref(), Some("Ash"));
+    assert_eq!(ash.team, Some(Team::Alpha));
+    let profile = ash.profile.as_ref().expect("有资料");
+    assert_eq!(profile.rating, Some(1101.0));
+    assert_eq!(
+        profile.ranked.as_ref().and_then(|r| r.win_rate),
+        Some(12.0 / 20.0)
+    );
+    assert_eq!(ash.encounters.total, 0);
+
+    let nameless = player(&snapshot, 102).expect("有空名字的玩家");
+    assert_eq!(nameless.log_name, None);
+    assert_eq!(
+        nameless.name.as_deref(),
+        Some("API-102"),
+        "空名字由接口资料补全"
+    );
+
+    assert!(player(&snapshot, ME).is_some_and(|p| p.is_self));
+    let alpha = &m.teams[0];
+    assert_eq!(alpha.team, Team::Alpha);
+    assert_eq!((alpha.players, alpha.rated), (2, 2));
+    assert_eq!(alpha.average_rating, Some(1101.5));
+    assert_eq!(snapshot.api.in_flight, 0);
+    assert_eq!(snapshot.api.last_error, None);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cached_profiles_show_first_and_failures_are_retried() {
+    let fx = Fixture::new().await;
+    {
+        let mut store = Store::open(&fx.store_path()).expect("建库");
+        store
+            .save_profile(
+                &ProfileUpdate {
+                    id: PlayerId(101),
+                    name: Some("Old Ash".into()),
+                    steam_id: None,
+                    level: Some(9),
+                    rating: Some(1500.0),
+                    rank: None,
+                    rating_games: None,
+                    raw_json: r#"{"info":{"id":101,"name":"Old Ash","level":9,"rating":1500}}"#
+                        .into(),
+                },
+                ts("12:00:00.000"),
+            )
+            .expect("写入旧资料");
+    }
+    Mock::given(method("GET"))
+        .and(path("/api/players/info"))
+        .and(query_param("stbid", "101"))
+        .respond_with(ResponseTemplate::new(503))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&fx.server)
+        .await;
+    fx.serve_profiles().await;
+
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| s.log.ready).await;
+    fx.append(
+        &(waiting_room(9_000_001, "18:52:05.318")
+            + &game_room(
+                9_000_001,
+                "18:53:01.979",
+                &[(101, "Ash", "Alpha"), (201, "Dune", "Bravo")],
+            )),
+    );
+
+    let snapshot = wait_for(&engine, "第一次请求失败", |s| {
+        player(s, 101).is_some_and(|p| matches!(p.fetch, FetchState::Failed { .. }))
+    })
+    .await;
+    let ash = player(&snapshot, 101).expect("有 Ash");
+    assert_eq!(
+        ash.fetch,
+        FetchState::Failed {
+            kind: ErrorKind::Server,
+            retry_at: Some(ts("18:55:05.000"))
+        }
+    );
+    // 失败期间照样显示以前的资料，并标明不是这场比赛取得的
+    assert_eq!(ash.profile.as_ref().and_then(|p| p.rating), Some(1500.0));
+    assert_eq!(ash.name.as_deref(), Some("Old Ash"));
+    assert!(!ash.profile_current);
+    assert_eq!(
+        snapshot.api.last_error.as_ref().map(|e| e.kind),
+        Some(ErrorKind::Server)
+    );
+
+    fx.clock.advance_millis(5_000);
+    let snapshot = wait_for(&engine, "重试成功", |s| is_current_profile(s, 101)).await;
+    let ash = player(&snapshot, 101).expect("有 Ash");
+    assert_eq!(ash.profile.as_ref().and_then(|p| p.rating), Some(1101.0));
+    assert_eq!(ash.fetch, FetchState::Idle);
+    assert_eq!(snapshot.api.last_error, None);
+    assert_eq!(fx.requests().await, vec![(101, 2), (201, 1)]);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn results_for_a_previous_match_do_not_leak_into_the_next() {
+    let fx = Fixture::new().await;
+    Mock::given(method("GET"))
+        .and(path("/api/players/info"))
+        .and(query_param("stbid", "101"))
+        .respond_with(ProfileResponder {
+            delay: Duration::from_millis(700),
+        })
+        .with_priority(1)
+        .mount(&fx.server)
+        .await;
+    fx.serve_profiles().await;
+
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| s.log.ready).await;
+    fx.append(
+        &(waiting_room(9_000_001, "18:52:05.318")
+            + &game_room(
+                9_000_001,
+                "18:53:01.979",
+                &[(101, "Ash", "Alpha"), (ME, "Me", "Bravo")],
+            )),
+    );
+    wait_for(&engine, "慢请求已发出", |s| {
+        player(s, 101).is_some_and(|p| p.fetch == FetchState::Fetching)
+    })
+    .await;
+
+    // 慢请求还没回来，下一场就开始了
+    fx.append(
+        &(waiting_room(9_000_002, "18:54:00.000")
+            + &game_room(
+                9_000_002,
+                "18:54:30.000",
+                &[(201, "Dune", "Alpha"), (ME, "Me", "Bravo")],
+            )),
+    );
+    wait_for(&engine, "第二场的玩家查完", |s| {
+        s.current
+            .as_ref()
+            .is_some_and(|m| m.match_id == MatchId(9_000_002))
+            && is_current_profile(s, 201)
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
+
+    let snapshot = engine.snapshot();
+    let m = snapshot.current.as_ref().expect("有当前比赛");
+    assert_eq!(m.match_id, MatchId(9_000_002));
+    let ids: Vec<u64> = m.players.iter().map(|p| p.id.get()).collect();
+    assert_eq!(ids, vec![201, ME], "上一场的结果不会出现在这一场");
+    assert_eq!(snapshot.api.in_flight, 0);
+    engine.shutdown().await;
+
+    let store = Store::open(&fx.store_path()).expect("打开长期库");
+    let ash = store.player(PlayerId(101)).expect("读取").expect("有记录");
+    assert!(ash.fetched_at.is_some(), "迟到的结果照样保存");
+    assert_eq!(ash.rating, Some(1101.0));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_rejoin_after_restart_restores_the_saved_clock() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    let id = MatchId(9_000_001);
+
+    // 上一次运行时记下的比赛
+    let saved = {
+        let mut tracker = Tracker::default();
+        let roster = vec![
+            RosterEntry {
+                id: PlayerId(101),
+                name: Some("Ash".into()),
+                team: Team::Alpha,
+            },
+            RosterEntry {
+                id: PlayerId(ME),
+                name: Some("Me".into()),
+                team: Team::Bravo,
+            },
+        ];
+        tracker.apply(
+            ts("18:52:05.318"),
+            &LogEvent::RoomEntered {
+                room: RoomKind::WaitingRoom,
+                match_id: id,
+                status: Some(RoomStatus::WaitClients),
+            },
+        );
+        tracker.apply(
+            ts("18:52:52.324"),
+            &LogEvent::LoadingStarted {
+                map: "Airport".into(),
+                scenario: None,
+            },
+        );
+        tracker.apply(
+            ts("18:53:01.979"),
+            &LogEvent::RoomEntered {
+                room: RoomKind::GameRoom,
+                match_id: id,
+                status: Some(RoomStatus::WaitClients),
+            },
+        );
+        tracker.apply(
+            ts("18:53:01.979"),
+            &LogEvent::PlayerList { players: roster },
+        );
+        tracker.apply(ts("18:53:33.861"), &LogEvent::ScenarioLoaded);
+        let state = tracker.current().expect("有比赛");
+        let mut store = Store::open(&fx.store_path()).expect("建库");
+        store.record_match(state).expect("记录");
+        state.clock.expect("有计时基准")
+    };
+
+    // 游戏崩溃重启，新日志里只有重连
+    fx.clock.set(ts("19:01:00.000"));
+    fx.append(
+        &(rec("18:59:00.000", "Log: Start reconnect to battle")
+            + &entered(9_000_001, "WaitingRoom", "InProcess", "18:59:01.000")
+            + &rec(
+                "18:59:01.000",
+                "Log: Start loading battle... map: Airport, scenario: - Airport_network",
+            )
+            + &scenario_loaded("18:59:08.000")
+            + &entered(9_000_001, "GameRoom", "InProcess", "18:59:08.000")
+            + &player_list(
+                "18:59:08.000",
+                &[(101, "Ash", "Alpha"), (ME, "Me", "Bravo")],
+            )),
+    );
+
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    let m = snapshot.current.as_ref().expect("有当前比赛");
+    assert!(m.rejoined);
+    assert_eq!(m.phase, Phase::InBattle);
+    assert_eq!(m.clock, Some(saved), "沿用上次记下的计时基准");
+
+    // 补读结束时比赛仍在进行：刷新玩家资料
+    wait_for(&engine, "刷新玩家资料", |s| {
+        is_current_profile(s, 101) && is_current_profile(s, ME)
+    })
+    .await;
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn switching_log_dirs_resets_the_match_and_is_remembered() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+    let other = fx.dir.path().join("OtherLogs");
+    std::fs::create_dir_all(&other).expect("建目录");
+    append_to(&other.join(LOG_FILE), &finished_match(9_000_002));
+
+    let engine = fx.start();
+    wait_for(&engine, "读到第一个目录的比赛", |s| {
+        s.current
+            .as_ref()
+            .is_some_and(|m| m.match_id == MatchId(9_000_001))
+    })
+    .await;
+
+    engine
+        .set_log_dir(Some(other.clone()))
+        .await
+        .expect("引擎在运行");
+    let snapshot = wait_for(&engine, "读到第二个目录的比赛", |s| {
+        s.log.ready
+            && s.current
+                .as_ref()
+                .is_some_and(|m| m.match_id == MatchId(9_000_002))
+    })
+    .await;
+    let other_text = other.to_string_lossy().into_owned();
+    assert_eq!(snapshot.log.dir.as_deref(), Some(other_text.as_str()));
+    engine.shutdown().await;
+
+    // 下次启动不指定目录时，用记住的那个
+    let mut config = fx.config();
+    config.log_dir = None;
+    let engine = fx.start_with(config);
+    let snapshot = wait_for(&engine, "重启后读到记住的目录", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    assert_eq!(snapshot.log.dir.as_deref(), Some(other_text.as_str()));
+    assert_eq!(
+        snapshot.current.as_ref().map(|m| m.match_id),
+        Some(MatchId(9_000_002))
+    );
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_missing_log_dir_is_reported_and_picked_up_once_created() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    let later = fx.dir.path().join("NotYet");
+    let mut config = fx.config();
+    config.log_dir = Some(later.clone());
+
+    let engine = fx.start_with(config);
+    let snapshot = wait_for(&engine, "报告目录不存在", |s| s.log.error.is_some()).await;
+    assert!(!snapshot.log.ready);
+    assert!(snapshot.current.is_none());
+
+    std::fs::create_dir_all(&later).expect("建目录");
+    append_to(&later.join(LOG_FILE), &finished_match(9_000_001));
+    let snapshot = wait_for(&engine, "目录出现后读到比赛", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    assert_eq!(snapshot.log.error, None);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn refresh_command_refetches_everyone() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    assert!(fx.requests().await.is_empty());
+
+    engine.refresh_players().await.expect("引擎在运行");
+    wait_for(&engine, "刷新完成", |s| {
+        ROSTER.iter().all(|(id, _, _)| is_current_profile(s, *id))
+    })
+    .await;
+    assert_eq!(
+        fx.requests().await,
+        vec![(101, 1), (102, 1), (201, 1), (ME, 1)]
+    );
+    engine.shutdown().await;
+}

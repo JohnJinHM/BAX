@@ -1,0 +1,730 @@
+//! 对局会话：引擎里唯一维护当前比赛状态的任务。
+//!
+//! 所有输入（日志事件、接口结果、界面命令、计时）都以消息形式进来，按顺序处理，
+//! 状态因此不需要加锁。会话的职责：
+//!
+//! - 把日志事件交给对局跟踪器，把变化写进长期库；
+//! - 为当前比赛的玩家准备资料：先用本地已有的，再按需从接口刷新；
+//! - 每次状态变化后发布一份快照。
+//!
+//! 刷新策略：一名玩家的资料如果不是在这场比赛开始之后取得的，就重新取一次（“每场动态更新”）。
+//! 等待室里先到的玩家立即开始查，名单到了再补齐其余的人。启动时补读出来的历史比赛不发请求，
+//! 只有补读结束时仍在进行的那一场会刷新。
+//!
+//! 请求调度的做法来自 BA-ELO-Overlay（`src/ba_elo_overlay.py`）：`EloService` 的有限并发、
+//! 先用旧资料兜底和换局后丢弃旧结果，`_warm` 的等待室预热，`_fill_levels` 的延时重试。
+
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use bax_batrace::model::PlayerInfoResponse;
+use bax_batrace::{ApiError, BatraceClient, Fetched};
+use bax_core::{MatchId, Phase, PlayerId, Team, Timestamp, Tracker, Update};
+use bax_gamelog::{Origin, WatchItem};
+use bax_store::{EncounterSummary, PlayerRecord, ProfileUpdate, Store};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::time::MissedTickBehavior;
+
+use crate::clock::Clock;
+use crate::config::EngineConfig;
+use crate::logthread::{LogMsg, LogThread, LogTiming};
+use crate::profile::ProfileSummary;
+use crate::snapshot::{
+    ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, Snapshot, TeamSummary,
+};
+
+/// 设置项：本机玩家的 ID。
+pub(crate) const SELF_ID_KEY: &str = "self.playerId";
+/// 设置项：用户指定的日志目录。
+pub(crate) const LOG_DIR_KEY: &str = "log.dir";
+
+pub(crate) const LOG_CHANNEL_CAPACITY: usize = 256;
+
+/// 界面发给会话的命令。
+#[derive(Debug)]
+pub(crate) enum Command {
+    /// 重新获取当前比赛全部玩家的资料，不管是否已经取过。
+    RefreshPlayers,
+    /// 换一个日志目录；`None` 表示改回自动定位。
+    SetLogDir {
+        dir: Option<PathBuf>,
+        done: oneshot::Sender<()>,
+    },
+}
+
+#[derive(Debug)]
+struct FetchResult {
+    player: PlayerId,
+    /// 发起请求时的比赛代次。比赛换了之后到达的结果不再更新界面。
+    generation: u64,
+    at: Timestamp,
+    result: Result<Fetched<PlayerInfoResponse>, ApiError>,
+}
+
+/// 当前比赛里的一名玩家。
+#[derive(Debug)]
+struct Slot {
+    id: PlayerId,
+    log_name: Option<String>,
+    team: Option<Team>,
+    record: Option<PlayerRecord>,
+    profile: Option<ProfileSummary>,
+    encounters: EncounterSummary,
+    fetch: FetchState,
+    failures: usize,
+}
+
+impl Slot {
+    fn fetched_at(&self) -> Option<Timestamp> {
+        self.record.as_ref().and_then(|r| r.fetched_at)
+    }
+
+    /// 资料不是在 `since` 之后取得的，而且没有请求在排队或进行。
+    fn needs_fetch(&self, since: Timestamp) -> bool {
+        self.fetch == FetchState::Idle && self.fetched_at().is_none_or(|at| at < since)
+    }
+}
+
+pub(crate) struct Parts {
+    pub config: EngineConfig,
+    pub clock: Arc<dyn Clock>,
+    pub store: Store,
+    pub client: BatraceClient,
+    pub log_dir: Option<PathBuf>,
+    pub self_hint: Option<PlayerId>,
+    pub snapshot_tx: watch::Sender<Arc<Snapshot>>,
+}
+
+pub(crate) struct Session {
+    config: EngineConfig,
+    clock: Arc<dyn Clock>,
+    store: Store,
+    client: BatraceClient,
+    tracker: Tracker,
+    self_hint: Option<PlayerId>,
+
+    snapshot_tx: watch::Sender<Arc<Snapshot>>,
+    revision: u64,
+    dirty: bool,
+
+    log: LogStatus,
+    log_thread: Option<LogThread>,
+    log_rx: mpsc::Receiver<LogMsg>,
+
+    fetch_tx: mpsc::UnboundedSender<FetchResult>,
+    fetch_rx: mpsc::UnboundedReceiver<FetchResult>,
+    generation: u64,
+    slots: Vec<Slot>,
+    queue: VecDeque<PlayerId>,
+    in_flight: usize,
+    paused_until: Option<Timestamp>,
+    last_error: Option<ApiErrorView>,
+}
+
+impl Session {
+    pub(crate) fn new(parts: Parts) -> Session {
+        let Parts {
+            config,
+            clock,
+            store,
+            client,
+            log_dir,
+            self_hint,
+            snapshot_tx,
+        } = parts;
+        let mut tracker = Tracker::new(config.tracker.clone());
+        tracker.set_self_hint(self_hint);
+        let (fetch_tx, fetch_rx) = mpsc::unbounded_channel();
+        // 先放一个空的接收端，马上由 start_log_thread 换成真正的
+        let (_, log_rx) = mpsc::channel(1);
+        let mut session = Session {
+            config,
+            clock,
+            store,
+            client,
+            tracker,
+            self_hint,
+            snapshot_tx,
+            revision: 0,
+            dirty: false,
+            log: LogStatus::default(),
+            log_thread: None,
+            log_rx,
+            fetch_tx,
+            fetch_rx,
+            generation: 0,
+            slots: Vec::new(),
+            queue: VecDeque::new(),
+            in_flight: 0,
+            paused_until: None,
+            last_error: None,
+        };
+        session.start_log_thread(log_dir);
+        session
+    }
+
+    pub(crate) async fn run(mut self, mut commands: mpsc::Receiver<Command>) {
+        let mut tick = tokio::time::interval(self.config.tick_interval);
+        tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        self.publish();
+        loop {
+            tokio::select! {
+                command = commands.recv() => match command {
+                    Some(command) => self.on_command(command),
+                    // 引擎句柄被丢弃
+                    None => break,
+                },
+                Some(msg) = self.log_rx.recv() => self.on_log(msg),
+                Some(result) = self.fetch_rx.recv() => self.on_fetched(result),
+                _ = tick.tick() => self.on_tick(),
+            }
+            self.dispatch();
+            if self.dirty && self.log.ready {
+                self.publish();
+            }
+        }
+        if let Some(handle) = self.log_thread.as_mut().and_then(LogThread::stop) {
+            let _ = tokio::task::spawn_blocking(move || handle.join()).await;
+        }
+    }
+
+    // ------------------------------------------------------------ 输入
+
+    fn on_command(&mut self, command: Command) {
+        match command {
+            Command::RefreshPlayers => {
+                let ids: Vec<PlayerId> = self.slots.iter().map(|s| s.id).collect();
+                for id in ids {
+                    if let Some(slot) = self.slot_mut(id) {
+                        slot.failures = 0;
+                        if matches!(slot.fetch, FetchState::Failed { .. }) {
+                            slot.fetch = FetchState::Idle;
+                        }
+                    }
+                    self.enqueue(id);
+                }
+                self.dirty = true;
+            }
+            Command::SetLogDir { dir, done } => {
+                let saved = match &dir {
+                    Some(dir) => self
+                        .store
+                        .set_setting(LOG_DIR_KEY, &dir.to_string_lossy().into_owned()),
+                    None => self.store.remove_setting(LOG_DIR_KEY).map(|_| ()),
+                };
+                if let Err(err) = saved {
+                    tracing::warn!(error = %err, "保存日志目录设置失败");
+                }
+                self.reset_match_state();
+                self.start_log_thread(dir);
+                self.publish();
+                let _ = done.send(());
+            }
+        }
+    }
+
+    fn on_log(&mut self, msg: LogMsg) {
+        match msg {
+            LogMsg::Searching => {
+                self.log = LogStatus {
+                    searching: true,
+                    ..LogStatus::default()
+                };
+                self.publish();
+            }
+            LogMsg::Watching { dir } => {
+                self.log = LogStatus {
+                    dir: Some(dir.to_string_lossy().into_owned()),
+                    ..LogStatus::default()
+                };
+                self.publish();
+            }
+            LogMsg::Failed { message } => {
+                self.log.error = Some(message);
+                self.publish();
+            }
+            LogMsg::Recovered => {
+                self.log.error = None;
+                self.dirty = true;
+            }
+            LogMsg::Item(item) => self.on_watch_item(item),
+        }
+    }
+
+    fn on_watch_item(&mut self, item: WatchItem) {
+        match item {
+            WatchItem::FileOpened { path, .. } => {
+                self.log.file = Some(path.to_string_lossy().into_owned());
+                self.dirty = true;
+            }
+            WatchItem::Truncated { path } => {
+                tracing::warn!(file = %path.display(), "日志文件被截断，从头重读");
+            }
+            WatchItem::BackfillDone => {
+                self.log.ready = true;
+                let now = self.clock.now();
+                let updates = self.tracker.advance(now);
+                self.handle_updates(updates, true);
+                // 补读结束时还在进行的比赛：用户是在对局中途打开的 BAX
+                if self
+                    .tracker
+                    .current()
+                    .is_some_and(|m| m.phase != Phase::Ended)
+                {
+                    self.enqueue_stale();
+                }
+                self.dirty = true;
+            }
+            WatchItem::Event { origin, event } => {
+                let live = origin == Origin::Live;
+                let at = event.at.to_utc(self.config.log_zone);
+                let mut updates = self.tracker.apply(at, &event.event);
+                if !live {
+                    updates.extend(self.tracker.advance(at));
+                }
+                self.handle_updates(updates, live);
+            }
+        }
+    }
+
+    fn on_tick(&mut self) {
+        if !self.log.ready {
+            return;
+        }
+        let now = self.clock.now();
+        let updates = self.tracker.advance(now);
+        self.handle_updates(updates, true);
+        let due: Vec<PlayerId> = self
+            .slots
+            .iter()
+            .filter(|slot| {
+                matches!(slot.fetch, FetchState::Failed { retry_at: Some(at), .. } if at <= now)
+            })
+            .map(|slot| slot.id)
+            .collect();
+        for id in due {
+            if let Some(slot) = self.slot_mut(id) {
+                slot.fetch = FetchState::Idle;
+            }
+            self.enqueue(id);
+        }
+        if self.paused_until.is_some_and(|until| until <= now) {
+            self.paused_until = None;
+            self.dirty = true;
+        }
+    }
+
+    fn on_fetched(&mut self, result: FetchResult) {
+        self.in_flight = self.in_flight.saturating_sub(1);
+        self.dirty = true;
+        let FetchResult {
+            player,
+            generation,
+            at,
+            result,
+        } = result;
+        let current = generation == self.generation;
+        match result {
+            Ok(fetched) => {
+                self.last_error = None;
+                // 比赛已经换了也照样保存：这份资料本身是有效的
+                if let Err(err) = self
+                    .store
+                    .save_profile(&profile_update(player, &fetched), at)
+                {
+                    tracing::warn!(error = %err, "保存玩家资料失败");
+                }
+                if current {
+                    let record = self.store.player(player).ok().flatten();
+                    if let Some(slot) = self.slot_mut(player) {
+                        slot.failures = 0;
+                        slot.fetch = FetchState::Idle;
+                        slot.profile = record
+                            .as_ref()
+                            .and_then(|r| r.profile_json.as_deref())
+                            .and_then(ProfileSummary::from_json);
+                        slot.record = record;
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::debug!(error = %err, "获取玩家资料失败");
+                if let ApiError::RateLimited { retry_after } = &err {
+                    let pause = retry_after.unwrap_or(self.config.rate_limit_pause);
+                    self.paused_until = Some(at.plus_millis(millis(pause)));
+                }
+                self.last_error = Some(ApiErrorView {
+                    kind: err.kind(),
+                    message: err.to_string(),
+                    at,
+                });
+                let delays = self.config.retry_delays.clone();
+                let paused_until = self.paused_until;
+                if current && let Some(slot) = self.slot_mut(player) {
+                    let retry_at =
+                        (err.is_transient() && slot.failures < delays.len()).then(|| {
+                            let planned = at.plus_millis(millis(delays[slot.failures]));
+                            paused_until.map_or(planned, |until| planned.max(until))
+                        });
+                    slot.failures += 1;
+                    slot.fetch = FetchState::Failed {
+                        kind: err.kind(),
+                        retry_at,
+                    };
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ 对局变化
+
+    fn handle_updates(&mut self, updates: Vec<Update>, live: bool) {
+        if updates.is_empty() {
+            return;
+        }
+        for update in updates {
+            match update {
+                Update::MatchDiscovered { match_id } => self.begin_match(match_id),
+                Update::EarlyPlayers { match_id, players } => {
+                    if self.is_current(match_id) {
+                        for player in players {
+                            self.add_early_player(player, live);
+                        }
+                    }
+                }
+                Update::RosterReady { match_id } => {
+                    if self.is_current(match_id) {
+                        self.apply_roster(live);
+                    }
+                }
+                Update::MatchSuperseded { .. }
+                | Update::ClockSet { .. }
+                | Update::MatchEnded { .. }
+                | Update::Disconnected { .. }
+                | Update::Changed { .. } => {}
+            }
+        }
+        self.learn_self();
+        self.record_current();
+        self.dirty = true;
+    }
+
+    fn is_current(&self, match_id: MatchId) -> bool {
+        self.tracker
+            .current()
+            .is_some_and(|m| m.match_id == match_id)
+    }
+
+    fn begin_match(&mut self, match_id: MatchId) {
+        self.generation += 1;
+        self.slots.clear();
+        self.queue.clear();
+        // 游戏重启后重连进来的比赛，日志给不出计时起点；用当初保存的基准
+        let needs_clock = self
+            .tracker
+            .current()
+            .is_some_and(|m| m.match_id == match_id && m.clock.is_none());
+        if needs_clock {
+            match self.store.match_record(match_id) {
+                Ok(Some(record)) => {
+                    if let Some(clock) = record.clock {
+                        self.tracker.set_clock(match_id, clock);
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => tracing::warn!(error = %err, "读取比赛记录失败"),
+            }
+        }
+    }
+
+    fn add_early_player(&mut self, player: PlayerId, live: bool) {
+        if self.slots.iter().any(|s| s.id == player) {
+            return;
+        }
+        let name = self.tracker.current().and_then(|m| {
+            m.early
+                .iter()
+                .find(|p| p.id == player)
+                .and_then(|p| p.name.clone())
+        });
+        let slot = self.load_slot(player, name, None);
+        self.slots.push(slot);
+        if live {
+            self.enqueue_if_stale(player);
+        }
+    }
+
+    fn apply_roster(&mut self, live: bool) {
+        let Some(roster) = self.tracker.current().map(|m| m.roster.clone()) else {
+            return;
+        };
+        let mut previous = std::mem::take(&mut self.slots);
+        let mut slots = Vec::with_capacity(roster.len());
+        for entry in roster {
+            let slot = match previous.iter().position(|s| s.id == entry.id) {
+                Some(index) => {
+                    let mut slot = previous.swap_remove(index);
+                    slot.team = Some(entry.team);
+                    slot.log_name = entry.name.or(slot.log_name);
+                    slot
+                }
+                None => self.load_slot(entry.id, entry.name, Some(entry.team)),
+            };
+            slots.push(slot);
+        }
+        self.slots = slots;
+        // 没进名单的人：等待室里来过又走了
+        let slots = &self.slots;
+        self.queue.retain(|id| slots.iter().any(|s| s.id == *id));
+        if live {
+            self.enqueue_stale();
+        }
+    }
+
+    fn load_slot(&self, id: PlayerId, log_name: Option<String>, team: Option<Team>) -> Slot {
+        let record = self.store.player(id).unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "读取玩家记录失败");
+            None
+        });
+        let profile = record
+            .as_ref()
+            .and_then(|r| r.profile_json.as_deref())
+            .and_then(ProfileSummary::from_json);
+        let current = self.tracker.current().map(|m| m.match_id);
+        let encounters = self.store.encounters(id, current).unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "统计相遇次数失败");
+            EncounterSummary::default()
+        });
+        Slot {
+            id,
+            log_name,
+            team,
+            record,
+            profile,
+            encounters,
+            fetch: FetchState::Idle,
+            failures: 0,
+        }
+    }
+
+    /// 记住本机玩家的 ID，下次即使名字对不上也能认出来。
+    fn learn_self(&mut self) {
+        let Some(found) = self.tracker.current().and_then(|m| m.self_id) else {
+            return;
+        };
+        if self.self_hint == Some(found) {
+            return;
+        }
+        self.self_hint = Some(found);
+        self.tracker.set_self_hint(Some(found));
+        if let Err(err) = self.store.set_setting(SELF_ID_KEY, &found) {
+            tracing::warn!(error = %err, "保存本机玩家 ID 失败");
+        }
+    }
+
+    fn record_current(&mut self) {
+        if let Some(state) = self.tracker.current()
+            && let Err(err) = self.store.record_match(state)
+        {
+            tracing::warn!(error = %err, match_id = %state.match_id, "保存比赛记录失败");
+        }
+    }
+
+    fn reset_match_state(&mut self) {
+        let mut tracker = Tracker::new(self.config.tracker.clone());
+        tracker.set_self_hint(self.self_hint);
+        self.tracker = tracker;
+        self.generation += 1;
+        self.slots.clear();
+        self.queue.clear();
+    }
+
+    fn start_log_thread(&mut self, dir: Option<PathBuf>) {
+        if let Some(mut old) = self.log_thread.take() {
+            // 不等旧线程结束：它在下一次检查时自己退出，发出的消息没人接收
+            old.stop();
+        }
+        let (tx, rx) = mpsc::channel(LOG_CHANNEL_CAPACITY);
+        self.log_rx = rx;
+        self.log = LogStatus::default();
+        let timing = LogTiming {
+            poll: self.config.log_poll_interval,
+            discovery: self.config.log_discovery_interval,
+        };
+        match LogThread::spawn(dir, timing, tx) {
+            Ok(thread) => self.log_thread = Some(thread),
+            Err(err) => {
+                tracing::error!(error = %err, "无法启动日志线程");
+                self.log.error = Some(format!("无法启动日志线程：{err}"));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ 请求调度
+
+    fn slot_mut(&mut self, id: PlayerId) -> Option<&mut Slot> {
+        self.slots.iter_mut().find(|s| s.id == id)
+    }
+
+    fn enqueue(&mut self, id: PlayerId) {
+        if let Some(slot) = self.slot_mut(id)
+            && matches!(slot.fetch, FetchState::Idle | FetchState::Failed { .. })
+        {
+            slot.fetch = FetchState::Queued;
+            self.queue.push_back(id);
+            self.dirty = true;
+        }
+    }
+
+    fn enqueue_if_stale(&mut self, id: PlayerId) {
+        let Some(since) = self.tracker.current().map(|m| m.times.discovered_at) else {
+            return;
+        };
+        if self
+            .slots
+            .iter()
+            .any(|slot| slot.id == id && slot.needs_fetch(since))
+        {
+            self.enqueue(id);
+        }
+    }
+
+    fn enqueue_stale(&mut self) {
+        let ids: Vec<PlayerId> = self.slots.iter().map(|s| s.id).collect();
+        for id in ids {
+            self.enqueue_if_stale(id);
+        }
+    }
+
+    fn dispatch(&mut self) {
+        let now = self.clock.now();
+        if self.paused_until.is_some_and(|until| now < until) {
+            return;
+        }
+        while self.in_flight < self.config.fetch_concurrency.max(1) {
+            let Some(id) = self.queue.pop_front() else {
+                break;
+            };
+            let Some(slot) = self.slot_mut(id) else {
+                continue;
+            };
+            if slot.fetch != FetchState::Queued {
+                continue;
+            }
+            slot.fetch = FetchState::Fetching;
+            self.in_flight += 1;
+            self.dirty = true;
+
+            let client = self.client.clone();
+            let tx = self.fetch_tx.clone();
+            let clock = Arc::clone(&self.clock);
+            let generation = self.generation;
+            tokio::spawn(async move {
+                let result = client.player_info(id).await;
+                let _ = tx.send(FetchResult {
+                    player: id,
+                    generation,
+                    at: clock.now(),
+                    result,
+                });
+            });
+        }
+    }
+
+    // ------------------------------------------------------------ 输出
+
+    fn publish(&mut self) {
+        self.revision += 1;
+        let snapshot = self.build_snapshot();
+        self.snapshot_tx.send_replace(Arc::new(snapshot));
+        self.dirty = false;
+    }
+
+    fn build_snapshot(&self) -> Snapshot {
+        let current = self.tracker.current().map(|m| {
+            let players: Vec<PlayerView> = self
+                .slots
+                .iter()
+                .map(|slot| {
+                    let fetched_at = slot.fetched_at();
+                    PlayerView {
+                        id: slot.id,
+                        name: slot
+                            .profile
+                            .as_ref()
+                            .and_then(|p| p.name.clone())
+                            .or_else(|| slot.log_name.clone()),
+                        log_name: slot.log_name.clone(),
+                        team: slot.team,
+                        is_self: m.self_id == Some(slot.id),
+                        profile: slot.profile.clone(),
+                        profile_fetched_at: fetched_at,
+                        profile_current: fetched_at.is_some_and(|at| at >= m.times.discovered_at),
+                        fetch: slot.fetch,
+                        encounters: slot.encounters,
+                    }
+                })
+                .collect();
+            let teams = [Team::Alpha, Team::Bravo]
+                .into_iter()
+                .map(|team| TeamSummary::of(team, &players))
+                .collect();
+            MatchView {
+                match_id: m.match_id,
+                phase: m.phase,
+                connection: m.connection,
+                rejoined: m.rejoined,
+                map: m.map.clone(),
+                scenario: m.scenario.clone(),
+                deck: m.deck.clone(),
+                clock: m.clock,
+                discovered_at: m.times.discovered_at,
+                ended_at: m.times.ended_at,
+                self_team: m.my_team(),
+                roster_known: !m.roster.is_empty(),
+                players,
+                teams,
+            }
+        });
+        Snapshot {
+            revision: self.revision,
+            log: self.log.clone(),
+            persona: self.tracker.persona().map(str::to_owned),
+            game_version: self.tracker.game_version().map(str::to_owned),
+            self_id: self
+                .tracker
+                .current()
+                .and_then(|m| m.self_id)
+                .or(self.self_hint),
+            api: ApiStatus {
+                in_flight: self.in_flight as u32,
+                queued: self.queue.len() as u32,
+                paused_until: self.paused_until,
+                last_error: self.last_error.clone(),
+            },
+            current,
+        }
+    }
+}
+
+fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> ProfileUpdate {
+    let info = fetched.data.info.as_ref();
+    ProfileUpdate {
+        id,
+        name: info
+            .and_then(|i| i.name.clone())
+            .filter(|n| !n.trim().is_empty()),
+        steam_id: info.and_then(|i| i.steam_id.clone()),
+        level: info.and_then(|i| i.level),
+        rating: info.and_then(|i| i.rating),
+        rank: info.and_then(|i| i.rank),
+        rating_games: info.and_then(|i| i.rating_games),
+        raw_json: fetched.raw.clone(),
+    }
+}
+
+fn millis(duration: Duration) -> i64 {
+    i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
+}

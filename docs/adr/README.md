@@ -8,7 +8,7 @@
 |---|---|---|---|
 | [0001](0001-desktop-stack.md) | 桌面技术栈暂定 Tauri＋Rust | 已采纳（暂定） | 2026-11-16 |
 | [0002](0002-exclude-cheat-detection.md) | 首阶段排除作弊与异常行为判定 | 已采纳 | 2026-11-16 |
-| [0003](0003-workspace-layout.md) | 用 Cargo workspace 分离核心库与 Tauri 外壳 | 提议 | 2026-11-16 |
+| [0003](0003-workspace-layout.md) | 用 Cargo workspace 分离核心库、后台运行时与 Tauri 外壳 | 提议 | 2026-11-16 |
 | [0004](0004-state-ownership.md) | 业务状态只存在于 Rust，窗口通过快照和事件订阅 | 提议 | 2026-11-16 |
 | [0005](0005-storage-separation.md) | 长期数据与缓存分成两个数据库文件 | 提议 | 2026-11-16 |
 
