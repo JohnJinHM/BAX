@@ -11,6 +11,7 @@
 | [0003](0003-workspace-layout.md) | 用 Cargo workspace 分离核心库、后台运行时与 Tauri 外壳 | 提议 | 2026-11-16 |
 | [0004](0004-state-ownership.md) | 业务状态只存在于 Rust，窗口通过快照和事件订阅 | 提议 | 2026-11-16 |
 | [0005](0005-storage-separation.md) | 长期数据与缓存分成两个数据库文件 | 提议 | 2026-11-16 |
+| [0006](0006-frontend-stack.md) | 前端采用 Vue 3＋TypeScript＋Vite，通信类型由 ts-rs 生成 | 提议 | 2026-11-17 |
 
 ## 什么时候写
 

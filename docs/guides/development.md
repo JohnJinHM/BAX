@@ -13,7 +13,15 @@
 | MSVC 生成工具 | Visual Studio 2022 或 Build Tools，含“使用 C++ 的桌面开发” | 编译内置的 SQLite |
 | rustfmt、clippy | `rustup component add rustfmt clippy` | 提交前检查 |
 
-TLS 使用 Windows 自带的 SChannel，不需要安装 CMake、NASM 或 OpenSSL。0.2 起还需要 Node.js 和 WebView2 运行时，到时补充。
+TLS 使用 Windows 自带的 SChannel，不需要安装 CMake、NASM 或 OpenSSL。
+
+桌面应用另外需要：
+
+| 工具 | 要求 | 说明 |
+|---|---|---|
+| Node.js | 22.12 或更新 | 前端构建（Vite 7 的要求） |
+| npm | 随 Node.js 安装 | 依赖锁定在 `package-lock.json` |
+| WebView2 运行时 | Windows 11 自带 | Windows 10 上安装包会自动下载 |
 
 ### 已知问题：全局的 CC 环境变量
 
@@ -21,7 +29,11 @@ TLS 使用 Windows 自带的 SChannel，不需要安装 CMake、NASM 或 OpenSSL
 
 ### 依赖版本
 
-`rusqlite` 固定在 0.40：0.41 起要求 Rust 1.89。升级工具链后可以放开。
+本机工具链是 Rust 1.88，几个依赖因此停在旧一点的版本，升级工具链后可以一起放开（见 [ADR-0006](../adr/0006-frontend-stack.md)）：
+
+- `rusqlite` 固定在 0.40：0.41 起要求 Rust 1.89。
+- `tauri` 停在 2.11：2.12 起要求 Rust 1.90。前端的 `@tauri-apps/api` 与 `@tauri-apps/cli` 也要停在 2.11，Tauri 要求两边的次版本一致。
+- TypeScript 停在 5.9，`vue-tsc` 对 7.0 的支持还没有验证。
 
 ## 常用命令
 
@@ -33,6 +45,31 @@ cargo build --release -p bax-cli                # 构建命令行工具 target\r
 ```
 
 测试不访问网络，也不读本机的游戏日志。引擎的端到端测试在临时目录里写日志、用本地模拟服务器代替 BATrace。
+
+## 桌面应用
+
+```powershell
+npm install                       # 第一次
+npm run tauri dev                 # 开发：启动 Vite 并运行调试版，前端改动即时生效
+npx tauri build --no-bundle       # 发布版 target\release\bax-app.exe，不打安装包
+npx tauri build                   # 发布版并打 NSIS 安装包
+npm run typecheck                 # 前端类型检查
+npm run bindings                  # Rust 一侧改了快照类型之后，重新生成 src/shared/bindings
+```
+
+`bax-app.exe --hidden` 启动时不显示悬浮窗，只有托盘图标。数据目录与命令行工具相同，也可以用 `BAX_DATA_DIR` 指定。
+
+### 不开桌面应用预览界面
+
+`dev/` 下的页面用 Tauri 官方的 `mockIPC` 冒充 Rust 一侧，喂给界面一份虚构的快照（`src/dev/fixture.ts`），用普通浏览器就能看：
+
+```powershell
+npx vite                          # 然后打开下面的地址
+# http://localhost:1420/dev/overlay.html           悬浮窗（加 ?locked 看锁定状态）
+# http://localhost:1420/dev/main.html?tab=reminders 主窗口，tab 可为 match、reminders、settings
+```
+
+这些页面不进发布包。改了快照结构时，`npm run typecheck` 会检查虚构快照是否还对得上。
 
 ## 命令行工具 bax
 
