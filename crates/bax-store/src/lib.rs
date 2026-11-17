@@ -10,11 +10,13 @@
 //!
 //! 这个库不发起网络请求，也不读系统时钟；时间由调用方传入。
 
+mod archive;
 mod cache;
 mod db;
 mod error;
 mod store;
 
+pub use archive::{EncounterRow, Note, PlayerHit, Relation};
 pub use cache::{CacheStore, CachedEntry};
 pub use error::StoreError;
 pub use store::{

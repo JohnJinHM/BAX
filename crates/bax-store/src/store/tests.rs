@@ -827,7 +827,12 @@ fn a_version_one_database_upgrades_with_a_backup() {
             .expect("记录");
     }
     let store = Store::open(&path).expect("升级");
-    assert_eq!(store.schema_version().expect("读取版本"), 2);
+    assert_eq!(
+        store.schema_version().expect("读取版本"),
+        MIGRATIONS.len() as u32,
+        "一次升级到最新版本"
+    );
+    assert!(store.note(PlayerId(101)).expect("备注表可用").is_none());
     assert!(
         store.match_record(MatchId(1)).expect("读取").is_some(),
         "旧数据还在"

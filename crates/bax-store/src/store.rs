@@ -86,6 +86,13 @@ const MIGRATIONS: &[&str] = &[
         at       INTEGER NOT NULL,
         PRIMARY KEY (match_id, rule_id)
     ) STRICT, WITHOUT ROWID;",
+    // 第 3 版：玩家备注。备注是用户写的，与接口资料分开存放，接口更新永远不会碰它
+    "CREATE TABLE notes (
+        player_id  INTEGER PRIMARY KEY,
+        body       TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX players_by_last_seen ON players(last_seen_at);",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -134,7 +141,9 @@ impl PlayerRecord {
 }
 
 /// 玩家某一时刻的 ELO 等数据。只在数值变化时记一条。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RatingPoint {
     pub at: Timestamp,
     pub rating: Option<f64>,
@@ -190,7 +199,7 @@ pub struct EncounterSummary {
 /// 长期库。
 #[derive(Debug)]
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Store {
@@ -800,11 +809,11 @@ impl RawMatch {
 
 // 写进数据库的枚举取值。它们是存储格式的一部分，改名需要迁移脚本，所以不跟着类型的序列化名走。
 
-fn id_to_db(id: u64) -> i64 {
+pub(crate) fn id_to_db(id: u64) -> i64 {
     id as i64
 }
 
-fn id_from_db(id: i64) -> u64 {
+pub(crate) fn id_from_db(id: i64) -> u64 {
     id as u64
 }
 
@@ -816,7 +825,7 @@ fn team_to_db(team: Team) -> &'static str {
     }
 }
 
-fn team_from_db(value: &str) -> Result<Team> {
+pub(crate) fn team_from_db(value: &str) -> Result<Team> {
     match value {
         "alpha" => Ok(Team::Alpha),
         "bravo" => Ok(Team::Bravo),
@@ -835,7 +844,7 @@ fn phase_to_db(phase: Phase) -> &'static str {
     }
 }
 
-fn phase_from_db(value: &str) -> Result<Phase> {
+pub(crate) fn phase_from_db(value: &str) -> Result<Phase> {
     match value {
         "waitingRoom" => Ok(Phase::WaitingRoom),
         "loading" => Ok(Phase::Loading),
