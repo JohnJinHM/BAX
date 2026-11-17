@@ -6,6 +6,7 @@
 pub mod event;
 pub mod ids;
 pub mod lifecycle;
+pub mod reminder;
 pub mod roster;
 pub mod time;
 
@@ -15,5 +16,6 @@ pub use lifecycle::{
     BattleClock, ClockSource, Connection, EarlyPlayer, MatchState, Phase, Timeline, Tracker,
     TrackerConfig, Update,
 };
+pub use reminder::{ReminderOutcome, ReminderRule};
 pub use roster::{RosterEntry, Team};
 pub use time::Timestamp;
