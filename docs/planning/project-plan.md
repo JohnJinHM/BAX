@@ -169,7 +169,7 @@ Rust 向前端发送当前比赛、玩家摘要、查询进度和提醒事件。
 
 ## 参考资料
 
-- 原型：[项目说明](../ba-elo-overlay/README.md)、[主程序](../ba-elo-overlay/src/ba_elo_overlay.py)、[原检测模块](../ba-elo-overlay/src/elo_cheat_check.py)、[MIT 许可](../ba-elo-overlay/LICENSE)。
+- 原型：[项目说明](../../../ba-elo-overlay/README.md)、[主程序](../../../ba-elo-overlay/src/ba_elo_overlay.py)、[原检测模块](../../../ba-elo-overlay/src/elo_cheat_check.py)、[MIT 许可](../../../ba-elo-overlay/LICENSE)。
 - [BATrace](https://bot.batrace.top/)：玩家资料、比赛详情与单位目录。
 - [VRCX](https://github.com/vrcx-team/VRCX)：玩家档案、备注、历史与主题组织方式的参考。
 - [Tauri 窗口 API](https://v2.tauri.app/reference/javascript/api/namespacewindow/) 与 [Tauri 架构](https://v2.tauri.app/concept/architecture/)：窗口能力及运行结构。
