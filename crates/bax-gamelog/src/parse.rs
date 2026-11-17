@@ -77,14 +77,13 @@ impl LogParser {
         match &mut self.mode {
             Mode::Skip => {}
             Mode::Header => self.mode = self.on_header(at, line, out),
-            Mode::PlayerList(players) => {
-                if let Some(entry) = parse_roster_line(line) {
-                    players.push(entry);
-                } else {
-                    // 空行或别的内容：名单到此为止
-                    self.flush(out);
-                }
-            }
+            Mode::PlayerList(players) => match parse_roster_line(line) {
+                Some(RosterLine::Player(entry)) => players.push(entry),
+                // AI 玩家不进名单，但名单还没有结束
+                Some(RosterLine::Ai) => {}
+                // 空行或别的内容：名单到此为止
+                None => self.flush(out),
+            },
             Mode::StartupInfo => {
                 if let Some(version) = line.strip_prefix("Version: ") {
                     emit(
@@ -292,7 +291,7 @@ fn parse_loading(message: &str) -> Option<LogEvent> {
     })
 }
 
-/// `Room: (WaitingRoom|130525), Client: (名字|14404)`。名字里可以有竖线和括号，所以从右往左找。
+/// `Room: (WaitingRoom|1), Client: (名字|101)`。名字里可以有竖线和括号，所以从右往左找。
 fn parse_room_client(message: &str) -> Option<LogEvent> {
     let rest = message.strip_prefix("Room: (")?;
     let (room_name, rest) = rest.split_once('|')?;
@@ -308,7 +307,7 @@ fn parse_room_client(message: &str) -> Option<LogEvent> {
     })
 }
 
-/// `FID:9777514 v1.2.2.1 - 名字 (2026-11-17 02:52)`
+/// `FID:9000001 v1.2.2.1 - 名字 (2026-11-17 02:52)`
 fn parse_fight_info(message: &str) -> Option<LogEvent> {
     let rest = message.strip_prefix("FID:")?;
     let (id, rest) = rest.split_once(' ')?;
@@ -327,12 +326,25 @@ fn parse_fight_info(message: &str) -> Option<LogEvent> {
     })
 }
 
+/// 名单里的一行。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RosterLine {
+    Player(RosterEntry),
+    /// AI 玩家。它们的 ID 是负数，每场比赛重新编号，不代表固定的身份，所以不进名单。
+    Ai,
+}
+
 /// 解析名单里的一行。
 ///
 /// 当前格式是 `ID: 1, Name: 名字, Team: Alpha`；旧版游戏写作 `ID: 1 Name: 名字Team: Alpha`，
 /// 名字与 `Team:` 之间没有分隔。名字可以为空，也可以包含逗号。
-pub(crate) fn parse_roster_line(line: &str) -> Option<RosterEntry> {
+/// 遭遇战和合作模式里的 AI 玩家 ID 为负数，例如 `ID: -12, Name: Bot 4, Team: Alpha`。
+pub(crate) fn parse_roster_line(line: &str) -> Option<RosterLine> {
     let rest = line.strip_prefix("ID:")?.trim_start();
+    let (is_ai, rest) = match rest.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, rest),
+    };
     let digits = rest
         .bytes()
         .position(|c| !c.is_ascii_digit())
@@ -353,12 +365,15 @@ pub(crate) fn parse_roster_line(line: &str) -> Option<RosterEntry> {
         name = name.trim_end_matches(' ');
         name = name.strip_suffix(',').unwrap_or(name);
     }
+    if is_ai {
+        return Some(RosterLine::Ai);
+    }
     let name = name.trim();
-    Some(RosterEntry {
+    Some(RosterLine::Player(RosterEntry {
         id,
         name: (!name.is_empty()).then(|| name.to_owned()),
         team,
-    })
+    }))
 }
 
 #[cfg(test)]

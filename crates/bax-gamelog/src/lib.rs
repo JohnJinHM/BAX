@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! [2026-11-16 18:52:05.319]
-//! Log: [NET_ROOM] WaitingRoom entered, fight id: 9777514
+//! Log: [NET_ROOM] WaitingRoom entered, fight id: 9000001
 //!
 //! ```
 //!

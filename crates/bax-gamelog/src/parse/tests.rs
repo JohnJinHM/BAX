@@ -151,7 +151,7 @@ fn player_list_keeps_empty_and_awkward_names() {
 Log: Player list: \n\
 ID: 101, Name: Ash, Team: Alpha\n\
 ID: 102, Name: , Team: Alpha\n\
-ID: 103, Name: 芳乃 さくら, Team: Alpha\n\
+ID: 103, Name: 示例 なまえ, Team: Alpha\n\
 ID: 104, Name: a, b, Team: Bravo\n\
 ID: 105, Name: Team: Rocket, Team: Bravo\n\
 ID: 106, Name: comma,, Team: Bravo\n\
@@ -172,7 +172,7 @@ Log: Client name - Ash\n\
             players: vec![
                 entry(101, Some("Ash"), Team::Alpha),
                 entry(102, None, Team::Alpha),
-                entry(103, Some("芳乃 さくら"), Team::Alpha),
+                entry(103, Some("示例 なまえ"), Team::Alpha),
                 entry(104, Some("a, b"), Team::Bravo),
                 entry(105, Some("Team: Rocket"), Team::Bravo),
                 entry(106, Some("comma,"), Team::Bravo),
@@ -185,12 +185,16 @@ Log: Client name - Ash\n\
 #[test]
 fn player_list_in_the_old_format_without_separators() {
     assert_eq!(
-        parse_roster_line("ID: 64024 Name: 骚俊大人Team: Alpha"),
-        Some(entry(64024, Some("骚俊大人"), Team::Alpha))
+        parse_roster_line("ID: 7001 Name: 测试玩家Team: Alpha"),
+        Some(RosterLine::Player(entry(
+            7001,
+            Some("测试玩家"),
+            Team::Alpha
+        )))
     );
     assert_eq!(
         parse_roster_line("ID: 7 Name: Team: Bravo"),
-        Some(entry(7, None, Team::Bravo))
+        Some(RosterLine::Player(entry(7, None, Team::Bravo)))
     );
 }
 
@@ -199,13 +203,46 @@ fn roster_lines_that_cannot_be_trusted_are_rejected() {
     for line in [
         "",
         "ID: , Name: x, Team: Alpha",
+        "ID: -, Name: x, Team: Alpha",
+        "ID: --3, Name: x, Team: Alpha",
         "ID: 12, Name: x",
+        "ID: -12, Name: Bot 4",
         "ID: 12, Name: x, Team: Charlie",
         "Name: x, Team: Alpha",
         "IDs: 12, Name: x, Team: Alpha",
     ] {
         assert_eq!(parse_roster_line(line), None, "{line:?}");
     }
+}
+
+#[test]
+fn ai_players_are_skipped_without_ending_the_list() {
+    assert_eq!(
+        parse_roster_line("ID: -12, Name: Bot 4, Team: Alpha"),
+        Some(RosterLine::Ai)
+    );
+    // 遭遇战与合作模式：AI 夹在真人中间，后面的真人不能丢
+    let text = "[2026-11-16 18:53:01.979]\n\
+Log: Player list: \n\
+ID: 101, Name: Ash, Team: Alpha\n\
+ID: -12, Name: Bot 4, Team: Alpha\n\
+ID: -3, Name: Bot 1, Team: Alpha\n\
+ID: 102, Name: Birch, Team: Alpha\n\
+ID: -15, Name: Bot 4, Team: Bravo\n\
+\n";
+    assert_eq!(
+        events(text),
+        vec![LogEvent::PlayerList {
+            players: vec![
+                entry(101, Some("Ash"), Team::Alpha),
+                entry(102, Some("Birch"), Team::Alpha),
+            ]
+        }]
+    );
+    // 只有 AI 的名单不产生事件
+    let bots_only =
+        "[2026-11-16 18:53:01.979]\nLog: Player list: \nID: -5, Name: Bot 0, Team: Bravo\n\n";
+    assert_eq!(events(bots_only), vec![]);
 }
 
 #[test]
@@ -262,15 +299,15 @@ fn pending_state_is_visible_while_a_list_is_incomplete() {
 #[test]
 fn room_client_names_may_contain_separators() {
     assert_eq!(
-        one("Log: Room: (WaitingRoom|130525), Client: (Aqua|14404)"),
+        one("Log: Room: (WaitingRoom|1), Client: (Ash|101)"),
         Some(LogEvent::RoomClient {
             room: RoomKind::WaitingRoom,
-            player: PlayerId(14404),
-            name: Some("Aqua".into()),
+            player: PlayerId(101),
+            name: Some("Ash".into()),
         })
     );
     assert_eq!(
-        one("Log: Room: (GameRoom|438107), Client: (a|b), Client: (c)|77)"),
+        one("Log: Room: (GameRoom|2), Client: (a|b), Client: (c)|77)"),
         Some(LogEvent::RoomClient {
             room: RoomKind::GameRoom,
             player: PlayerId(77),
@@ -341,7 +378,7 @@ fn fight_info_gives_the_local_player_name() {
         })
     );
     // 另一种以 SID 开头的行不是对局信息
-    assert_eq!(one("Log: SID:36290145 v1.2.2.1"), None);
+    assert_eq!(one("Log: SID:1000001 v1.2.2.1"), None);
 }
 
 #[test]
@@ -353,9 +390,9 @@ fn single_line_markers() {
         })
     );
     assert_eq!(
-        one("Log: Deck set to: _ros+guard"),
+        one("Log: Deck set to: _my+deck"),
         Some(LogEvent::DeckSelected {
-            name: Some("_ros+guard".into())
+            name: Some("_my+deck".into())
         })
     );
     assert_eq!(
@@ -440,7 +477,7 @@ fn a_whole_match_parses_in_order_with_times() {
     let text = [
         "[2026-11-16 18:52:05.318]\nLog: [NET_ROOM] Network lifecycle | Stage=Game | Action=Entered | Route=Direct | RoomType=WaitingRoom | FightId=9000001 | Status=WaitClients\n",
         "[2026-11-16 18:52:05.319]\nLog: [NET_ROOM] WaitingRoom entered, fight id: 9000001\n",
-        "[2026-11-16 18:52:05.319]\nLog: Deck set to: _ros+guard\n",
+        "[2026-11-16 18:52:05.319]\nLog: Deck set to: _my+deck\n",
         "[2026-11-16 18:52:52.324]\nLog: Start loading battle... map: Airport, scenario: - Airport_network\n",
         "[2026-11-16 18:53:00.733]\nLog: FID:9000001 v1.2.2.1 - Starling (2026-11-17 02:52)\n",
         "[2026-11-16 18:53:01.977]\nLog: [NET_ROOM] Network lifecycle | Stage=Game | Action=Exited | Cause=ServerExitInstance | Reason=none | RoomType=WaitingRoom | FightId=9000001 | Status=WaitClients\n",

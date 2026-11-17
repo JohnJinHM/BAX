@@ -99,7 +99,7 @@ fn a_partial_line_waits_for_its_newline() {
 fn multibyte_characters_split_across_reads_stay_intact() {
     let dir = tempfile::tempdir().expect("临时目录");
     let path = dir.path().join(FIRST);
-    let text = "ID: 1, Name: 芳乃 さくら🍊, Team: Alpha\n".as_bytes();
+    let text = "ID: 1, Name: 示例 なまえ🍊, Team: Alpha\n".as_bytes();
 
     let mut t = tailer(dir.path());
     let mut seen = Vec::new();
@@ -108,7 +108,7 @@ fn multibyte_characters_split_across_reads_stay_intact() {
         append(&path, &[*byte]);
         seen.extend(poll(&mut t));
     }
-    assert_eq!(lines(&seen), ["ID: 1, Name: 芳乃 さくら🍊, Team: Alpha"]);
+    assert_eq!(lines(&seen), ["ID: 1, Name: 示例 なまえ🍊, Team: Alpha"]);
 }
 
 #[test]
