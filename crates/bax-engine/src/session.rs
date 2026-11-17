@@ -109,6 +109,8 @@ pub(crate) enum Command {
         fetched: Box<Fetched<PlayerInfoResponse>>,
         done: oneshot::Sender<Result<(), String>>,
     },
+    /// 长期库被别处改过（例如导入了历史日志）：重新读取当前比赛玩家的同场次数与备注。
+    ReloadArchive,
 }
 
 #[derive(Debug)]
@@ -375,6 +377,20 @@ impl Session {
             }
             Command::SaveProfile { id, fetched, done } => {
                 let _ = done.send(self.save_single_profile(id, &fetched));
+            }
+            Command::ReloadArchive => {
+                let current = self.tracker.current().map(|m| m.match_id);
+                for index in 0..self.slots.len() {
+                    let id = self.slots[index].id;
+                    if let Ok(encounters) = self.store.encounters(id, current) {
+                        self.slots[index].encounters = encounters;
+                    }
+                    if let Ok(note) = self.store.note(id) {
+                        self.slots[index].note = note.map(|n| n.body);
+                    }
+                }
+                self.dirty = true;
+                self.publish();
             }
         }
     }

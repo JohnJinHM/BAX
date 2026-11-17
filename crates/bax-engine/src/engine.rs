@@ -8,7 +8,9 @@ use std::time::Instant;
 use bax_batrace::{ApiError, BatraceClient};
 use bax_core::PlayerId;
 use bax_core::reminder::{self, ReminderRule};
+use bax_gamelog::LogZone;
 use bax_store::{PlayerHit, Store, StoreError};
+use serde::Serialize;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
@@ -37,6 +39,19 @@ pub enum CommandError {
     Rejected(String),
 }
 
+/// 一次历史日志导入的结果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ImportSummary {
+    /// 读完的日志文件数。
+    pub files: u32,
+    /// 写入长期库的不同比赛数。
+    pub matches: u32,
+    /// 读不了或写不进去的文件数。
+    pub failed: u32,
+}
+
 /// 正在运行的引擎。丢弃句柄会让引擎停下；需要等它收尾时用 [`Engine::shutdown`]。
 #[derive(Debug)]
 pub struct Engine {
@@ -45,6 +60,8 @@ pub struct Engine {
     task: JoinHandle<()>,
     /// 单独刷新一名玩家时直接用它发请求，不占用会话。
     client: BatraceClient,
+    store_path: PathBuf,
+    log_zone: LogZone,
 }
 
 impl Engine {
@@ -54,6 +71,8 @@ impl Engine {
         let store = Store::open(&config.store_path).inspect_err(|err| {
             tracing::error!(store = %config.store_path.display(), error = %err, "无法打开长期库");
         })?;
+        let store_path = config.store_path.clone();
+        let log_zone = config.log_zone;
         let client = BatraceClient::new(config.api.clone())?;
 
         let saved_dir = store
@@ -97,6 +116,8 @@ impl Engine {
             snapshots,
             task,
             client,
+            store_path,
+            log_zone,
         })
     }
 
@@ -207,6 +228,43 @@ impl Engine {
         })
         .await?;
         reply(wait).await
+    }
+
+    /// 把当前日志目录里的全部历史日志导入长期库，用于统计以前同场的次数。
+    ///
+    /// 在后台线程里用另一个数据库连接导入，不阻塞对局会话；完成后刷新当前比赛的同场次数。
+    /// 重复导入不会产生重复记录。
+    pub async fn import_history(&self) -> Result<ImportSummary, CommandError> {
+        let dir = self
+            .snapshot()
+            .log
+            .dir
+            .clone()
+            .map(PathBuf::from)
+            .ok_or_else(|| CommandError::Rejected("还没有找到日志目录".to_owned()))?;
+        let store_path = self.store_path.clone();
+        let zone = self.log_zone;
+        let summary = tokio::task::spawn_blocking(move || -> Result<ImportSummary, String> {
+            let files = bax_gamelog::tail::list_log_files(&dir).map_err(|e| e.to_string())?;
+            let mut store = Store::open(&store_path).map_err(|e| e.to_string())?;
+            let report = crate::history::import_logs(&mut store, &files, zone, |_, _| {});
+            Ok(ImportSummary {
+                files: report.files as u32,
+                matches: report.matches as u32,
+                failed: report.failed.len() as u32,
+            })
+        })
+        .await
+        .map_err(|err| CommandError::Rejected(err.to_string()))?
+        .map_err(CommandError::Rejected)?;
+        tracing::info!(
+            files = summary.files,
+            matches = summary.matches,
+            failed = summary.failed,
+            "历史日志导入完成"
+        );
+        self.send(Command::ReloadArchive).await?;
+        Ok(summary)
     }
 
     /// 停下引擎，等它收尾。

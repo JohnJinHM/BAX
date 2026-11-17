@@ -976,3 +976,41 @@ async fn a_single_player_can_be_refreshed_on_demand() {
     assert_eq!(fx.requests().await, vec![(201, 1)]);
     engine.shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn importing_history_updates_encounter_counts() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    // 一份更早的日志：与 101 等人同场过一次
+    append_to(
+        &fx.logs.join("Gamelog__2026_11_15__18_00.log"),
+        &finished_match(8_000_001),
+    );
+    fx.append(&finished_match(9_000_001));
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    assert_eq!(
+        player(&snapshot, 101).map(|p| p.encounters.total),
+        Some(0),
+        "补读只读最新的一份日志"
+    );
+
+    let summary = engine.import_history().await.expect("导入");
+    assert_eq!((summary.files, summary.matches, summary.failed), (2, 2, 0));
+    wait_for(&engine, "同场次数更新", |s| {
+        player(s, 101).is_some_and(|p| p.encounters.total == 1)
+    })
+    .await;
+
+    let again = engine.import_history().await.expect("再导入一次");
+    assert_eq!(again.matches, 2);
+    assert_eq!(
+        player(&engine.snapshot(), 101).map(|p| p.encounters.total),
+        Some(1),
+        "重复导入不会重复计数"
+    );
+    engine.shutdown().await;
+}

@@ -103,6 +103,7 @@ pub fn run() {
             commands::search_players,
             commands::set_note,
             commands::refresh_player,
+            commands::import_history,
         ])
         .setup(move |app| {
             let data_dir = data_dir.ok_or("无法确定数据目录")?;

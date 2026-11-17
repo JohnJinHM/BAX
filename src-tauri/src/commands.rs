@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use bax_core::{PlayerId, ReminderRule};
 use bax_engine::diag::{self, ExportOptions};
-use bax_engine::{CommandError, PlayerDetail, PlayerHit, Snapshot};
+use bax_engine::{CommandError, ImportSummary, PlayerDetail, PlayerHit, Snapshot};
 use tauri::{AppHandle, State, Window};
 
 use crate::app::{AppState, AppStatus, reveal_in_explorer, show_main_window};
@@ -152,6 +152,16 @@ pub async fn refresh_player(state: State<'_, AppState>, id: u64) -> CommandResul
         .refresh_player(PlayerId(id))
         .await
         .map_err(rejected("refresh_player"))
+}
+
+/// 导入日志目录里的全部历史日志。
+#[tauri::command]
+pub async fn import_history(state: State<'_, AppState>) -> Result<ImportSummary, String> {
+    state
+        .engine
+        .import_history()
+        .await
+        .map_err(rejected("import_history"))
 }
 
 /// 窗口要在异步命令里创建：同步命令跑在主线程上，在那里建窗口会卡住事件循环。

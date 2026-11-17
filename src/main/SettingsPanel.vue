@@ -47,6 +47,25 @@ watch(
   { immediate: true },
 );
 
+// ---------------------------------------------------------------- 历史日志
+
+const importing = ref(false);
+const importResult = ref<{ ok: boolean; text: string } | null>(null);
+
+async function importHistory() {
+  importing.value = true;
+  importResult.value = null;
+  try {
+    const summary = await commands.importHistory();
+    const failed = summary.failed > 0 ? `，${summary.failed} 份读取失败` : "";
+    importResult.value = { ok: true, text: `读了 ${summary.files} 份日志，记录 ${summary.matches} 场比赛${failed}` };
+  } catch (error) {
+    importResult.value = { ok: false, text: errorText(error) };
+  } finally {
+    importing.value = false;
+  }
+}
+
 const saveHotkeys = () =>
   run(() =>
     saveSetting(hotkeys.value, "ui.hotkeys", {
@@ -164,6 +183,11 @@ async function exportDiag() {
   <section class="card">
     <h2>数据</h2>
     <p class="hint">长期数据保存在 {{ status?.dataDir ?? "…" }}</p>
+    <div class="row">
+      <button :disabled="importing" @click="importHistory">{{ importing ? "正在导入…" : "导入历史日志" }}</button>
+      <span class="hint">把日志目录里以前的日志都读一遍，用于统计以前同场的次数。重复导入不会重复计数。</span>
+    </div>
+    <p v-if="importResult" :class="importResult.ok ? 'ok' : 'error'">{{ importResult.text }}</p>
   </section>
 
   <section class="card">

@@ -34,7 +34,7 @@ mod snapshot;
 pub use bax_store::{EncounterRow, Note, PlayerHit, RatingPoint, Relation};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use config::{EngineConfig, cache_path, default_data_dir, store_path};
-pub use engine::{CommandError, Engine, EngineError};
+pub use engine::{CommandError, Engine, EngineError, ImportSummary};
 pub use player::PlayerDetail;
 pub use profile::{ProfileSummary, RankedStats};
 pub use snapshot::{

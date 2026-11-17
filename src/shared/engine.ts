@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { shallowRef, type ShallowRef } from "vue";
 
+import type { ImportSummary } from "./bindings/ImportSummary";
 import type { PlayerDetail } from "./bindings/PlayerDetail";
 import type { PlayerHit } from "./bindings/PlayerHit";
 import type { ReminderRule } from "./bindings/ReminderRule";
@@ -94,6 +95,8 @@ export const commands = {
   /** 内容为空时删除备注。 */
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
   refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),
+  /** 导入日志目录里的全部历史日志；重复导入不会重复计数。 */
+  importHistory: () => invoke<ImportSummary>("import_history"),
 };
 
 /** 把命令的失败原因转成一句话。 */
