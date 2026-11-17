@@ -146,7 +146,7 @@ pub struct MatchInfo {
     pub total_play_time_in_sec: Option<i64>,
     pub total_objective_zones_count: Option<i64>,
     /// 胜方的队伍编号。键不出现表示 0。
-    pub winner_team: Option<u32>,
+    pub winner_team: Option<i64>,
     pub victory_level: Option<i64>,
     pub end_match_reason: Option<i64>,
     #[serde(rename = "Type")]
@@ -161,18 +161,14 @@ impl MatchInfo {
     /// 胜方。接口省略默认值，所以没有 `WinnerTeam` 键时胜方是 Alpha；
     /// 其他编号（见过 101）含义不明，返回 `None`。
     pub fn winner(&self) -> Option<Team> {
-        match self.winner_team.unwrap_or(0) {
-            id @ (0 | 1) => Team::from_api_id(id),
-            _ => None,
-        }
+        winner_of(self.winner_team)
     }
 
-    /// 按玩家遍历。
+    /// 按玩家遍历，不含 AI 玩家。
     pub fn players(&self) -> impl Iterator<Item = (PlayerId, &MatchPlayer)> {
-        self.data.iter().filter_map(|(key, player)| {
-            let id = player.id.or_else(|| key.trim().parse().ok())?;
-            Some((PlayerId(id), player))
-        })
+        self.data
+            .iter()
+            .filter_map(|(key, player)| Some((human_id(player.id, key)?, player)))
     }
 
     /// 战报是否还没有内容。刚结束的比赛可能先返回一个空壳。
@@ -192,10 +188,11 @@ pub struct TeamMatchPoints {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct MatchPlayer {
-    pub id: Option<u64>,
+    /// AI 玩家为负数。
+    pub id: Option<i64>,
     pub name: Option<String>,
     /// 队伍编号。键不出现表示 0。
-    pub team_id: Option<u32>,
+    pub team_id: Option<i64>,
     pub old_rating: Option<f64>,
     pub new_rating: Option<f64>,
     pub total_spawned_unit_score: Option<i64>,
@@ -308,7 +305,7 @@ pub struct MatchSummary {
     pub map_id: Option<i64>,
     pub end_time: Option<i64>,
     pub total_play_time_in_sec: Option<i64>,
-    pub winner_team: Option<u32>,
+    pub winner_team: Option<i64>,
     pub victory_level: Option<i64>,
     #[serde(rename = "Type")]
     pub match_type: Option<i64>,
@@ -318,26 +315,39 @@ pub struct MatchSummary {
 
 impl MatchSummary {
     pub fn winner(&self) -> Option<Team> {
-        match self.winner_team.unwrap_or(0) {
-            id @ (0 | 1) => Team::from_api_id(id),
-            _ => None,
-        }
+        winner_of(self.winner_team)
     }
 
+    /// 按玩家遍历，不含 AI 玩家。
     pub fn players(&self) -> impl Iterator<Item = (PlayerId, &MatchSummaryPlayer)> {
-        self.data.iter().filter_map(|(key, player)| {
-            let id = player.id.or_else(|| key.trim().parse().ok())?;
-            Some((PlayerId(id), player))
-        })
+        self.data
+            .iter()
+            .filter_map(|(key, player)| Some((human_id(player.id, key)?, player)))
+    }
+}
+
+/// 真人玩家的 ID。键里的 `Id` 缺失时用外层的键补上。
+///
+/// 遭遇战与合作模式里的 AI 玩家 ID 是负数，每场比赛重新编号，不对应任何玩家档案，返回 `None`。
+fn human_id(id: Option<i64>, key: &str) -> Option<PlayerId> {
+    let id = id.or_else(|| key.trim().parse().ok())?;
+    u64::try_from(id).ok().map(PlayerId)
+}
+
+fn winner_of(winner_team: Option<i64>) -> Option<Team> {
+    match winner_team.unwrap_or(0) {
+        id @ (0 | 1) => Team::from_api_id(id),
+        _ => None,
     }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct MatchSummaryPlayer {
-    pub id: Option<u64>,
+    /// AI 玩家为负数。
+    pub id: Option<i64>,
     pub name: Option<String>,
-    pub team_id: Option<u32>,
+    pub team_id: Option<i64>,
     pub old_rating: Option<f64>,
     pub new_rating: Option<f64>,
     pub destruction_score: Option<i64>,

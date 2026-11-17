@@ -469,3 +469,22 @@ fn invalid_base_url_is_rejected_up_front() {
         .is_ok()
     );
 }
+
+#[test]
+fn ai_players_with_negative_ids_parse_and_are_left_out() {
+    // 遭遇战与合作模式的比赛列表里，AI 玩家的 Id 是负数
+    let summary: crate::model::MatchSummary = serde_json::from_str(
+        r#"{"WinnerTeam":0,"Data":{"193":{"Id":193,"Name":"Me"},"-12":{"Id":-12,"Name":"Bot 4"},"-15":{"Id":-15,"Name":"Bot 4","TeamId":1}}}"#,
+    )
+    .expect("带 AI 的比赛摘要可以解析");
+    let ids: Vec<PlayerId> = summary.players().map(|(id, _)| id).collect();
+    assert_eq!(ids, vec![PlayerId(193)]);
+    assert_eq!(summary.data["-15"].team(), Some(Team::Bravo));
+
+    let report: crate::model::MatchInfo =
+        serde_json::from_str(r#"{"WinnerTeam":-1,"Data":{"-3":{"Id":-3,"TeamId":-1}}}"#)
+            .expect("负数的编号可以解析");
+    assert_eq!(report.players().count(), 0);
+    assert_eq!(report.winner(), None);
+    assert_eq!(report.data["-3"].team(), None);
+}

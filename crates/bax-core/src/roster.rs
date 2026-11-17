@@ -26,7 +26,7 @@ impl Team {
     }
 
     /// 解析 BATrace 的 `TeamId`。
-    pub fn from_api_id(id: u32) -> Option<Team> {
+    pub fn from_api_id(id: i64) -> Option<Team> {
         match id {
             0 => Some(Team::Alpha),
             1 => Some(Team::Bravo),
