@@ -1,0 +1,4 @@
+[env]
+# 机器上若全局设置了 CC（例如直接指向 cl.exe），cc crate 会原样使用它并跳过 MSVC 环境探测，
+# 编译 SQLite 时就找不到头文件。这里把它置空，让 cc 自己定位编译器与头文件路径。
+CC = { value = "", force = true }

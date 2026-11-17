@@ -1,0 +1,17 @@
+[package]
+name = "bax-core"
+description = "BAX 的领域模型与纯逻辑：对局生命周期、计时、统计口径"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
