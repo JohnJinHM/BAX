@@ -1,0 +1,256 @@
+<script setup lang="ts">
+import { computed, ref, watch } from "vue";
+
+import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
+import type { Relation } from "../shared/bindings/Relation";
+import { commands, errorText } from "../shared/engine";
+import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
+import { useNow } from "../shared/useNow";
+import Sparkline from "./Sparkline.vue";
+
+const props = defineProps<{ id: number }>();
+
+const now = useNow(60_000);
+const detail = ref<PlayerDetail | null>(null);
+const loading = ref(false);
+const missing = ref(false);
+const failure = ref<string | null>(null);
+const noteDraft = ref("");
+const noteDirty = ref(false);
+const noteMessage = ref<{ ok: boolean; text: string } | null>(null);
+const refreshing = ref(false);
+
+async function load() {
+  loading.value = true;
+  failure.value = null;
+  try {
+    const result = await commands.playerDetail(props.id);
+    detail.value = result;
+    missing.value = result == null;
+    if (!noteDirty.value) noteDraft.value = result?.note?.body ?? "";
+  } catch (error) {
+    failure.value = errorText(error);
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(
+  () => props.id,
+  () => {
+    noteDirty.value = false;
+    noteMessage.value = null;
+    detail.value = null;
+    void load();
+  },
+  { immediate: true },
+);
+
+const title = computed(() => {
+  const d = detail.value;
+  return d?.name ?? d?.logName ?? `ID ${props.id}`;
+});
+
+const historyPoints = computed(() =>
+  (detail.value?.history ?? [])
+    .filter((p) => p.rating != null)
+    .map((p) => ({ at: p.at, value: p.rating as number })),
+);
+
+const relationNames: Record<Relation, string> = { teammate: "队友", opponent: "对手", other: "其他" };
+
+function date(at: number): string {
+  return new Date(at).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+async function saveNote() {
+  try {
+    await commands.setNote(props.id, noteDraft.value);
+    noteDirty.value = false;
+    noteMessage.value = { ok: true, text: noteDraft.value.trim() ? "已保存" : "已删除" };
+    await load();
+  } catch (error) {
+    noteMessage.value = { ok: false, text: errorText(error) };
+  }
+}
+
+async function refresh() {
+  refreshing.value = true;
+  failure.value = null;
+  try {
+    await commands.refreshPlayer(props.id);
+    await load();
+  } catch (error) {
+    failure.value = errorText(error);
+  } finally {
+    refreshing.value = false;
+  }
+}
+</script>
+
+<template>
+  <section class="card detail">
+    <div class="row head">
+      <h2>{{ title }}</h2>
+      <span v-if="detail?.isSelf" class="tag">本机</span>
+      <span class="hint">ID {{ id }}</span>
+      <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
+      <span v-if="detail?.steamId" class="hint">Steam {{ detail.steamId }}</span>
+      <button class="refresh" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
+    </div>
+    <p v-if="failure" class="error">{{ failure }}</p>
+    <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 BATrace 查一次。</p>
+
+    <template v-if="detail">
+      <div class="stats">
+        <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
+        <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
+        <div><label>排名</label><span class="num">{{ detail.profile?.rank ?? "–" }}</span></div>
+        <div><label>排位场次</label><span class="num">{{ detail.profile?.ratingGames ?? "–" }}</span></div>
+        <div><label>胜率</label><span class="num">{{ percent(detail.profile?.ranked?.winRate) }}</span></div>
+        <div><label>离场</label><span class="num">{{ detail.profile?.ranked?.leaves ?? "–" }}</span></div>
+        <div><label>损毁比</label><span class="num">{{ ratio(detail.profile?.ranked?.killLossRatio) }}</span></div>
+        <div><label>价值比</label><span class="num">{{ ratio(detail.profile?.ranked?.costRatio) }}</span></div>
+        <div><label>场均时长</label><span class="num">{{ minutes(detail.profile?.ranked?.averageMinutes) }}</span></div>
+        <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
+      </div>
+
+      <h3>备注</h3>
+      <textarea
+        v-model="noteDraft"
+        rows="3"
+        maxlength="2000"
+        placeholder="只保存在本机，对局时显示在悬浮窗上"
+        @input="noteDirty = true; noteMessage = null"
+      />
+      <div class="row">
+        <button class="primary" :disabled="!noteDirty" @click="saveNote">保存备注</button>
+        <span class="hint num">{{ noteDraft.length }}/2000</span>
+        <span v-if="detail.note && !noteDirty" class="hint">更新于 {{ ago(detail.note.updatedAt, now) }}</span>
+        <span v-if="noteMessage" :class="noteMessage.ok ? 'ok' : 'error'">{{ noteMessage.text }}</span>
+      </div>
+
+      <h3>ELO 变化</h3>
+      <Sparkline :points="historyPoints" />
+
+      <h3>
+        同场 {{ detail.encounters.total }} 场：队友 {{ detail.encounters.asTeammate }}，对手 {{ detail.encounters.asOpponent }}
+      </h3>
+      <table v-if="detail.matches.length">
+        <thead>
+          <tr>
+            <th class="left">时间</th>
+            <th class="left">地图</th>
+            <th class="left">关系</th>
+            <th class="left">当时的名字</th>
+            <th>时长</th>
+            <th>状态</th>
+            <th>比赛</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="m in detail.matches" :key="m.matchId">
+            <td class="left num">{{ date(m.at) }}</td>
+            <td class="left">{{ m.map ?? "–" }}</td>
+            <td class="left" :class="m.relation">{{ relationNames[m.relation] }}</td>
+            <td class="left">{{ m.logName ?? "–" }}</td>
+            <td class="num">{{ m.durationMs != null ? mmss(m.durationMs) : "–" }}</td>
+            <td>{{ phaseNames[m.phase] }}</td>
+            <td class="num hint">{{ m.matchId }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="hint">还没有同场记录。</p>
+    </template>
+    <p v-else-if="loading" class="hint">正在读取…</p>
+  </section>
+</template>
+
+<style scoped>
+.head h2 {
+  margin: 0;
+}
+
+.tag {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: rgb(76 194 255 / 0.15);
+  color: var(--bax-accent);
+  font-size: 12px;
+}
+
+.refresh {
+  margin-left: auto;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats label {
+  font-size: 12px;
+  color: var(--bax-muted);
+}
+
+.big {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--bax-border);
+  border-radius: 6px;
+  background: var(--bax-surface-2);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--bax-accent);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  padding: 4px 8px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--bax-border);
+}
+
+th {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--bax-muted);
+}
+
+.left {
+  text-align: left;
+}
+
+td.teammate {
+  color: var(--bax-good);
+}
+
+td.opponent {
+  color: var(--bax-bravo);
+}
+</style>

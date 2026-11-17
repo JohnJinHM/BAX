@@ -125,6 +125,7 @@ const emptyText = computed(() => {
 
 function playerTitle(p: PlayerView): string {
   const parts = [`ID ${p.id}`];
+  if (p.note) parts.push(`备注：${p.note}`);
   if (p.logName && p.logName !== p.name) parts.push(`日志名 ${p.logName}`);
   const e = p.encounters;
   if (e.total > 0) parts.push(`以前同场 ${e.total} 次（队友 ${e.asTeammate}，对手 ${e.asOpponent}）`);
@@ -309,7 +310,9 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="lv num">{{ p.profile?.level != null ? `Lv${p.profile.level}` : "" }}</span>
             <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
-            <span class="name">{{ p.name ?? `ID ${p.id}` }}</span>
+            <span class="name">
+              {{ p.name ?? `ID ${p.id}` }}<span v-if="p.note" class="note"> · {{ p.note }}</span>
+            </span>
             <span
               v-if="p.fetch.state !== 'idle'"
               class="fetch"
@@ -620,6 +623,11 @@ li.stale .elo {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.note {
+  color: var(--bax-warn);
+  font-size: 11px;
 }
 
 .fetch {

@@ -16,6 +16,7 @@ import {
   teamNames,
 } from "../shared/format";
 import { useNow } from "../shared/useNow";
+import { openPlayer } from "./navigation";
 
 const snapshot = useSnapshot();
 const now = useNow(1000);
@@ -108,8 +109,9 @@ async function refresh() {
         <tbody>
           <tr v-for="p in group.players" :key="p.id" :class="{ self: p.isSelf }">
             <td class="left">
-              <div class="name">{{ p.name ?? "（无名）" }}</div>
+              <a class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name ?? "（无名）" }}</a>
               <div class="hint">ID {{ p.id }}<template v-if="p.logName && p.logName !== p.name"> · {{ p.logName }}</template></div>
+              <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
             </td>
             <td class="num strong">{{ rating(p.profile?.rating) }}</td>
             <td class="num">{{ p.profile?.level ?? "–" }}</td>
@@ -180,8 +182,24 @@ table {
 }
 
 td.left .name {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: inherit;
+  text-decoration: none;
+}
+
+td.left .name:hover {
+  color: var(--bax-accent);
+  text-decoration: underline;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--bax-warn);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 th,

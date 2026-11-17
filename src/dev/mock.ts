@@ -2,10 +2,10 @@
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 
-import { fixtureSnapshot } from "./fixture";
+import { fixtureDetail, fixtureHits, fixtureSnapshot } from "./fixture";
 
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
-  mockIPC((cmd) => {
+  mockIPC((cmd, args) => {
     switch (cmd) {
       case "get_snapshot":
         return options.collapsed
@@ -23,6 +23,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         };
       case "export_diag":
         return "C:\\Users\\example\\AppData\\Local\\BAX\\diag\\export\\bax-diag-20261117-203015.txt";
+      case "player_detail":
+        return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
+      case "search_players":
+        return fixtureHits(String((args as { query?: string } | undefined)?.query ?? ""));
       default:
         // 事件订阅、窗口大小等调用一律当作成功
         return null;

@@ -1,19 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 import { useSnapshot } from "../shared/engine";
 import { errorNames } from "../shared/format";
 import MatchPanel from "./MatchPanel.vue";
+import { currentTab as tab } from "./navigation";
+import PlayersPanel from "./PlayersPanel.vue";
 import RemindersPanel from "./RemindersPanel.vue";
 import SettingsPanel from "./SettingsPanel.vue";
 
-type Tab = "match" | "reminders" | "settings";
-const tabs: Tab[] = ["match", "reminders", "settings"];
-
 const snapshot = useSnapshot();
-// 地址里的 ?tab= 可以指定打开哪一页（预览和托盘菜单用）
-const requested = new URLSearchParams(location.search).get("tab");
-const tab = ref<Tab>(tabs.find((t) => t === requested) ?? "match");
 
 const logLine = computed(() => {
   const s = snapshot.value;
@@ -38,6 +34,7 @@ const apiLine = computed(() => {
     <nav>
       <div class="brand">BAX</div>
       <button :class="{ active: tab === 'match' }" @click="tab = 'match'">当前对局</button>
+      <button :class="{ active: tab === 'players' }" @click="tab = 'players'">玩家</button>
       <button :class="{ active: tab === 'reminders' }" @click="tab = 'reminders'">提醒与计时</button>
       <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
       <div class="status">
@@ -47,6 +44,7 @@ const apiLine = computed(() => {
     </nav>
     <main>
       <MatchPanel v-if="tab === 'match'" />
+      <PlayersPanel v-else-if="tab === 'players'" />
       <RemindersPanel v-else-if="tab === 'reminders'" />
       <SettingsPanel v-else />
     </main>

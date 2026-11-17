@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { shallowRef, type ShallowRef } from "vue";
 
+import type { PlayerDetail } from "./bindings/PlayerDetail";
+import type { PlayerHit } from "./bindings/PlayerHit";
 import type { ReminderRule } from "./bindings/ReminderRule";
 import type { JsonValue } from "./bindings/serde_json/JsonValue";
 import type { Snapshot } from "./bindings/Snapshot";
@@ -85,6 +87,13 @@ export const commands = {
   /** 前端错误交给 Rust 写进诊断日志（ADR-0007）。 */
   reportUiError: (kind: string, message: string, stack: string | null) =>
     invoke<void>("report_ui_error", { kind, message, stack }),
+  /** 长期库里没有这名玩家时为 null。 */
+  playerDetail: (id: number) => invoke<PlayerDetail | null>("player_detail", { id }),
+  /** 查询为空时列出最近见过的玩家。 */
+  searchPlayers: (query: string, limit = 50) => invoke<PlayerHit[]>("search_players", { query, limit }),
+  /** 内容为空时删除备注。 */
+  setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
+  refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),
 };
 
 /** 把命令的失败原因转成一句话。 */
