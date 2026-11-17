@@ -241,6 +241,9 @@ impl MatchPlayer {
 }
 
 /// 战报里的一个单位实例。
+///
+/// 实例在 `UnitData` 里的键在一场比赛内唯一。单位被转交后出现在接收者的 `UnitData` 里，
+/// 转出者的 `TransferredUnits` 里留有同一个键。
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct UnitInstance {
@@ -248,8 +251,10 @@ pub struct UnitInstance {
     pub id: Option<i64>,
     #[serde(deserialize_with = "null_as_default")]
     pub option_ids: Vec<i64>,
+    /// 出生时刻，Unix 秒（不是相对开局的秒数）。相对开局的时间是它减去 `MatchInfo::start_time`；
+    /// 准备阶段部署的单位在开局后两三秒出现。
     pub spawn_time: Option<i64>,
-    /// 阵亡时刻。键不出现表示活到了比赛结束。
+    /// 阵亡时刻，Unix 秒。键不出现表示活到了比赛结束。
     pub death_time: Option<i64>,
     pub killed_count: Option<i64>,
     pub building_destroyed_count: Option<i64>,
@@ -264,13 +269,14 @@ pub struct UnitInstance {
     pub self_destruction: Option<bool>,
 }
 
-/// 转交单位的基本信息。
+/// 转出的单位：出现在转出者（原本出兵的人）名下，实例本身在接收者的 `UnitData` 里，键相同。
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "PascalCase")]
 pub struct TransferredUnit {
     pub id: Option<i64>,
     #[serde(deserialize_with = "null_as_default")]
     pub option_ids: Vec<i64>,
+    /// 出生时刻，Unix 秒，与接收者那边的实例相同。
     pub spawn_time: Option<i64>,
 }
 

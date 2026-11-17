@@ -15,8 +15,8 @@
           "1": {
             "Id": 169,
             "OptionIds": [11, 12, 40],
-            "SpawnTime": 0,
-            "DeathTime": 340,
+            "SpawnTime": 1794883996,
+            "DeathTime": 1794884333,
             "KilledCount": 3,
             "TotalDamageDealt": 812.5,
             "TotalDamageReceived": 400
@@ -24,13 +24,13 @@
           "2": {
             "Id": 42,
             "OptionIds": [],
-            "SpawnTime": 95,
+            "SpawnTime": 1794884088,
             "WasRefunded": true
           },
           "9": {
             "Id": 301,
             "OptionIds": [7],
-            "SpawnTime": 610,
+            "SpawnTime": 1794884603,
             "TotalDamageDealt": 120,
             "TotalSupplyPointsConsumed": 350,
             "WasAirdropped": true
@@ -63,8 +63,8 @@
           "3": {
             "Id": 88,
             "OptionIds": [2],
-            "SpawnTime": 12,
-            "DeathTime": 900,
+            "SpawnTime": 1794884005,
+            "DeathTime": 1794884893,
             "TotalDamageReceived": 233.25,
             "SelfDestruction": true
           }
@@ -90,7 +90,7 @@
           "20": {
             "Id": 512,
             "OptionIds": [3, 4],
-            "SpawnTime": 5,
+            "SpawnTime": 1794883998,
             "KilledCount": 9,
             "BuildingDestroyedCount": 1,
             "TotalDamageDealt": 2400,
@@ -98,7 +98,7 @@
           }
         },
         "TransferredUnits": {
-          "31": { "Id": 77, "OptionIds": [5], "SpawnTime": 400 }
+          "31": { "Id": 77, "OptionIds": [5], "SpawnTime": 1794884393 }
         },
         "Destruction": 15,
         "Losses": 4,
@@ -127,8 +127,8 @@
           "31": {
             "Id": 77,
             "OptionIds": [5],
-            "SpawnTime": 400,
-            "DeathTime": 1100,
+            "SpawnTime": 1794884393,
+            "DeathTime": 1794885093,
             "KilledCount": 2,
             "TotalDamageDealt": 640,
             "TotalDamageReceived": 500

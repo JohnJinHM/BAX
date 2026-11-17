@@ -67,7 +67,8 @@
 | `StartTime`、`EndTime` | Unix 秒。`EndTime − StartTime` 与 `TotalPlayTimeInSec` 相差 0～2 秒 |
 | `VictoryLevel` | 样本中有 40、50、60、70 |
 | `EndMatchReason` | 样本中有 1、2、3 |
-| 单位目录 `category_type` | 0～6。原型的用法：1 步兵，2 坦克，3 火炮与防空，5 直升机，6 固定翼；0 与 4 的含义待验证 4 确认。2026-11-17 的目录共 462 个单位 |
+| 单位目录 `category_type` | 0～6，含义见下文“单位分类”。2026-11-17 的目录共 462 个单位 |
+| 单位实例的 `SpawnTime`、`DeathTime` | **Unix 秒**，不是相对开局的秒数。相对开局的时间要减去 `StartTime` |
 
 ## 玩家资料
 
@@ -83,4 +84,28 @@
 
 玩家战报包括赛前赛后 ELO、出兵与回收价值、击毁与损失、伤害、占点、补给、勋章、经验，`UnitData`（实例 ID → 单位实例）和 `TransferredUnits`（转交的单位，只有类型、选项和出生时间）。样本中 307 份战报有 125 份出现转交单位，1 份没有任何单位数据。
 
-单位实例：`Id`（单位类型，对应单位目录）、`OptionIds`（改装选项）、`SpawnTime`、`DeathTime`（秒，相对开局）、`KilledCount`、`BuildingDestroyedCount`、各类伤害、`TotalSupplyPointsConsumed`、`WasRefunded`、`WasAirdropped`、`SelfDestruction`。转交与接收的归属口径由验证 4 确定。
+单位实例：`Id`（单位类型，对应单位目录）、`OptionIds`（改装选项）、`SpawnTime` 与 `DeathTime`（Unix 秒）、`KilledCount`、`BuildingDestroyedCount`、各类伤害、`TotalSupplyPointsConsumed`、`WasRefunded`、`WasAirdropped`、`SelfDestruction`。
+
+以下规律来自原型缓存里的 307 份战报、183,898 个单位实例（2026-11-17 分析，见[验证 4](../validation/04-units-and-specs.md)）：
+
+- **时间。** 准备阶段部署的单位在 `StartTime` 后 2～12 秒出现（中位数 3 秒），所有实例的时间都落在 `StartTime` 与 `EndTime` 之间。42.6% 的实例没有 `DeathTime`，即存活到比赛结束。
+- **实例键。** `UnitData` 的键在一场比赛内唯一，没有出现在两名玩家名下的情况。
+- **转交。** 玩家 A 把单位交给 B 之后，实例在 B 的 `UnitData` 里，A 的 `TransferredUnits` 里留有同一个键，单位类型与出生时间都相同；A 自己的 `UnitData` 里不再有它。样本中 125 份战报共 2,474 个转交实例，全部符合。所以 `UnitData` 是比赛结束时各自名下的单位，原本由谁出兵要把转交还原回去。
+- **价值。** 按目录的基础价格累加实例，只有战报 `TotalSpawnedUnitScore` 的 61%～88%（中位数 76%），差额来自改装选项等。单个单位的实际成本不能用基础价格代替。
+- **专精。** 战报里没有专精或卡组字段，逐场专精无法从战报得到。
+
+## 单位分类
+
+目录的 `category_type` 与 `role` 组合起来才能区分兵种。下表的名称是按目录里的单位名推断的，尚未在游戏里逐一核对。
+
+| category | 推断的含义 | role 与示例 |
+|---|---|---|
+| 0 | 侦察 | 10 侦察步战车（M3A3 CFV）；11 侦察坦克；12 轻型侦察车（LAV-25）；13 侦察与炮兵观察车（Stryker RV、M7 BFIST）；32 侦察步兵；33 狙击手；36 特种侦察；100 无人机（MQ-9 Reaper） |
+| 1 | 步兵 | 30 普通步兵；31 突击与精锐步兵；33 狙击手；34 便携防空；35 反坦克导弹；36 特种部队 |
+| 2 | 车辆 | 10 步战车（BMP-3、Bradley）；11 坦克（T-72B、M1A1）；12 运输车（BTR-82、Stryker ICV）；13 反坦克车辆（Humvee TOW-2）；133 扫雷车 |
+| 3 | 支援 | 14 补给车（LMTV、KamAZ）；15 远程防空（Patriot、S-300）；16 近程防空（Avenger、Tor）；130 火箭炮（HIMARS、Grad）；131 迫击炮；132 弹道导弹（Iskander）；133 自行火炮（M109A7、2S19） |
+| 4 | 非作战 | 机组与飞行员、训练靶、舰艇、NPC 等，样本里只有 26 个实例 |
+| 5 | 直升机 | 70 侦察与轻型攻击；71 通用运输；72 重型运输；73 武装直升机 |
+| 6 | 固定翼 | 160 对地攻击（A-10C、Su-25）；161 打击（Su-24M2、F-117）；162 轰炸机；163 运输与空投；164 战斗机与多用途 |
+
+规划要求“火炮和防空、坦克和运输车分别处理”，就要按 role 拆开 category 2 与 3。原型的检测模块把整个 category 3 当作“火炮/防空”，其中混进了补给车。

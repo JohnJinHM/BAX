@@ -178,8 +178,8 @@ async fn match_report_is_parsed_with_teams_winner_and_optional_unit_fields() {
     let killed = &ash.unit_data["1"];
     assert_eq!(killed.id, Some(169));
     assert_eq!(killed.option_ids, vec![11, 12, 40]);
-    assert_eq!(killed.spawn_time, Some(0));
-    assert_eq!(killed.death_time, Some(340));
+    assert_eq!(killed.spawn_time, Some(1_794_883_996), "Unix 秒");
+    assert_eq!(killed.death_time, Some(1_794_884_333));
     assert_eq!(killed.killed_count, Some(3));
     assert_eq!(killed.total_damage_dealt, Some(812.5));
 
@@ -203,7 +203,7 @@ async fn match_report_is_parsed_with_teams_winner_and_optional_unit_fields() {
 
     let dune = &info.data["100201"];
     assert_eq!(dune.transferred_units["31"].id, Some(77));
-    assert_eq!(dune.transferred_units["31"].spawn_time, Some(400));
+    assert_eq!(dune.transferred_units["31"].spawn_time, Some(1_794_884_393));
     assert_eq!(dune.unit_data["20"].building_destroyed_count, Some(1));
     assert_eq!(
         dune.unit_data["20"].total_damage_friendly_fire_dealt,
