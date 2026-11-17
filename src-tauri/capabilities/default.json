@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "悬浮窗与主窗口：接收快照事件、拖动悬浮窗、按内容调整悬浮窗大小。BAX 自己的命令默认对所有窗口开放。",
+  "windows": ["overlay", "main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-size"
+  ]
+}
