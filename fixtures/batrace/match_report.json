@@ -1,0 +1,168 @@
+{
+  "matchInfo": {
+    "TotalObjectiveZonesCount": 10,
+    "MapId": 12,
+    "StartTime": 1794883993,
+    "EndTime": 1794885193,
+    "TotalPlayTimeInSec": 1200,
+    "Data": {
+      "100101": {
+        "Id": 100101,
+        "Name": "Ash",
+        "TotalSpawnedUnitScore": 5200,
+        "TotalRefundedUnitScore": 300,
+        "UnitData": {
+          "1": {
+            "Id": 169,
+            "OptionIds": [11, 12, 40],
+            "SpawnTime": 0,
+            "DeathTime": 340,
+            "KilledCount": 3,
+            "TotalDamageDealt": 812.5,
+            "TotalDamageReceived": 400
+          },
+          "2": {
+            "Id": 42,
+            "OptionIds": [],
+            "SpawnTime": 95,
+            "WasRefunded": true
+          },
+          "9": {
+            "Id": 301,
+            "OptionIds": [7],
+            "SpawnTime": 610,
+            "TotalDamageDealt": 120,
+            "TotalSupplyPointsConsumed": 350,
+            "WasAirdropped": true
+          }
+        },
+        "TransferredUnits": {},
+        "Destruction": 12,
+        "Losses": 9,
+        "OldRating": 2100.5,
+        "NewRating": 2088,
+        "DamageDealt": 9000,
+        "DamageReceived": 7000,
+        "ObjectivesCaptured": 3,
+        "SupplyPointsConsumed": 1200,
+        "SupplyPointsConsumedByAllies": 150,
+        "DestructionScore": 3100,
+        "LossesScore": 2500,
+        "Medals": [3, 7],
+        "SupplyDestroyed": 2,
+        "RawExpWithMultipliers": 900,
+        "RawExp": 600,
+        "TotalExp": 900,
+        "DLRatio": 1.24
+      },
+      "100102": {
+        "Id": 100102,
+        "Name": "",
+        "TotalSpawnedUnitScore": 4100,
+        "UnitData": {
+          "3": {
+            "Id": 88,
+            "OptionIds": [2],
+            "SpawnTime": 12,
+            "DeathTime": 900,
+            "TotalDamageReceived": 233.25,
+            "SelfDestruction": true
+          }
+        },
+        "TransferredUnits": {},
+        "Losses": 14,
+        "OldRating": 1890.25,
+        "NewRating": 1877.75,
+        "DamageReceived": 8100,
+        "LossesScore": 3900,
+        "Medals": [],
+        "Deserter": true,
+        "RawExpWithMultipliers": 100,
+        "RawExp": 100
+      },
+      "100201": {
+        "Id": 100201,
+        "Name": "Dune",
+        "TeamId": 1,
+        "TotalSpawnedUnitScore": 6100,
+        "TotalRefundedUnitScore": 800,
+        "UnitData": {
+          "20": {
+            "Id": 512,
+            "OptionIds": [3, 4],
+            "SpawnTime": 5,
+            "KilledCount": 9,
+            "BuildingDestroyedCount": 1,
+            "TotalDamageDealt": 2400,
+            "TotalDamageFriendlyFireDealt": 35.5
+          }
+        },
+        "TransferredUnits": {
+          "31": { "Id": 77, "OptionIds": [5], "SpawnTime": 400 }
+        },
+        "Destruction": 15,
+        "Losses": 4,
+        "OldRating": 2250,
+        "NewRating": 2262.5,
+        "DamageDealt": 11000,
+        "DamageReceived": 3000,
+        "ObjectivesCaptured": 5,
+        "SupplyPointsConsumed": 900,
+        "SupplyPointsConsumedFromAllies": 150,
+        "SupplyCaptured": 1,
+        "DestructionScore": 4100,
+        "LossesScore": 1100,
+        "Medals": [1],
+        "RawExpWithMultipliers": 1500,
+        "RawExp": 1000,
+        "TotalExp": 1500,
+        "DLRatio": 3.73
+      },
+      "100202": {
+        "Id": 100202,
+        "Name": "Starling",
+        "TeamId": 1,
+        "TotalSpawnedUnitScore": 5800,
+        "UnitData": {
+          "31": {
+            "Id": 77,
+            "OptionIds": [5],
+            "SpawnTime": 400,
+            "DeathTime": 1100,
+            "KilledCount": 2,
+            "TotalDamageDealt": 640,
+            "TotalDamageReceived": 500
+          }
+        },
+        "TransferredUnits": {},
+        "Destruction": 8,
+        "Losses": 6,
+        "OldRating": 2143.5,
+        "NewRating": 2155,
+        "DamageDealt": 7200,
+        "DamageReceived": 5100,
+        "ObjectivesCaptured": 2,
+        "SupplyPointsConsumed": 700,
+        "DestructionScore": 2300,
+        "LossesScore": 1700,
+        "Medals": [],
+        "RawExpWithMultipliers": 1200,
+        "RawExp": 800,
+        "TotalExp": 1200,
+        "DLRatio": 1.35
+      },
+      "100900": {
+        "Id": 100900,
+        "Name": "Watcher",
+        "TeamId": 100,
+        "UnitData": {},
+        "TransferredUnits": {},
+        "Medals": []
+      }
+    },
+    "WinnerTeam": 1,
+    "VictoryLevel": 70,
+    "EndMatchReason": 3,
+    "TeamMatchPoints": { "Alpha": 420, "Bravo": 1000 }
+  }
+}

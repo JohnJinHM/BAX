@@ -1,0 +1,44 @@
+{
+  "units": [
+    {
+      "id": 169,
+      "hud_name": "Su-35S",
+      "name": "Su-35S",
+      "country_id": 2,
+      "description": null,
+      "cost": 330,
+      "type": 4,
+      "category_type": 6,
+      "role": 14,
+      "original_name": null,
+      "owner_infantry_id": 0,
+      "original_cost": 330,
+      "country": { "id": 2, "name": "Russia", "uiName": "RU", "flagFileName": "ru.png", "maxPoints": 10000, "hidden": false },
+      "display_in_armory": true,
+      "is_unit_modification": false,
+      "in_build_level": 0
+    },
+    {
+      "id": 42,
+      "hud_name": "M1A2 SEP v3",
+      "name": "M1A2 SEP v3 Abrams",
+      "country_id": 1,
+      "cost": 290,
+      "type": 2,
+      "category_type": 2,
+      "role": 3,
+      "original_cost": 290,
+      "country": { "id": 1, "name": "USA", "uiName": "US" },
+      "display_in_armory": true,
+      "is_unit_modification": false
+    },
+    {
+      "id": 88,
+      "name": "Rifle squad",
+      "country_id": 1,
+      "cost": 40,
+      "category_type": 1
+    }
+  ],
+  "count": 3
+}

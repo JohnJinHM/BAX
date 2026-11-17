@@ -1,0 +1,24 @@
+[package]
+name = "bax-batrace"
+description = "BATrace 接口客户端：玩家资料、比赛列表、战报与单位目录"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bax-core.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+wiremock.workspace = true
+
+[lints]
+workspace = true

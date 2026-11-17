@@ -1,0 +1,33 @@
+{
+  "matches": [
+    {
+      "matchId": "9000003",
+      "data": {
+        "TotalPlayTimeInSec": 1200,
+        "MapId": 12,
+        "EndTime": 1794885193,
+        "WinnerTeam": 1,
+        "VictoryLevel": 70,
+        "Data": {
+          "100101": { "Id": 100101, "Name": "Ash", "OldRating": 2100.5, "NewRating": 2088, "DestructionScore": 3100, "LossesScore": 2500, "ObjectivesCaptured": 3 },
+          "100202": { "Id": 100202, "Name": "Starling", "TeamId": 1, "OldRating": 2143.5, "NewRating": 2155, "DestructionScore": 2300, "LossesScore": 1700, "ObjectivesCaptured": 2 }
+        }
+      }
+    },
+    {
+      "matchId": "9000002",
+      "data": {
+        "TotalPlayTimeInSec": 2410,
+        "MapId": 5,
+        "EndTime": 1794880000,
+        "VictoryLevel": 50,
+        "Type": 2,
+        "Data": {
+          "100202": { "Id": 100202, "Name": "Starling", "OldRating": 2143.5, "NewRating": 2143.5 },
+          "100777": { "Id": 100777, "Name": "Guest", "TeamId": 1 }
+        }
+      }
+    }
+  ],
+  "totalCount": 100
+}
