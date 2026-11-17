@@ -2,3 +2,6 @@
 # 机器上若全局设置了 CC（例如直接指向 cl.exe），cc crate 会原样使用它并跳过 MSVC 环境探测，
 # 编译 SQLite 时就找不到头文件。这里把它置空，让 cc 自己定位编译器与头文件路径。
 CC = { value = "", force = true }
+# ts-rs 生成的 TypeScript 类型放到前端目录；64 位整数按 number 处理（ID 与毫秒时间都在安全整数范围内）
+TS_RS_EXPORT_DIR = { value = "src/shared/bindings", relative = true }
+TS_RS_LARGE_INT = "number"

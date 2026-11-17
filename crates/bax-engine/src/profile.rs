@@ -8,6 +8,7 @@ use serde::Serialize;
 /// 一名玩家的资料摘要。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ProfileSummary {
     /// 接口资料里的名字；空串记为 `None`。
     pub name: Option<String>,
@@ -25,6 +26,7 @@ pub struct ProfileSummary {
 /// 排位赛的累计统计。比率在分母为零或数据缺失时为 `None`。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RankedStats {
     pub fights: Option<i64>,
     pub wins: Option<i64>,

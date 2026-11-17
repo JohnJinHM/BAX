@@ -15,6 +15,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[features]
+ts = ["dep:ts-rs", "bax-core/ts"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread"] }

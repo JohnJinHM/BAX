@@ -18,6 +18,7 @@ use crate::profile::ProfileSummary;
 /// 引擎状态的一份快照。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Snapshot {
     /// 每发布一次加一。
     pub revision: u64,
@@ -58,6 +59,7 @@ impl Snapshot {
 /// 一条提醒规则，以及它在当前比赛里的情况。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ReminderView {
     pub id: u32,
     pub label: String,
@@ -74,6 +76,7 @@ pub struct ReminderView {
 /// 一次按时触发的提醒。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct AlertView {
     /// 本次运行里第几次提醒，从 1 开始。
     pub seq: u64,
@@ -86,6 +89,7 @@ pub struct AlertView {
 /// 日志读取的状态。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LogStatus {
     /// 正在自动寻找日志目录。
     pub searching: bool,
@@ -101,6 +105,7 @@ pub struct LogStatus {
 /// 接口请求的整体状态。
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ApiStatus {
     pub in_flight: u32,
     pub queued: u32,
@@ -112,6 +117,7 @@ pub struct ApiStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ApiErrorView {
     pub kind: ErrorKind,
     pub message: String,
@@ -121,6 +127,7 @@ pub struct ApiErrorView {
 /// 当前比赛。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchView {
     pub match_id: MatchId,
     pub phase: Phase,
@@ -146,6 +153,7 @@ pub struct MatchView {
 /// 比赛里的一名玩家。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlayerView {
     pub id: PlayerId,
     /// 显示用的名字：接口资料里的名字优先，其次是这场比赛日志里的名字。
@@ -171,6 +179,7 @@ pub struct PlayerView {
     rename_all_fields = "camelCase",
     tag = "state"
 )]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum FetchState {
     /// 没有请求在进行，也不需要请求。
     Idle,
@@ -186,6 +195,7 @@ pub enum FetchState {
 /// 一支队伍的汇总。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct TeamSummary {
     pub team: Team,
     pub players: u32,

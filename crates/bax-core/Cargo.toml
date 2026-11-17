@@ -9,6 +9,11 @@ publish.workspace = true
 
 [dependencies]
 serde.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# 为界面生成 TypeScript 类型
+ts = ["dep:ts-rs"]
 
 [dev-dependencies]
 serde_json.workspace = true

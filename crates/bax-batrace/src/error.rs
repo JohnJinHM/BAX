@@ -41,6 +41,7 @@ pub enum ApiError {
 /// [`ApiError`] 去掉细节之后的类别，可以直接交给界面。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ErrorKind {
     Timeout,
     Network,

@@ -30,6 +30,8 @@ thiserror = "2"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# 由 Rust 类型生成前端用的 TypeScript 类型（ADR-0004、ADR-0006）
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 winreg = "0.56"
 wiremock = "0.6"
 

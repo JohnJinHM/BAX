@@ -9,11 +9,13 @@ use serde::{Deserialize, Serialize};
 /// 游戏内部的玩家 ID。玩家以它为准，名字只是附加信息。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlayerId(pub u64);
 
 /// 比赛 ID，日志里叫 fight id，BATrace 里叫 match id。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchId(pub u64);
 
 macro_rules! id_impls {

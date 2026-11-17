@@ -12,6 +12,7 @@ use crate::time::Timestamp;
 /// 一条提醒规则。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ReminderRule {
     /// 稳定的编号，用来记录每场比赛里这条规则是否已经提醒过。改时间或文字不应换编号。
     pub id: u32,
@@ -34,6 +35,7 @@ pub fn default_rules() -> Vec<ReminderRule> {
 /// 规则在一场比赛里的结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ReminderOutcome {
     Fired,
     Missed,

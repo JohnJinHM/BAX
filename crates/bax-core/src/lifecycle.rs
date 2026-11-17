@@ -24,6 +24,7 @@ use crate::time::Timestamp;
 /// 比赛所处的阶段。顺序即先后。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Phase {
     /// 匹配成功，在等待室里等其他玩家。
     WaitingRoom,
@@ -40,6 +41,7 @@ pub enum Phase {
 /// 本机与比赛服务器的连接情况。它与 [`Phase`] 无关：断线之后比赛照常进行。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Connection {
     Connected,
     /// 已离开房间，比赛可能仍在进行。
@@ -51,6 +53,7 @@ pub enum Connection {
 /// 计时基准的来源。排在后面的更可信，可以覆盖前面的。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ClockSource {
     /// 由日志推算：场景加载完成的时刻加上准备阶段的长度。
     LogEstimate,
@@ -63,6 +66,7 @@ pub enum ClockSource {
 /// 一场比赛的计时基准：正式开局的时刻。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BattleClock {
     pub start_at: Timestamp,
     pub source: ClockSource,

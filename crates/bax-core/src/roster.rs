@@ -8,6 +8,7 @@ use crate::ids::PlayerId;
 /// BATrace 用 `TeamId`，缺省（0）是 Alpha，1 是 Bravo，100 是观战。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Team {
     Alpha,
     Bravo,

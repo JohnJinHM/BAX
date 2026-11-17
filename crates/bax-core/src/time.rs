@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// 都是调用方的事。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Timestamp(pub i64);
 
 impl Timestamp {

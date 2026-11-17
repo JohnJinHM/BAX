@@ -175,6 +175,7 @@ pub struct MatchPlayerRow {
 /// 与某名玩家的相遇情况。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct EncounterSummary {
     /// 一共同场多少次。
     pub total: u32,
