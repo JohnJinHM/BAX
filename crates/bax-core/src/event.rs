@@ -75,7 +75,11 @@ impl ExitCause {
 
 /// 一条与对局有关的日志事件。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum LogEvent {
     /// 游戏启动时报告的版本号，例如 `1.2.2.1`。
     GameVersion { version: String },

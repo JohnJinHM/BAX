@@ -184,7 +184,11 @@ impl MatchState {
 
 /// [`Tracker::apply`] 报告的变化。调用方据此决定要做什么：查询玩家、保存记录、获取战报。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum Update {
     /// 出现了一场新比赛。
     MatchDiscovered { match_id: MatchId },
