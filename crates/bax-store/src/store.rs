@@ -1,0 +1,812 @@
+//! 长期库：玩家档案、比赛、相遇记录和设置。
+//!
+//! 写入都是幂等的合并：同一场比赛、同一份资料写多少遍，结果都一样；
+//! 用一份不完整的状态再写一遍，不会把已有的信息抹掉。
+//! 重读日志、重连、应用重启都会让同样的数据再来一遍，存储层必须经得起。
+
+use std::path::Path;
+
+use bax_core::{
+    BattleClock, ClockSource, ExitCause, MatchId, MatchState, Phase, PlayerId, Team, Timestamp,
+};
+use rusqlite::{Connection, OptionalExtension, Row, params};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use crate::Result;
+use crate::db;
+use crate::error::StoreError;
+
+const MIGRATIONS: &[&str] = &[
+    // 第 1 版：对局识别与玩家查询
+    "CREATE TABLE players (
+        id            INTEGER PRIMARY KEY,
+        name          TEXT,
+        steam_id      TEXT,
+        level         INTEGER,
+        rating        REAL,
+        rank          INTEGER,
+        rating_games  INTEGER,
+        profile_json  TEXT,
+        fetched_at    INTEGER,
+        last_log_name TEXT,
+        first_seen_at INTEGER,
+        last_seen_at  INTEGER
+    ) STRICT;
+
+    CREATE TABLE player_ratings (
+        player_id    INTEGER NOT NULL,
+        at           INTEGER NOT NULL,
+        rating       REAL,
+        level        INTEGER,
+        rank         INTEGER,
+        rating_games INTEGER,
+        PRIMARY KEY (player_id, at)
+    ) STRICT, WITHOUT ROWID;
+
+    CREATE TABLE matches (
+        id                 INTEGER PRIMARY KEY,
+        discovered_at      INTEGER NOT NULL,
+        phase              TEXT NOT NULL,
+        rejoined           INTEGER NOT NULL DEFAULT 0,
+        map                TEXT,
+        scenario           TEXT,
+        deck               TEXT,
+        game_version       TEXT,
+        self_id            INTEGER,
+        self_team          TEXT,
+        start_at           INTEGER,
+        start_source       TEXT,
+        scenario_loaded_at INTEGER,
+        ended_at           INTEGER,
+        end_cause          TEXT
+    ) STRICT;
+    CREATE INDEX matches_by_time ON matches(discovered_at);
+
+    CREATE TABLE match_players (
+        match_id  INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        player_id INTEGER NOT NULL,
+        position  INTEGER NOT NULL,
+        team      TEXT,
+        log_name  TEXT,
+        PRIMARY KEY (match_id, player_id)
+    ) STRICT, WITHOUT ROWID;
+    CREATE INDEX match_players_by_player ON match_players(player_id);
+
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    ) STRICT, WITHOUT ROWID;",
+];
+
+/// 从接口取得的一份玩家资料，准备写入长期库。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProfileUpdate {
+    pub id: PlayerId,
+    pub name: Option<String>,
+    pub steam_id: Option<String>,
+    pub level: Option<i64>,
+    pub rating: Option<f64>,
+    pub rank: Option<i64>,
+    pub rating_games: Option<i64>,
+    /// 接口响应的原文。
+    pub raw_json: String,
+}
+
+/// 长期库里的一名玩家。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlayerRecord {
+    pub id: PlayerId,
+    /// 接口资料里的名字。
+    pub name: Option<String>,
+    pub steam_id: Option<String>,
+    pub level: Option<i64>,
+    pub rating: Option<f64>,
+    pub rank: Option<i64>,
+    pub rating_games: Option<i64>,
+    /// 最近一次成功取得的接口响应原文。
+    pub profile_json: Option<String>,
+    /// 最近一次成功取得资料的时刻；从未取到过时为 `None`。
+    pub fetched_at: Option<Timestamp>,
+    /// 最近一次在日志名单里见到的名字。
+    pub last_log_name: Option<String>,
+    pub first_seen_at: Option<Timestamp>,
+    pub last_seen_at: Option<Timestamp>,
+}
+
+impl PlayerRecord {
+    /// 用来显示的名字：接口资料优先，其次是日志里的名字。空串视为没有。
+    pub fn display_name(&self) -> Option<&str> {
+        [self.name.as_deref(), self.last_log_name.as_deref()]
+            .into_iter()
+            .flatten()
+            .find(|n| !n.trim().is_empty())
+    }
+}
+
+/// 玩家某一时刻的 ELO 等数据。只在数值变化时记一条。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RatingPoint {
+    pub at: Timestamp,
+    pub rating: Option<f64>,
+    pub level: Option<i64>,
+    pub rank: Option<i64>,
+    pub rating_games: Option<i64>,
+}
+
+/// 长期库里的一场比赛。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchRecord {
+    pub id: MatchId,
+    pub discovered_at: Timestamp,
+    pub phase: Phase,
+    pub rejoined: bool,
+    pub map: Option<String>,
+    pub scenario: Option<String>,
+    pub deck: Option<String>,
+    pub game_version: Option<String>,
+    pub self_id: Option<PlayerId>,
+    pub self_team: Option<Team>,
+    pub clock: Option<BattleClock>,
+    pub scenario_loaded_at: Option<Timestamp>,
+    pub ended_at: Option<Timestamp>,
+    pub end_cause: Option<ExitCause>,
+}
+
+/// 比赛名单里的一行。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchPlayerRow {
+    pub player: PlayerId,
+    /// 只在等待室见过、还没有完整名单时为 `None`。
+    pub team: Option<Team>,
+    /// 日志里的名字；空名字为 `None`。
+    pub log_name: Option<String>,
+}
+
+/// 与某名玩家的相遇情况。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncounterSummary {
+    /// 一共同场多少次。
+    pub total: u32,
+    /// 其中作为队友的次数。
+    pub as_teammate: u32,
+    /// 其中作为对手的次数。
+    pub as_opponent: u32,
+    pub first_at: Option<Timestamp>,
+    pub last_at: Option<Timestamp>,
+}
+
+/// 长期库。
+#[derive(Debug)]
+pub struct Store {
+    conn: Connection,
+}
+
+impl Store {
+    /// 打开长期库，必要时建库或迁移结构。迁移已有数据之前会在旁边留一份备份。
+    pub fn open(path: &Path) -> Result<Store> {
+        Ok(Store {
+            conn: db::open(Some(path), MIGRATIONS, true)?,
+        })
+    }
+
+    pub fn open_in_memory() -> Result<Store> {
+        Ok(Store {
+            conn: db::open(None, MIGRATIONS, true)?,
+        })
+    }
+
+    pub fn schema_version(&self) -> Result<u32> {
+        db::schema_version(&self.conn)
+    }
+
+    // ------------------------------------------------------------ 玩家
+
+    pub fn player(&self, id: PlayerId) -> Result<Option<PlayerRecord>> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!("SELECT {PLAYER_COLUMNS} FROM players WHERE id = ?1"),
+                [id_to_db(id.get())],
+                player_from_row,
+            )
+            .optional()?)
+    }
+
+    /// 批量读取。库里没有的玩家不出现在结果里。
+    pub fn players(&self, ids: &[PlayerId]) -> Result<Vec<PlayerRecord>> {
+        let mut out = Vec::with_capacity(ids.len());
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT {PLAYER_COLUMNS} FROM players WHERE id = ?1"
+        ))?;
+        for id in ids {
+            if let Some(record) = stmt
+                .query_row([id_to_db(id.get())], player_from_row)
+                .optional()?
+            {
+                out.push(record);
+            }
+        }
+        Ok(out)
+    }
+
+    /// 写入一份从接口取得的资料。只更新外部资料的列，不动相遇记录。
+    ///
+    /// ELO、等级、排名或排位场次与上一次记录不同时，追加一条历史。
+    pub fn save_profile(&mut self, profile: &ProfileUpdate, at: Timestamp) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        let id = id_to_db(profile.id.get());
+        tx.execute(
+            "INSERT INTO players(id, name, steam_id, level, rating, rank, rating_games, profile_json, fetched_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                 name = excluded.name,
+                 steam_id = COALESCE(excluded.steam_id, steam_id),
+                 level = excluded.level,
+                 rating = excluded.rating,
+                 rank = excluded.rank,
+                 rating_games = excluded.rating_games,
+                 profile_json = excluded.profile_json,
+                 fetched_at = excluded.fetched_at
+             WHERE excluded.fetched_at >= COALESCE(players.fetched_at, excluded.fetched_at)",
+            params![
+                id,
+                profile.name,
+                profile.steam_id,
+                profile.level,
+                profile.rating,
+                profile.rank,
+                profile.rating_games,
+                profile.raw_json,
+                at.as_millis(),
+            ],
+        )?;
+
+        type Point = (Option<f64>, Option<i64>, Option<i64>, Option<i64>);
+        let latest: Option<(i64, Point)> = tx
+            .query_row(
+                "SELECT at, rating, level, rank, rating_games FROM player_ratings
+                 WHERE player_id = ?1 ORDER BY at DESC LIMIT 1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        (row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?),
+                    ))
+                },
+            )
+            .optional()?;
+        let current: Point = (
+            profile.rating,
+            profile.level,
+            profile.rank,
+            profile.rating_games,
+        );
+        let has_values = current != (None, None, None, None);
+        // 只在数值变化时记一条；迟到的旧资料不插进历史中间
+        let changed =
+            latest.is_none_or(|(latest_at, point)| at.as_millis() > latest_at && point != current);
+        if has_values && changed {
+            tx.execute(
+                "INSERT OR IGNORE INTO player_ratings(player_id, at, rating, level, rank, rating_games)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    id,
+                    at.as_millis(),
+                    profile.rating,
+                    profile.level,
+                    profile.rank,
+                    profile.rating_games
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 玩家的 ELO 等数据的变化历史，从旧到新。
+    pub fn rating_history(&self, id: PlayerId) -> Result<Vec<RatingPoint>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT at, rating, level, rank, rating_games FROM player_ratings
+             WHERE player_id = ?1 ORDER BY at",
+        )?;
+        let rows = stmt.query_map([id_to_db(id.get())], |row| {
+            Ok(RatingPoint {
+                at: Timestamp::from_millis(row.get(0)?),
+                rating: row.get(1)?,
+                level: row.get(2)?,
+                rank: row.get(3)?,
+                rating_games: row.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    // ------------------------------------------------------------ 比赛
+
+    /// 把一场比赛的当前状态合并进长期库，连同名单和玩家的相遇时间。
+    pub fn record_match(&mut self, state: &MatchState) -> Result<()> {
+        let existing = self.match_record(state.match_id)?;
+        let merged = merge_match(existing, state);
+        let tx = self.conn.transaction()?;
+        let match_id = id_to_db(merged.id.get());
+        tx.execute(
+            "INSERT INTO matches(id, discovered_at, phase, rejoined, map, scenario, deck, game_version,
+                                 self_id, self_team, start_at, start_source, scenario_loaded_at,
+                                 ended_at, end_cause)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             ON CONFLICT(id) DO UPDATE SET
+                 discovered_at = excluded.discovered_at, phase = excluded.phase,
+                 rejoined = excluded.rejoined, map = excluded.map, scenario = excluded.scenario,
+                 deck = excluded.deck, game_version = excluded.game_version,
+                 self_id = excluded.self_id, self_team = excluded.self_team,
+                 start_at = excluded.start_at, start_source = excluded.start_source,
+                 scenario_loaded_at = excluded.scenario_loaded_at,
+                 ended_at = excluded.ended_at, end_cause = excluded.end_cause",
+            params![
+                match_id,
+                merged.discovered_at.as_millis(),
+                phase_to_db(merged.phase),
+                merged.rejoined,
+                merged.map,
+                merged.scenario,
+                merged.deck,
+                merged.game_version,
+                merged.self_id.map(|id| id_to_db(id.get())),
+                merged.self_team.map(team_to_db),
+                merged.clock.map(|c| c.start_at.as_millis()),
+                merged.clock.map(|c| source_to_db(c.source)),
+                merged.scenario_loaded_at.map(Timestamp::as_millis),
+                merged.ended_at.map(Timestamp::as_millis),
+                merged.end_cause.map(cause_to_db),
+            ],
+        )?;
+
+        let seen_at = merged.discovered_at.as_millis();
+        if !state.roster.is_empty() {
+            // 完整名单取代等待室里先到的玩家：没进名单的人已经离开了
+            tx.execute("DELETE FROM match_players WHERE match_id = ?1", [match_id])?;
+            for (position, entry) in state.roster.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO match_players(match_id, player_id, position, team, log_name)
+                     VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(match_id, player_id) DO NOTHING",
+                    params![
+                        match_id,
+                        id_to_db(entry.id.get()),
+                        position as i64,
+                        team_to_db(entry.team),
+                        entry.name
+                    ],
+                )?;
+                touch_player(&tx, entry.id, entry.name.as_deref(), seen_at)?;
+            }
+        } else {
+            for (position, early) in state.early.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO match_players(match_id, player_id, position, team, log_name)
+                     VALUES (?1, ?2, ?3, NULL, ?4)
+                     ON CONFLICT(match_id, player_id) DO UPDATE SET
+                         log_name = COALESCE(excluded.log_name, log_name)",
+                    params![
+                        match_id,
+                        id_to_db(early.id.get()),
+                        position as i64,
+                        early.name
+                    ],
+                )?;
+                touch_player(&tx, early.id, early.name.as_deref(), seen_at)?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn match_record(&self, id: MatchId) -> Result<Option<MatchRecord>> {
+        self.conn
+            .query_row(
+                &format!("SELECT {MATCH_COLUMNS} FROM matches WHERE id = ?1"),
+                [id_to_db(id.get())],
+                RawMatch::from_row,
+            )
+            .optional()?
+            .map(RawMatch::decode)
+            .transpose()
+    }
+
+    /// 最近的比赛，新的在前。
+    pub fn recent_matches(&self, limit: u32) -> Result<Vec<MatchRecord>> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT {MATCH_COLUMNS} FROM matches ORDER BY discovered_at DESC, id DESC LIMIT ?1"
+        ))?;
+        let rows = stmt.query_map([limit], RawMatch::from_row)?;
+        rows.map(|row| row.map_err(StoreError::from).and_then(RawMatch::decode))
+            .collect()
+    }
+
+    /// 一场比赛的名单，按日志里的顺序。
+    pub fn match_players(&self, id: MatchId) -> Result<Vec<MatchPlayerRow>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT player_id, team, log_name FROM match_players WHERE match_id = ?1 ORDER BY position",
+        )?;
+        let rows = stmt.query_map([id_to_db(id.get())], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (player, team, log_name) = row?;
+            out.push(MatchPlayerRow {
+                player: PlayerId(id_from_db(player)),
+                team: team.as_deref().map(team_from_db).transpose()?,
+                log_name,
+            });
+        }
+        Ok(out)
+    }
+
+    /// 修改一场比赛的计时基准。用于手动校准和战报修正；来源不如现有基准可信时不生效。
+    pub fn set_match_clock(&mut self, id: MatchId, clock: BattleClock) -> Result<bool> {
+        let Some(existing) = self.match_record(id)? else {
+            return Ok(false);
+        };
+        if existing.clock.is_some_and(|old| old.source > clock.source) {
+            return Ok(false);
+        }
+        self.conn.execute(
+            "UPDATE matches SET start_at = ?2, start_source = ?3 WHERE id = ?1",
+            params![
+                id_to_db(id.get()),
+                clock.start_at.as_millis(),
+                source_to_db(clock.source)
+            ],
+        )?;
+        Ok(true)
+    }
+
+    /// 与一名玩家的相遇情况。`exclude` 通常是当前这场比赛，免得把它也算进“以前遇到过”。
+    pub fn encounters(
+        &self,
+        player: PlayerId,
+        exclude: Option<MatchId>,
+    ) -> Result<EncounterSummary> {
+        let playing = "mp.team IN ('alpha', 'bravo') AND m.self_team IN ('alpha', 'bravo')";
+        let sql = format!(
+            "SELECT COUNT(*),
+                    COALESCE(SUM(CASE WHEN {playing} AND mp.team = m.self_team THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN {playing} AND mp.team <> m.self_team THEN 1 ELSE 0 END), 0),
+                    MIN(m.discovered_at),
+                    MAX(m.discovered_at)
+             FROM match_players mp JOIN matches m ON m.id = mp.match_id
+             WHERE mp.player_id = ?1
+               AND (m.self_id IS NULL OR m.self_id <> mp.player_id)
+               AND (?2 IS NULL OR m.id <> ?2)"
+        );
+        Ok(self.conn.query_row(
+            &sql,
+            params![id_to_db(player.get()), exclude.map(|id| id_to_db(id.get()))],
+            |row| {
+                Ok(EncounterSummary {
+                    total: row.get(0)?,
+                    as_teammate: row.get(1)?,
+                    as_opponent: row.get(2)?,
+                    first_at: row.get::<_, Option<i64>>(3)?.map(Timestamp::from_millis),
+                    last_at: row.get::<_, Option<i64>>(4)?.map(Timestamp::from_millis),
+                })
+            },
+        )?)
+    }
+
+    /// 出现场次最多的玩家，以及有名单的比赛总数。
+    ///
+    /// 本机玩家出现在自己的每一场比赛里，所以场次接近总数的那个 ID 就是本机玩家。
+    /// 日志不直接给出本机玩家的 ID，这是按名字匹配之外的另一条线索。
+    pub fn most_common_player(&self) -> Result<Option<(PlayerId, u32, u32)>> {
+        let total: u32 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT match_id) FROM match_players WHERE team IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        let top: Option<(i64, u32)> = self
+            .conn
+            .query_row(
+                "SELECT player_id, COUNT(*) AS n FROM match_players WHERE team IS NOT NULL
+                 GROUP BY player_id ORDER BY n DESC, player_id LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(top.map(|(id, count)| (PlayerId(id_from_db(id)), count, total)))
+    }
+
+    // ------------------------------------------------------------ 设置
+
+    /// 读取一项设置。没有设置过时为 `None`。
+    pub fn setting<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+        let raw: Option<String> = self
+            .conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        raw.map(|raw| {
+            serde_json::from_str(&raw).map_err(|source| StoreError::Setting {
+                key: key.to_owned(),
+                source,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn set_setting<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
+        let raw = serde_json::to_string(value).map_err(|source| StoreError::Setting {
+            key: key.to_owned(),
+            source,
+        })?;
+        self.conn.execute(
+            "INSERT INTO settings(key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, raw],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_setting(&mut self, key: &str) -> Result<bool> {
+        Ok(self
+            .conn
+            .execute("DELETE FROM settings WHERE key = ?1", [key])?
+            > 0)
+    }
+}
+
+/// 记下在某场比赛里见到了这名玩家。
+fn touch_player(
+    conn: &Connection,
+    id: PlayerId,
+    log_name: Option<&str>,
+    seen_at: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO players(id, last_log_name, first_seen_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)
+         ON CONFLICT(id) DO UPDATE SET
+             last_log_name = CASE
+                 WHEN excluded.last_log_name IS NOT NULL
+                      AND excluded.last_seen_at >= COALESCE(players.last_seen_at, excluded.last_seen_at)
+                 THEN excluded.last_log_name ELSE players.last_log_name END,
+             first_seen_at = MIN(COALESCE(players.first_seen_at, excluded.first_seen_at), excluded.first_seen_at),
+             last_seen_at = MAX(COALESCE(players.last_seen_at, excluded.last_seen_at), excluded.last_seen_at)",
+        params![id_to_db(id.get()), log_name, seen_at],
+    )?;
+    Ok(())
+}
+
+/// 把新观察到的状态并入已有记录。已有的信息只会被更可信或更晚的信息取代，不会被空值覆盖。
+fn merge_match(existing: Option<MatchRecord>, state: &MatchState) -> MatchRecord {
+    let fresh = MatchRecord {
+        id: state.match_id,
+        discovered_at: state.times.discovered_at,
+        phase: state.phase,
+        rejoined: state.rejoined,
+        map: state.map.clone(),
+        scenario: state.scenario.clone(),
+        deck: state.deck.clone(),
+        game_version: state.game_version.clone(),
+        self_id: state.self_id,
+        self_team: state.my_team(),
+        clock: state.clock,
+        scenario_loaded_at: state.times.scenario_loaded_at,
+        ended_at: state.times.ended_at,
+        end_cause: state.end_cause,
+    };
+    let Some(old) = existing else {
+        return fresh;
+    };
+    MatchRecord {
+        id: fresh.id,
+        discovered_at: old.discovered_at.min(fresh.discovered_at),
+        phase: old.phase.max(fresh.phase),
+        rejoined: old.rejoined || fresh.rejoined,
+        map: fresh.map.or(old.map),
+        scenario: fresh.scenario.or(old.scenario),
+        deck: fresh.deck.or(old.deck),
+        game_version: fresh.game_version.or(old.game_version),
+        self_id: fresh.self_id.or(old.self_id),
+        self_team: fresh.self_team.or(old.self_team),
+        clock: match (old.clock, fresh.clock) {
+            (Some(a), Some(b)) => Some(if b.source >= a.source { b } else { a }),
+            (a, b) => b.or(a),
+        },
+        scenario_loaded_at: old.scenario_loaded_at.or(fresh.scenario_loaded_at),
+        ended_at: old.ended_at.or(fresh.ended_at),
+        end_cause: old.end_cause.or(fresh.end_cause),
+    }
+}
+
+const PLAYER_COLUMNS: &str = "id, name, steam_id, level, rating, rank, rating_games, profile_json, \
+                              fetched_at, last_log_name, first_seen_at, last_seen_at";
+
+fn player_from_row(row: &Row<'_>) -> rusqlite::Result<PlayerRecord> {
+    let ts = |i: usize| -> rusqlite::Result<Option<Timestamp>> {
+        Ok(row.get::<_, Option<i64>>(i)?.map(Timestamp::from_millis))
+    };
+    Ok(PlayerRecord {
+        id: PlayerId(id_from_db(row.get(0)?)),
+        name: row.get(1)?,
+        steam_id: row.get(2)?,
+        level: row.get(3)?,
+        rating: row.get(4)?,
+        rank: row.get(5)?,
+        rating_games: row.get(6)?,
+        profile_json: row.get(7)?,
+        fetched_at: ts(8)?,
+        last_log_name: row.get(9)?,
+        first_seen_at: ts(10)?,
+        last_seen_at: ts(11)?,
+    })
+}
+
+const MATCH_COLUMNS: &str = "id, discovered_at, phase, rejoined, map, scenario, deck, game_version, \
+                             self_id, self_team, start_at, start_source, scenario_loaded_at, \
+                             ended_at, end_cause";
+
+/// `matches` 表的一行，枚举列还是文本。读行与解释取值分两步，各自只处理一种错误。
+struct RawMatch {
+    id: i64,
+    discovered_at: i64,
+    phase: String,
+    rejoined: bool,
+    map: Option<String>,
+    scenario: Option<String>,
+    deck: Option<String>,
+    game_version: Option<String>,
+    self_id: Option<i64>,
+    self_team: Option<String>,
+    start_at: Option<i64>,
+    start_source: Option<String>,
+    scenario_loaded_at: Option<i64>,
+    ended_at: Option<i64>,
+    end_cause: Option<String>,
+}
+
+impl RawMatch {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<RawMatch> {
+        Ok(RawMatch {
+            id: row.get(0)?,
+            discovered_at: row.get(1)?,
+            phase: row.get(2)?,
+            rejoined: row.get(3)?,
+            map: row.get(4)?,
+            scenario: row.get(5)?,
+            deck: row.get(6)?,
+            game_version: row.get(7)?,
+            self_id: row.get(8)?,
+            self_team: row.get(9)?,
+            start_at: row.get(10)?,
+            start_source: row.get(11)?,
+            scenario_loaded_at: row.get(12)?,
+            ended_at: row.get(13)?,
+            end_cause: row.get(14)?,
+        })
+    }
+
+    fn decode(self) -> Result<MatchRecord> {
+        let clock = match (self.start_at, self.start_source.as_deref()) {
+            (Some(start_at), Some(source)) => Some(BattleClock {
+                start_at: Timestamp::from_millis(start_at),
+                source: source_from_db(source)?,
+            }),
+            _ => None,
+        };
+        Ok(MatchRecord {
+            id: MatchId(id_from_db(self.id)),
+            discovered_at: Timestamp::from_millis(self.discovered_at),
+            phase: phase_from_db(&self.phase)?,
+            rejoined: self.rejoined,
+            map: self.map,
+            scenario: self.scenario,
+            deck: self.deck,
+            game_version: self.game_version,
+            self_id: self.self_id.map(|id| PlayerId(id_from_db(id))),
+            self_team: self.self_team.as_deref().map(team_from_db).transpose()?,
+            clock,
+            scenario_loaded_at: self.scenario_loaded_at.map(Timestamp::from_millis),
+            ended_at: self.ended_at.map(Timestamp::from_millis),
+            end_cause: self.end_cause.as_deref().map(cause_from_db).transpose()?,
+        })
+    }
+}
+
+// 写进数据库的枚举取值。它们是存储格式的一部分，改名需要迁移脚本，所以不跟着类型的序列化名走。
+
+fn id_to_db(id: u64) -> i64 {
+    id as i64
+}
+
+fn id_from_db(id: i64) -> u64 {
+    id as u64
+}
+
+fn team_to_db(team: Team) -> &'static str {
+    match team {
+        Team::Alpha => "alpha",
+        Team::Bravo => "bravo",
+        Team::Spectators => "spectators",
+    }
+}
+
+fn team_from_db(value: &str) -> Result<Team> {
+    match value {
+        "alpha" => Ok(Team::Alpha),
+        "bravo" => Ok(Team::Bravo),
+        "spectators" => Ok(Team::Spectators),
+        other => Err(StoreError::Corrupt(format!("队伍 {other:?}"))),
+    }
+}
+
+fn phase_to_db(phase: Phase) -> &'static str {
+    match phase {
+        Phase::WaitingRoom => "waitingRoom",
+        Phase::Loading => "loading",
+        Phase::Deployment => "deployment",
+        Phase::InBattle => "inBattle",
+        Phase::Ended => "ended",
+    }
+}
+
+fn phase_from_db(value: &str) -> Result<Phase> {
+    match value {
+        "waitingRoom" => Ok(Phase::WaitingRoom),
+        "loading" => Ok(Phase::Loading),
+        "deployment" => Ok(Phase::Deployment),
+        "inBattle" => Ok(Phase::InBattle),
+        "ended" => Ok(Phase::Ended),
+        other => Err(StoreError::Corrupt(format!("阶段 {other:?}"))),
+    }
+}
+
+fn source_to_db(source: ClockSource) -> &'static str {
+    match source {
+        ClockSource::LogEstimate => "logEstimate",
+        ClockSource::Manual => "manual",
+        ClockSource::Report => "report",
+    }
+}
+
+fn source_from_db(value: &str) -> Result<ClockSource> {
+    match value {
+        "logEstimate" => Ok(ClockSource::LogEstimate),
+        "manual" => Ok(ClockSource::Manual),
+        "report" => Ok(ClockSource::Report),
+        other => Err(StoreError::Corrupt(format!("计时来源 {other:?}"))),
+    }
+}
+
+fn cause_to_db(cause: ExitCause) -> &'static str {
+    match cause {
+        ExitCause::MatchEnded => "matchEnded",
+        ExitCause::ServerExitInstance => "serverExitInstance",
+        ExitCause::ConnectionLost => "connectionLost",
+        ExitCause::ServiceDisposed => "serviceDisposed",
+        ExitCause::Manual => "manual",
+        ExitCause::Unknown => "unknown",
+    }
+}
+
+fn cause_from_db(value: &str) -> Result<ExitCause> {
+    match value {
+        "matchEnded" => Ok(ExitCause::MatchEnded),
+        "serverExitInstance" => Ok(ExitCause::ServerExitInstance),
+        "connectionLost" => Ok(ExitCause::ConnectionLost),
+        "serviceDisposed" => Ok(ExitCause::ServiceDisposed),
+        "manual" => Ok(ExitCause::Manual),
+        "unknown" => Ok(ExitCause::Unknown),
+        other => Err(StoreError::Corrupt(format!("结束原因 {other:?}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests;
