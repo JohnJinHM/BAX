@@ -1,0 +1,51 @@
+/* 颜色、字号与间距都通过变量控制，之后的皮肤功能只需要换一组变量（规划·自定义皮肤）。 */
+
+:root {
+  --bax-font: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  --bax-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+
+  /* 底色用 RGB 三元组，方便和不透明度组合 */
+  --bax-bg-rgb: 14 17 22;
+  --bax-surface: #161b22;
+  --bax-surface-2: #1d232c;
+  --bax-fg: #e6e9ee;
+  --bax-muted: #8b949e;
+  --bax-faint: #5b636d;
+  --bax-border: rgb(255 255 255 / 0.09);
+
+  --bax-accent: #4cc2ff;
+  --bax-alpha: #5ea8ff;
+  --bax-bravo: #ff8f6b;
+  --bax-good: #5fd38d;
+  --bax-warn: #f2c14e;
+  --bax-bad: #f0616d;
+
+  --bax-radius: 8px;
+  --bax-space: 8px;
+  --bax-scale: 1;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  font-family: var(--bax-font);
+  color: var(--bax-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}

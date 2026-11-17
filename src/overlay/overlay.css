@@ -1,0 +1,8 @@
+/* 悬浮窗的窗口本身是透明的，只有面板有底色 */
+html.overlay,
+html.overlay body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}

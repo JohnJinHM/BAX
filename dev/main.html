@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>预览：主窗口</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import { installMock } from "/src/dev/mock.ts";
+      installMock();
+      await import("/src/main/main.ts");
+    </script>
+  </body>
+</html>
