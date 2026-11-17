@@ -4,8 +4,12 @@
 //! 每次变化发布一份完整的快照，带递增的修订号，窗口晚打开或重新加载时拿最新的一份就能对齐
 //! （见 ADR-0004）。完整战报这类大块数据不放进快照，由界面按需另外读取。
 
+use std::collections::BTreeMap;
+
 use bax_batrace::ErrorKind;
-use bax_core::{BattleClock, Connection, MatchId, Phase, PlayerId, Team, Timestamp};
+use bax_core::{
+    BattleClock, Connection, MatchId, Phase, PlayerId, ReminderOutcome, Team, Timestamp,
+};
 use bax_store::EncounterSummary;
 use serde::Serialize;
 
@@ -24,6 +28,12 @@ pub struct Snapshot {
     /// 本机玩家的 ID：当前比赛里识别出的，或者以前记住的。
     pub self_id: Option<PlayerId>,
     pub api: ApiStatus,
+    /// 全部提醒规则，以及它们在当前比赛里的情况。
+    pub reminders: Vec<ReminderView>,
+    /// 最近一次按时触发的提醒。界面看到 `seq` 变大就提示一次。
+    pub alert: Option<AlertView>,
+    /// 界面自己的设置（键以 `ui.` 开头），引擎只负责保存和分发。
+    pub ui: BTreeMap<String, serde_json::Value>,
     /// 当前比赛；还没见过任何比赛时为 `None`。比赛结束后仍然保留，直到下一场开始。
     pub current: Option<MatchView>,
 }
@@ -37,9 +47,40 @@ impl Snapshot {
             game_version: None,
             self_id: None,
             api: ApiStatus::default(),
+            reminders: Vec::new(),
+            alert: None,
+            ui: BTreeMap::new(),
             current: None,
         }
     }
+}
+
+/// 一条提醒规则，以及它在当前比赛里的情况。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderView {
+    pub id: u32,
+    pub label: String,
+    /// 正式开局后多少秒。
+    pub at_secs: u32,
+    pub enabled: bool,
+    /// 在当前比赛里到点的时刻；没有比赛或没有计时基准时为 `None`。
+    pub fire_at: Option<Timestamp>,
+    /// 当前比赛里的结果；还没到点时为 `None`。
+    pub outcome: Option<ReminderOutcome>,
+    pub outcome_at: Option<Timestamp>,
+}
+
+/// 一次按时触发的提醒。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertView {
+    /// 本次运行里第几次提醒，从 1 开始。
+    pub seq: u64,
+    pub match_id: MatchId,
+    pub rule_id: u32,
+    pub label: String,
+    pub at: Timestamp,
 }
 
 /// 日志读取的状态。

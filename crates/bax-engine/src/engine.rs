@@ -1,17 +1,19 @@
 //! 引擎的对外句柄。
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use bax_batrace::{ApiError, BatraceClient};
 use bax_core::PlayerId;
+use bax_core::reminder::{self, ReminderRule};
 use bax_store::{Store, StoreError};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::clock::Clock;
 use crate::config::EngineConfig;
-use crate::session::{Command, LOG_DIR_KEY, Parts, SELF_ID_KEY, Session};
+use crate::session::{Command, LOG_DIR_KEY, Parts, REMINDERS_KEY, SELF_ID_KEY, Session, UI_PREFIX};
 use crate::snapshot::Snapshot;
 
 /// 启动失败的原因。
@@ -23,10 +25,15 @@ pub enum EngineError {
     Api(#[from] ApiError),
 }
 
-/// 引擎已经停止，命令没有送达。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("引擎已经停止")]
-pub struct EngineStopped;
+/// 命令没有执行。
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CommandError {
+    #[error("引擎已经停止")]
+    Stopped,
+    /// 命令被拒绝，内容是给使用者看的原因。
+    #[error("{0}")]
+    Rejected(String),
+}
 
 /// 正在运行的引擎。丢弃句柄会让引擎停下；需要等它收尾时用 [`Engine::shutdown`]。
 #[derive(Debug)]
@@ -50,6 +57,8 @@ impl Engine {
                 .map(PathBuf::from)
         });
         let self_hint = remembered_self(&store);
+        let rules = saved_rules(&store);
+        let ui = saved_ui_settings(&store);
 
         let (snapshot_tx, snapshots) = watch::channel(Arc::new(Snapshot::initial()));
         let (commands, command_rx) = mpsc::channel(16);
@@ -60,6 +69,8 @@ impl Engine {
             client,
             log_dir,
             self_hint,
+            rules,
+            ui,
             snapshot_tx,
         });
         let task = tokio::spawn(session.run(command_rx));
@@ -81,22 +92,46 @@ impl Engine {
     }
 
     /// 重新获取当前比赛全部玩家的资料。
-    pub async fn refresh_players(&self) -> Result<(), EngineStopped> {
-        self.commands
-            .send(Command::RefreshPlayers)
-            .await
-            .map_err(|_| EngineStopped)
+    pub async fn refresh_players(&self) -> Result<(), CommandError> {
+        self.send(Command::RefreshPlayers).await
     }
 
     /// 改用另一个日志目录并记住这个选择；`None` 表示改回自动定位。
     /// 返回时新的日志线程已经启动，当前比赛的状态已经清空。
-    pub async fn set_log_dir(&self, dir: Option<PathBuf>) -> Result<(), EngineStopped> {
+    pub async fn set_log_dir(&self, dir: Option<PathBuf>) -> Result<(), CommandError> {
         let (done, wait) = oneshot::channel();
-        self.commands
-            .send(Command::SetLogDir { dir, done })
-            .await
-            .map_err(|_| EngineStopped)?;
-        wait.await.map_err(|_| EngineStopped)
+        self.send(Command::SetLogDir { dir, done }).await?;
+        wait.await.map_err(|_| CommandError::Stopped)
+    }
+
+    /// 替换全部提醒规则并保存。
+    pub async fn set_reminders(&self, rules: Vec<ReminderRule>) -> Result<(), CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SetReminders { rules, done }).await?;
+        reply(wait).await
+    }
+
+    /// 手动校准当前比赛的计时：此刻处于正式开局后 `elapsed_ms` 毫秒，准备阶段里为负数。
+    pub async fn calibrate(&self, elapsed_ms: i64) -> Result<(), CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::Calibrate { elapsed_ms, done }).await?;
+        reply(wait).await
+    }
+
+    /// 保存一项界面设置。键必须以 `ui.` 开头；值为 `null` 时删除这一项。
+    pub async fn set_ui_setting(
+        &self,
+        key: impl Into<String>,
+        value: serde_json::Value,
+    ) -> Result<(), CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SetUiSetting {
+            key: key.into(),
+            value,
+            done,
+        })
+        .await?;
+        reply(wait).await
     }
 
     /// 停下引擎，等它收尾。
@@ -104,6 +139,21 @@ impl Engine {
         let Engine { commands, task, .. } = self;
         drop(commands);
         let _ = task.await;
+    }
+
+    async fn send(&self, command: Command) -> Result<(), CommandError> {
+        self.commands
+            .send(command)
+            .await
+            .map_err(|_| CommandError::Stopped)
+    }
+}
+
+async fn reply(wait: oneshot::Receiver<Result<(), String>>) -> Result<(), CommandError> {
+    match wait.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(reason)) => Err(CommandError::Rejected(reason)),
+        Err(_) => Err(CommandError::Stopped),
     }
 }
 
@@ -116,4 +166,26 @@ fn remembered_self(store: &Store) -> Option<PlayerId> {
     }
     let (id, count, total) = store.most_common_player().ok().flatten()?;
     (count >= 5 && u64::from(count) * 10 >= u64::from(total) * 8).then_some(id)
+}
+
+/// 保存的提醒规则；没有保存过，或者保存的内容不合法时用默认规则。
+fn saved_rules(store: &Store) -> Vec<ReminderRule> {
+    match store.setting::<Vec<ReminderRule>>(REMINDERS_KEY) {
+        Ok(Some(rules)) if reminder::validate(&rules).is_ok() => rules,
+        Ok(None) => reminder::default_rules(),
+        Ok(Some(_)) | Err(_) => {
+            tracing::warn!("保存的提醒规则无法使用，改用默认规则");
+            reminder::default_rules()
+        }
+    }
+}
+
+fn saved_ui_settings(store: &Store) -> BTreeMap<String, serde_json::Value> {
+    let rows = store.settings_with_prefix(UI_PREFIX).unwrap_or_else(|err| {
+        tracing::warn!(error = %err, "读取界面设置失败");
+        Vec::new()
+    });
+    rows.into_iter()
+        .filter_map(|(key, raw)| Some((key, serde_json::from_str(&raw).ok()?)))
+        .collect()
 }

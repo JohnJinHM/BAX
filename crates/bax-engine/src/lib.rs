@@ -31,8 +31,9 @@ mod snapshot;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use config::{EngineConfig, cache_path, default_data_dir, store_path};
-pub use engine::{Engine, EngineError, EngineStopped};
+pub use engine::{CommandError, Engine, EngineError};
 pub use profile::{ProfileSummary, RankedStats};
 pub use snapshot::{
-    ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, Snapshot, TeamSummary,
+    AlertView, ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, ReminderView,
+    Snapshot, TeamSummary,
 };

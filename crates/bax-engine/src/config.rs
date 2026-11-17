@@ -32,6 +32,8 @@ pub struct EngineConfig {
     pub retry_delays: Vec<Duration>,
     /// 被限流而站点没有说明要等多久时，暂停全部请求的时间。
     pub rate_limit_pause: Duration,
+    /// 提醒到点后多长时间内仍算按时，毫秒。超过这段时间才第一次检查到的记为错过，不补发。
+    pub reminder_grace_ms: i64,
 }
 
 impl EngineConfig {
@@ -49,6 +51,7 @@ impl EngineConfig {
             fetch_concurrency: 5,
             retry_delays: vec![Duration::from_secs(12), Duration::from_secs(24)],
             rate_limit_pause: Duration::from_secs(30),
+            reminder_grace_ms: bax_core::reminder::DEFAULT_GRACE_MS,
         }
     }
 }

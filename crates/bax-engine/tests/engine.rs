@@ -8,10 +8,12 @@ use std::time::Duration;
 
 use bax_batrace::{ClientConfig, ErrorKind};
 use bax_core::{
-    BattleClock, ClockSource, LogEvent, MatchId, Phase, PlayerId, RoomKind, RoomStatus,
-    RosterEntry, Team, Timestamp, Tracker,
+    BattleClock, ClockSource, LogEvent, MatchId, Phase, PlayerId, ReminderOutcome, ReminderRule,
+    RoomKind, RoomStatus, RosterEntry, Team, Timestamp, Tracker,
 };
-use bax_engine::{Engine, EngineConfig, FetchState, ManualClock, PlayerView, Snapshot};
+use bax_engine::{
+    CommandError, Engine, EngineConfig, FetchState, ManualClock, PlayerView, Snapshot,
+};
 use bax_gamelog::{LogTime, LogZone};
 use bax_store::{ProfileUpdate, Store};
 use wiremock::matchers::{method, path, query_param};
@@ -697,5 +699,171 @@ async fn refresh_command_refetches_everyone() {
         fx.requests().await,
         vec![(101, 1), (102, 1), (201, 1), (ME, 1)]
     );
+    engine.shutdown().await;
+}
+
+fn rule(id: u32, at_secs: u32, label: &str) -> ReminderRule {
+    ReminderRule {
+        id,
+        at_secs,
+        label: label.to_owned(),
+        enabled: true,
+    }
+}
+
+/// 一场正在进行的比赛：场景加载完成于 18:53:33.861，开局时刻推算为 18:54:33.861。
+fn match_in_progress(id: u64) -> String {
+    waiting_room(id, "18:52:05.318")
+        + &game_room(id, "18:53:01.979", &ROSTER)
+        + &scenario_loaded("18:53:33.861")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reminder_fires_once_and_not_again_after_a_restart() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&match_in_progress(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    engine
+        .set_reminders(vec![rule(7, 120, "两分钟")])
+        .await
+        .expect("规则合法");
+    let snapshot = engine.snapshot();
+    assert_eq!(snapshot.reminders.len(), 1);
+    assert_eq!(snapshot.reminders[0].fire_at, Some(ts("18:56:33.861")));
+    assert_eq!(snapshot.reminders[0].outcome, None);
+    assert_eq!(snapshot.alert, None);
+
+    fx.clock.set(ts("18:56:34.000"));
+    let snapshot = wait_for(&engine, "到点提醒", |s| s.alert.is_some()).await;
+    let alert = snapshot.alert.as_ref().expect("有提醒");
+    assert_eq!(alert.seq, 1);
+    assert_eq!(alert.rule_id, 7);
+    assert_eq!(alert.label, "两分钟");
+    assert_eq!(alert.match_id, MatchId(9_000_001));
+    assert_eq!(snapshot.reminders[0].outcome, Some(ReminderOutcome::Fired));
+    engine.shutdown().await;
+
+    // 重启后补读同一场比赛：规则还在，已经提醒过的不再提醒
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "重启后补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+    assert_eq!(snapshot.reminders[0].id, 7, "规则保存在长期库里");
+    assert_eq!(snapshot.reminders[0].outcome, Some(ReminderOutcome::Fired));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(engine.snapshot().alert, None);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reminders_passed_before_bax_started_are_marked_missed() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&match_in_progress(9_000_001));
+    // 开局 20 分钟后才打开 BAX，第 10 分钟的默认提醒已经过去
+    fx.clock.set(ts("19:14:40.000"));
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "检查过提醒", |s| {
+        s.reminders.first().is_some_and(|r| r.outcome.is_some())
+    })
+    .await;
+    assert_eq!(snapshot.reminders[0].at_secs, 600, "默认规则是第 10 分钟");
+    assert_eq!(snapshot.reminders[0].outcome, Some(ReminderOutcome::Missed));
+    assert_eq!(snapshot.alert, None, "错过的不补发");
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn manual_calibration_moves_the_clock() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&match_in_progress(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+
+    // 画面上显示开局 5 分钟整
+    engine.calibrate(300_000).await.expect("比赛进行中");
+    let snapshot = engine.snapshot();
+    let clock = snapshot
+        .current
+        .as_ref()
+        .and_then(|m| m.clock)
+        .expect("有计时基准");
+    assert_eq!(clock.source, ClockSource::Manual);
+    assert_eq!(clock.start_at, ts("18:50:00.000"));
+
+    // 比赛结束后不再接受校准
+    fx.append(&match_ended(9_000_001, "18:55:30.000"));
+    wait_for(&engine, "比赛结束", |s| {
+        s.current.as_ref().is_some_and(|m| m.phase == Phase::Ended)
+    })
+    .await;
+    let err = engine.calibrate(0).await.expect_err("应当拒绝");
+    assert!(matches!(err, CommandError::Rejected(_)));
+    engine.shutdown().await;
+
+    let store = Store::open(&fx.store_path()).expect("打开长期库");
+    let record = store
+        .match_record(MatchId(9_000_001))
+        .expect("读取")
+        .expect("有记录");
+    assert_eq!(record.clock.map(|c| c.source), Some(ClockSource::Manual));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ui_settings_are_saved_and_shared() {
+    let fx = Fixture::new().await;
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| s.log.ready).await;
+
+    let overlay = serde_json::json!({ "opacity": 0.85, "locked": true });
+    engine
+        .set_ui_setting("ui.overlay", overlay.clone())
+        .await
+        .expect("合法的键");
+    assert_eq!(engine.snapshot().ui.get("ui.overlay"), Some(&overlay));
+    let err = engine
+        .set_ui_setting("overlay", serde_json::json!(1))
+        .await
+        .expect_err("键必须以 ui. 开头");
+    assert!(matches!(err, CommandError::Rejected(_)));
+    engine
+        .set_ui_setting("ui.temp", serde_json::json!("x"))
+        .await
+        .expect("合法的键");
+    engine
+        .set_ui_setting("ui.temp", serde_json::Value::Null)
+        .await
+        .expect("删除");
+    engine.shutdown().await;
+
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "重启", |s| s.log.ready).await;
+    assert_eq!(snapshot.ui.get("ui.overlay"), Some(&overlay));
+    assert!(!snapshot.ui.contains_key("ui.temp"));
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn invalid_reminder_rules_are_rejected_and_nothing_changes() {
+    let fx = Fixture::new().await;
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| s.log.ready).await;
+    let before = engine.snapshot().reminders.clone();
+    let err = engine
+        .set_reminders(vec![rule(1, 60, "a"), rule(1, 120, "b")])
+        .await
+        .expect_err("编号重复");
+    assert!(matches!(err, CommandError::Rejected(_)));
+    assert_eq!(engine.snapshot().reminders, before);
     engine.shutdown().await;
 }

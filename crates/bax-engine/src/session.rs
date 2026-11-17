@@ -14,14 +14,17 @@
 //! 请求调度的做法来自 BA-ELO-Overlay（`src/ba_elo_overlay.py`）：`EloService` 的有限并发、
 //! 先用旧资料兜底和换局后丢弃旧结果，`_warm` 的等待室预热，`_fill_levels` 的延时重试。
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use bax_batrace::model::PlayerInfoResponse;
 use bax_batrace::{ApiError, BatraceClient, Fetched};
-use bax_core::{MatchId, Phase, PlayerId, Team, Timestamp, Tracker, Update};
+use bax_core::reminder::{self, ReminderOutcome, ReminderRule};
+use bax_core::{
+    BattleClock, ClockSource, MatchId, Phase, PlayerId, Team, Timestamp, Tracker, Update,
+};
 use bax_gamelog::{Origin, WatchItem};
 use bax_store::{EncounterSummary, PlayerRecord, ProfileUpdate, Store};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -32,13 +35,20 @@ use crate::config::EngineConfig;
 use crate::logthread::{LogMsg, LogThread, LogTiming};
 use crate::profile::ProfileSummary;
 use crate::snapshot::{
-    ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, Snapshot, TeamSummary,
+    AlertView, ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, ReminderView,
+    Snapshot, TeamSummary,
 };
 
 /// 设置项：本机玩家的 ID。
 pub(crate) const SELF_ID_KEY: &str = "self.playerId";
 /// 设置项：用户指定的日志目录。
 pub(crate) const LOG_DIR_KEY: &str = "log.dir";
+/// 设置项：提醒规则。
+pub(crate) const REMINDERS_KEY: &str = "reminders";
+/// 界面自己的设置都以这个前缀开头。引擎只负责保存和分发，不解释内容。
+pub(crate) const UI_PREFIX: &str = "ui.";
+/// 一项界面设置序列化之后的长度上限。
+const UI_VALUE_LIMIT: usize = 64 * 1024;
 
 pub(crate) const LOG_CHANNEL_CAPACITY: usize = 256;
 
@@ -51,6 +61,22 @@ pub(crate) enum Command {
     SetLogDir {
         dir: Option<PathBuf>,
         done: oneshot::Sender<()>,
+    },
+    /// 替换全部提醒规则。
+    SetReminders {
+        rules: Vec<ReminderRule>,
+        done: oneshot::Sender<Result<(), String>>,
+    },
+    /// 手动校准：当前比赛此刻处于正式开局后 `elapsed_ms` 毫秒，准备阶段里为负数。
+    Calibrate {
+        elapsed_ms: i64,
+        done: oneshot::Sender<Result<(), String>>,
+    },
+    /// 保存一项界面设置，键必须以 `ui.` 开头。
+    SetUiSetting {
+        key: String,
+        value: serde_json::Value,
+        done: oneshot::Sender<Result<(), String>>,
     },
 }
 
@@ -94,6 +120,8 @@ pub(crate) struct Parts {
     pub client: BatraceClient,
     pub log_dir: Option<PathBuf>,
     pub self_hint: Option<PlayerId>,
+    pub rules: Vec<ReminderRule>,
+    pub ui: BTreeMap<String, serde_json::Value>,
     pub snapshot_tx: watch::Sender<Arc<Snapshot>>,
 }
 
@@ -121,6 +149,12 @@ pub(crate) struct Session {
     in_flight: usize,
     paused_until: Option<Timestamp>,
     last_error: Option<ApiErrorView>,
+
+    rules: Vec<ReminderRule>,
+    /// 当前比赛里各条规则的结果。
+    outcomes: Vec<(u32, ReminderOutcome, Timestamp)>,
+    alert: Option<AlertView>,
+    ui: BTreeMap<String, serde_json::Value>,
 }
 
 impl Session {
@@ -132,6 +166,8 @@ impl Session {
             client,
             log_dir,
             self_hint,
+            rules,
+            ui,
             snapshot_tx,
         } = parts;
         let mut tracker = Tracker::new(config.tracker.clone());
@@ -160,6 +196,10 @@ impl Session {
             in_flight: 0,
             paused_until: None,
             last_error: None,
+            rules,
+            outcomes: Vec::new(),
+            alert: None,
+            ui,
         };
         session.start_log_thread(log_dir);
         session
@@ -222,6 +262,122 @@ impl Session {
                 self.publish();
                 let _ = done.send(());
             }
+            Command::SetReminders { rules, done } => {
+                let _ = done.send(self.set_reminders(rules));
+            }
+            Command::Calibrate { elapsed_ms, done } => {
+                let _ = done.send(self.calibrate(elapsed_ms));
+            }
+            Command::SetUiSetting { key, value, done } => {
+                let _ = done.send(self.set_ui_setting(key, value));
+            }
+        }
+    }
+
+    fn set_reminders(&mut self, rules: Vec<ReminderRule>) -> Result<(), String> {
+        reminder::validate(&rules).map_err(|err| err.to_string())?;
+        self.store
+            .set_setting(REMINDERS_KEY, &rules)
+            .map_err(|err| err.to_string())?;
+        self.rules = rules;
+        self.dirty = true;
+        // 不等日志就绪：设置界面需要立刻看到结果
+        self.publish();
+        Ok(())
+    }
+
+    fn calibrate(&mut self, elapsed_ms: i64) -> Result<(), String> {
+        let Some(m) = self.tracker.current() else {
+            return Err("当前没有比赛".to_owned());
+        };
+        if m.phase == Phase::Ended {
+            return Err("比赛已经结束".to_owned());
+        }
+        let match_id = m.match_id;
+        let clock = BattleClock {
+            start_at: self.clock.now().plus_millis(-elapsed_ms),
+            source: ClockSource::Manual,
+        };
+        self.tracker.set_clock(match_id, clock);
+        self.store
+            .set_match_clock(match_id, clock)
+            .map_err(|err| err.to_string())?;
+        let now = self.clock.now();
+        let updates = self.tracker.advance(now);
+        self.handle_updates(updates, true);
+        self.dirty = true;
+        self.publish();
+        Ok(())
+    }
+
+    fn set_ui_setting(&mut self, key: String, value: serde_json::Value) -> Result<(), String> {
+        if !key.starts_with(UI_PREFIX) || key.len() <= UI_PREFIX.len() {
+            return Err(format!("界面设置的键必须以 {UI_PREFIX} 开头"));
+        }
+        if value.to_string().len() > UI_VALUE_LIMIT {
+            return Err("设置内容过长".to_owned());
+        }
+        if self.ui.get(&key) == Some(&value) {
+            return Ok(());
+        }
+        let saved = if value.is_null() {
+            self.store.remove_setting(&key).map(|_| ())
+        } else {
+            self.store.set_setting(&key, &value)
+        };
+        saved.map_err(|err| err.to_string())?;
+        if value.is_null() {
+            self.ui.remove(&key);
+        } else {
+            self.ui.insert(key, value);
+        }
+        self.dirty = true;
+        self.publish();
+        Ok(())
+    }
+
+    /// 检查提醒是否到点。每条规则每场比赛只有一个结果，记进长期库，重启后不会重复。
+    fn check_reminders(&mut self, now: Timestamp) {
+        let Some(m) = self.tracker.current() else {
+            return;
+        };
+        if !matches!(m.phase, Phase::Deployment | Phase::InBattle) {
+            return;
+        }
+        let Some(clock) = m.clock else {
+            return;
+        };
+        let match_id = m.match_id;
+        let outcomes = &self.outcomes;
+        let due = reminder::due(
+            &self.rules,
+            clock,
+            now,
+            self.config.reminder_grace_ms,
+            |id| outcomes.iter().any(|(rule, _, _)| *rule == id),
+        );
+        for (rule_id, outcome) in due {
+            if let Err(err) = self.store.record_reminder(match_id, rule_id, outcome, now) {
+                tracing::warn!(error = %err, "保存提醒结果失败");
+            }
+            self.outcomes.push((rule_id, outcome, now));
+            if outcome == ReminderOutcome::Fired {
+                let label = self
+                    .rules
+                    .iter()
+                    .find(|r| r.id == rule_id)
+                    .map(|r| r.label.clone())
+                    .unwrap_or_default();
+                let seq = self.alert.as_ref().map_or(1, |a| a.seq + 1);
+                self.alert = Some(AlertView {
+                    seq,
+                    match_id,
+                    rule_id,
+                    label,
+                    at: now,
+                });
+            }
+            self.dirty = true;
         }
     }
 
@@ -296,6 +452,7 @@ impl Session {
         let now = self.clock.now();
         let updates = self.tracker.advance(now);
         self.handle_updates(updates, true);
+        self.check_reminders(now);
         let due: Vec<PlayerId> = self
             .slots
             .iter()
@@ -421,6 +578,14 @@ impl Session {
         self.generation += 1;
         self.slots.clear();
         self.queue.clear();
+        // 这场比赛以前（上一次运行时）已经提醒过或错过的，不再重复
+        self.outcomes = self
+            .store
+            .reminder_outcomes(match_id)
+            .unwrap_or_else(|err| {
+                tracing::warn!(error = %err, "读取提醒记录失败");
+                Vec::new()
+            });
         // 游戏重启后重连进来的比赛，日志给不出计时起点；用当初保存的基准
         let needs_clock = self
             .tracker
@@ -539,6 +704,7 @@ impl Session {
         self.generation += 1;
         self.slots.clear();
         self.queue.clear();
+        self.outcomes.clear();
     }
 
     fn start_log_thread(&mut self, dir: Option<PathBuf>) {
@@ -704,8 +870,30 @@ impl Session {
                 paused_until: self.paused_until,
                 last_error: self.last_error.clone(),
             },
+            reminders: self.reminder_views(),
+            alert: self.alert.clone(),
+            ui: self.ui.clone(),
             current,
         }
+    }
+
+    fn reminder_views(&self) -> Vec<ReminderView> {
+        let clock = self.tracker.current().and_then(|m| m.clock);
+        self.rules
+            .iter()
+            .map(|rule| {
+                let outcome = self.outcomes.iter().find(|(id, _, _)| *id == rule.id);
+                ReminderView {
+                    id: rule.id,
+                    label: rule.label.clone(),
+                    at_secs: rule.at_secs,
+                    enabled: rule.enabled,
+                    fire_at: clock.map(|c| reminder::fire_at(rule, c)),
+                    outcome: outcome.map(|(_, o, _)| *o),
+                    outcome_at: outcome.map(|(_, _, at)| *at),
+                }
+            })
+            .collect()
     }
 }
 

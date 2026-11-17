@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use bax_core::{Phase, Team};
+use bax_core::{Phase, ReminderOutcome, Team};
 use bax_engine::{
     Clock, Engine, EngineConfig, FetchState, MatchView, PlayerView, Snapshot, SystemClock,
 };
@@ -66,6 +66,33 @@ fn print_snapshot(s: &Snapshot) {
     match &s.current {
         Some(m) => print_match(m),
         None => println!("   还没有见到比赛"),
+    }
+    let reminders: Vec<String> = s
+        .reminders
+        .iter()
+        .filter(|r| r.enabled)
+        .map(|r| {
+            let state = match r.outcome {
+                Some(ReminderOutcome::Fired) => "已提醒",
+                Some(ReminderOutcome::Missed) => "已错过",
+                None if r.fire_at.is_some() => "等待中",
+                None => "-",
+            };
+            format!(
+                "{} {}（{state}）",
+                mmss(i64::from(r.at_secs) * 1000),
+                r.label
+            )
+        })
+        .collect();
+    if !reminders.is_empty() {
+        println!("  提醒：{}", reminders.join("，"));
+    }
+    if let Some(alert) = &s.alert {
+        let ago = SystemClock.now().millis_since(alert.at);
+        if ago < 60_000 {
+            println!("  ⏰ {}（{} 秒前）", alert.label, ago / 1000);
+        }
     }
 }
 
