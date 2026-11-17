@@ -756,3 +756,87 @@ fn a_failed_migration_leaves_the_previous_version_in_place() {
         "失败的迁移整体回滚，不留下半张表"
     );
 }
+
+#[test]
+fn reminder_outcomes_are_recorded_once_per_match_and_rule() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    let id = MatchId(1);
+    assert!(store.reminder_outcomes(id).expect("读取").is_empty());
+
+    assert!(
+        store
+            .record_reminder(id, 1, ReminderOutcome::Fired, t(1600))
+            .expect("写入")
+    );
+    assert!(
+        !store
+            .record_reminder(id, 1, ReminderOutcome::Missed, t(1700))
+            .expect("重复写入"),
+        "第一次的结果为准"
+    );
+    store
+        .record_reminder(id, 2, ReminderOutcome::Missed, t(1800))
+        .expect("写入");
+    store
+        .record_reminder(MatchId(2), 1, ReminderOutcome::Fired, t(9000))
+        .expect("另一场比赛");
+
+    assert_eq!(
+        store.reminder_outcomes(id).expect("读取"),
+        vec![
+            (1, ReminderOutcome::Fired, t(1600)),
+            (2, ReminderOutcome::Missed, t(1800)),
+        ]
+    );
+}
+
+#[test]
+fn settings_can_be_listed_by_prefix() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    store
+        .set_setting("ui.overlay", &serde_json::json!({"opacity": 0.9}))
+        .expect("写入");
+    store
+        .set_setting("ui.hotkeys", &serde_json::json!({"toggle": "Ctrl+Alt+B"}))
+        .expect("写入");
+    store.set_setting("uix.other", &1).expect("写入");
+    store.set_setting("log.dir", &"D:\\Logs").expect("写入");
+    // LIKE 里的通配符不应生效
+    store.set_setting("u_.weird", &2).expect("写入");
+
+    let keys: Vec<String> = store
+        .settings_with_prefix("ui.")
+        .expect("读取")
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert_eq!(keys, vec!["ui.hotkeys", "ui.overlay"]);
+    let (_, raw) = &store.settings_with_prefix("ui.overlay").expect("读取")[0];
+    assert_eq!(raw, r#"{"opacity":0.9}"#);
+}
+
+#[test]
+fn a_version_one_database_upgrades_with_a_backup() {
+    let dir = tempfile::tempdir().expect("临时目录");
+    let path = dir.path().join("bax.db");
+    {
+        // 0.1.0 创建的库只有第 1 版结构
+        let conn = db::open(Some(&path), &MIGRATIONS[..1], true).expect("建第 1 版");
+        let mut old = Store { conn };
+        old.record_match(state(&played(1, 1000, standard_roster())))
+            .expect("记录");
+    }
+    let store = Store::open(&path).expect("升级");
+    assert_eq!(store.schema_version().expect("读取版本"), 2);
+    assert!(
+        store.match_record(MatchId(1)).expect("读取").is_some(),
+        "旧数据还在"
+    );
+    assert!(
+        store
+            .reminder_outcomes(MatchId(1))
+            .expect("新表可用")
+            .is_empty()
+    );
+    assert!(db::backup_path(&path, 1).exists(), "升级前留了备份");
+}

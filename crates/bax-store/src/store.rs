@@ -7,7 +7,8 @@
 use std::path::Path;
 
 use bax_core::{
-    BattleClock, ClockSource, ExitCause, MatchId, MatchState, Phase, PlayerId, Team, Timestamp,
+    BattleClock, ClockSource, ExitCause, MatchId, MatchState, Phase, PlayerId, ReminderOutcome,
+    Team, Timestamp,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::Serialize;
@@ -76,6 +77,14 @@ const MIGRATIONS: &[&str] = &[
     CREATE TABLE settings (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
+    ) STRICT, WITHOUT ROWID;",
+    // 第 2 版：计时提醒在每场比赛里的结果
+    "CREATE TABLE reminder_log (
+        match_id INTEGER NOT NULL,
+        rule_id  INTEGER NOT NULL,
+        outcome  TEXT NOT NULL,
+        at       INTEGER NOT NULL,
+        PRIMARY KEY (match_id, rule_id)
     ) STRICT, WITHOUT ROWID;",
 ];
 
@@ -560,6 +569,74 @@ impl Store {
             .conn
             .execute("DELETE FROM settings WHERE key = ?1", [key])?
             > 0)
+    }
+
+    /// 键以 `prefix` 开头的全部设置，值为原样的 JSON 文本，按键排序。
+    pub fn settings_with_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT key, value FROM settings WHERE substr(key, 1, length(?1)) = ?1 ORDER BY key",
+        )?;
+        let rows = stmt.query_map([prefix], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    // ------------------------------------------------------------ 提醒
+
+    /// 记下一条提醒规则在一场比赛里的结果。每条规则每场只记第一次，返回这次是否记下了。
+    pub fn record_reminder(
+        &mut self,
+        match_id: MatchId,
+        rule_id: u32,
+        outcome: ReminderOutcome,
+        at: Timestamp,
+    ) -> Result<bool> {
+        Ok(self.conn.execute(
+            "INSERT OR IGNORE INTO reminder_log(match_id, rule_id, outcome, at) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                id_to_db(match_id.get()),
+                rule_id,
+                outcome_to_db(outcome),
+                at.as_millis()
+            ],
+        )? > 0)
+    }
+
+    /// 一场比赛里各条提醒规则的结果：规则编号、结果、时刻。
+    pub fn reminder_outcomes(
+        &self,
+        match_id: MatchId,
+    ) -> Result<Vec<(u32, ReminderOutcome, Timestamp)>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT rule_id, outcome, at FROM reminder_log WHERE match_id = ?1 ORDER BY rule_id",
+        )?;
+        let rows = stmt.query_map([id_to_db(match_id.get())], |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (rule, outcome, at) = row?;
+            out.push((rule, outcome_from_db(&outcome)?, Timestamp::from_millis(at)));
+        }
+        Ok(out)
+    }
+}
+
+fn outcome_to_db(outcome: ReminderOutcome) -> &'static str {
+    match outcome {
+        ReminderOutcome::Fired => "fired",
+        ReminderOutcome::Missed => "missed",
+    }
+}
+
+fn outcome_from_db(value: &str) -> Result<ReminderOutcome> {
+    match value {
+        "fired" => Ok(ReminderOutcome::Fired),
+        "missed" => Ok(ReminderOutcome::Missed),
+        other => Err(StoreError::Corrupt(format!("提醒结果 {other:?}"))),
     }
 }
 
