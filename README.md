@@ -32,6 +32,6 @@ Tauri＋Rust 桌面应用，网页前端，SQLite 本地存储，目标平台为
 
 ## 来源与许可
 
-BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型采用 MIT 许可，来源与许可声明见 [NOTICE.md](NOTICE.md)。
+BAX 采用 MIT 许可，见 [LICENSE](LICENSE)。
 
-BAX 自身的许可证尚未确定。
+BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型同样采用 MIT 许可，来源与许可声明见 [NOTICE.md](NOTICE.md)。
