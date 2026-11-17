@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use bax_core::ReminderRule;
+use bax_core::{PlayerId, ReminderRule};
 use bax_engine::diag::{self, ExportOptions};
-use bax_engine::{CommandError, Snapshot};
+use bax_engine::{CommandError, PlayerDetail, PlayerHit, Snapshot};
 use tauri::{AppHandle, State, Window};
 
 use crate::app::{AppState, AppStatus, reveal_in_explorer, show_main_window};
@@ -107,6 +107,51 @@ pub fn set_overlay_hotspot(app: AppHandle, hotspot: Option<overlay::Hotspot>) {
 #[tauri::command]
 pub fn set_overlay_visible(app: AppHandle, visible: bool) {
     overlay::set_visible(&app, visible, "界面");
+}
+
+#[tauri::command]
+pub async fn player_detail(
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<Option<PlayerDetail>, String> {
+    state
+        .engine
+        .player_detail(PlayerId(id))
+        .await
+        .map_err(rejected("player_detail"))
+}
+
+/// `query` 为空时列出最近见过的玩家。
+#[tauri::command]
+pub async fn search_players(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<PlayerHit>, String> {
+    state
+        .engine
+        .search_players(query, limit.unwrap_or(50))
+        .await
+        .map_err(rejected("search_players"))
+}
+
+/// `body` 为空时删除备注。
+#[tauri::command]
+pub async fn set_note(state: State<'_, AppState>, id: u64, body: String) -> CommandResult {
+    state
+        .engine
+        .set_note(PlayerId(id), body)
+        .await
+        .map_err(rejected("set_note"))
+}
+
+#[tauri::command]
+pub async fn refresh_player(state: State<'_, AppState>, id: u64) -> CommandResult {
+    state
+        .engine
+        .refresh_player(PlayerId(id))
+        .await
+        .map_err(rejected("refresh_player"))
 }
 
 /// 窗口要在异步命令里创建：同步命令跑在主线程上，在那里建窗口会卡住事件循环。

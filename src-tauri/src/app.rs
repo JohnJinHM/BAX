@@ -99,6 +99,10 @@ pub fn run() {
             commands::report_ui_error,
             commands::open_diag_dir,
             commands::export_diag,
+            commands::player_detail,
+            commands::search_players,
+            commands::set_note,
+            commands::refresh_player,
         ])
         .setup(move |app| {
             let data_dir = data_dir.ok_or("无法确定数据目录")?;

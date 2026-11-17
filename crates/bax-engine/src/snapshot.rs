@@ -170,6 +170,8 @@ pub struct PlayerView {
     pub fetch: FetchState,
     /// 以前同场的次数，不含这一场。
     pub encounters: EncounterSummary,
+    /// 用户写的备注。
+    pub note: Option<String>,
 }
 
 /// 一名玩家的资料请求进行到哪一步。

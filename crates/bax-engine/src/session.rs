@@ -27,13 +27,14 @@ use bax_core::{
     Tracker, Update,
 };
 use bax_gamelog::{LogTime, Origin, WatchItem};
-use bax_store::{EncounterSummary, PlayerRecord, ProfileUpdate, Store};
+use bax_store::{EncounterSummary, PlayerHit, PlayerRecord, ProfileUpdate, Store};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::MissedTickBehavior;
 
 use crate::clock::Clock;
 use crate::config::EngineConfig;
 use crate::logthread::{LogMsg, LogThread, LogTiming};
+use crate::player::PlayerDetail;
 use crate::profile::ProfileSummary;
 use crate::snapshot::{
     AlertView, ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, ReminderView,
@@ -50,6 +51,10 @@ pub(crate) const REMINDERS_KEY: &str = "reminders";
 pub(crate) const UI_PREFIX: &str = "ui.";
 /// 一项界面设置序列化之后的长度上限。
 const UI_VALUE_LIMIT: usize = 64 * 1024;
+/// 一条备注的字数上限。
+const NOTE_LIMIT: usize = 2000;
+/// 玩家档案里列出的同场比赛数上限。
+const DETAIL_MATCH_LIMIT: u32 = 200;
 
 pub(crate) const LOG_CHANNEL_CAPACITY: usize = 256;
 /// 详细档位下，多久写一行运行摘要。
@@ -79,6 +84,29 @@ pub(crate) enum Command {
     SetUiSetting {
         key: String,
         value: serde_json::Value,
+        done: oneshot::Sender<Result<(), String>>,
+    },
+    /// 一名玩家的完整档案。
+    PlayerDetail {
+        id: PlayerId,
+        done: oneshot::Sender<Result<Option<PlayerDetail>, String>>,
+    },
+    /// 按名字或 ID 查找玩家；查询为空时列出最近见过的。
+    SearchPlayers {
+        query: String,
+        limit: u32,
+        done: oneshot::Sender<Result<Vec<PlayerHit>, String>>,
+    },
+    /// 保存备注；内容为空时删除。
+    SetNote {
+        id: PlayerId,
+        body: String,
+        done: oneshot::Sender<Result<(), String>>,
+    },
+    /// 保存一份单独取得的资料（主窗口里“刷新这名玩家”）。请求由调用方发出，会话只负责写入。
+    SaveProfile {
+        id: PlayerId,
+        fetched: Box<Fetched<PlayerInfoResponse>>,
         done: oneshot::Sender<Result<(), String>>,
     },
 }
@@ -120,6 +148,7 @@ struct Slot {
     record: Option<PlayerRecord>,
     profile: Option<ProfileSummary>,
     encounters: EncounterSummary,
+    note: Option<String>,
     fetch: FetchState,
     failures: usize,
 }
@@ -331,7 +360,100 @@ impl Session {
             Command::SetUiSetting { key, value, done } => {
                 let _ = done.send(self.set_ui_setting(key, value));
             }
+            Command::PlayerDetail { id, done } => {
+                let _ = done.send(self.player_detail(id).map_err(|e| e.to_string()));
+            }
+            Command::SearchPlayers { query, limit, done } => {
+                let _ = done.send(
+                    self.store
+                        .search_players(&query, limit.min(500))
+                        .map_err(|e| e.to_string()),
+                );
+            }
+            Command::SetNote { id, body, done } => {
+                let _ = done.send(self.set_note(id, &body));
+            }
+            Command::SaveProfile { id, fetched, done } => {
+                let _ = done.send(self.save_single_profile(id, &fetched));
+            }
         }
+    }
+
+    fn player_detail(&self, id: PlayerId) -> bax_store::Result<Option<PlayerDetail>> {
+        let record = self.store.player(id)?;
+        let note = self.store.note(id)?;
+        if record.is_none() && note.is_none() {
+            return Ok(None);
+        }
+        let profile = record
+            .as_ref()
+            .and_then(|r| r.profile_json.as_deref())
+            .and_then(ProfileSummary::from_json);
+        let self_id = self
+            .tracker
+            .current()
+            .and_then(|m| m.self_id)
+            .or(self.self_hint);
+        Ok(Some(PlayerDetail {
+            id,
+            name: record.as_ref().and_then(|r| r.name.clone()),
+            log_name: record.as_ref().and_then(|r| r.last_log_name.clone()),
+            steam_id: record.as_ref().and_then(|r| r.steam_id.clone()),
+            profile,
+            fetched_at: record.as_ref().and_then(|r| r.fetched_at),
+            first_seen_at: record.as_ref().and_then(|r| r.first_seen_at),
+            last_seen_at: record.as_ref().and_then(|r| r.last_seen_at),
+            note,
+            encounters: self.store.encounters(id, None)?,
+            history: self.store.rating_history(id)?,
+            matches: self.store.encounter_list(id, DETAIL_MATCH_LIMIT)?,
+            is_self: self_id == Some(id),
+        }))
+    }
+
+    fn set_note(&mut self, id: PlayerId, body: &str) -> Result<(), String> {
+        if body.chars().count() > NOTE_LIMIT {
+            return Err(format!("备注不能超过 {NOTE_LIMIT} 个字"));
+        }
+        let now = self.clock.now();
+        self.store
+            .set_note(id, body, now)
+            .map_err(|e| e.to_string())?;
+        let note = self.store.note(id).ok().flatten().map(|n| n.body);
+        if let Some(slot) = self.slot_mut(id) {
+            slot.note = note;
+            self.dirty = true;
+            self.publish();
+        }
+        Ok(())
+    }
+
+    fn save_single_profile(
+        &mut self,
+        id: PlayerId,
+        fetched: &Fetched<PlayerInfoResponse>,
+    ) -> Result<(), String> {
+        let now = self.clock.now();
+        self.store
+            .save_profile(&profile_update(id, fetched), now)
+            .map_err(|e| e.to_string())?;
+        if self.slots.iter().any(|s| s.id == id) {
+            let record = self.store.player(id).ok().flatten();
+            if let Some(slot) = self.slot_mut(id) {
+                slot.profile = record
+                    .as_ref()
+                    .and_then(|r| r.profile_json.as_deref())
+                    .and_then(ProfileSummary::from_json);
+                slot.record = record;
+                slot.failures = 0;
+                if matches!(slot.fetch, FetchState::Failed { .. }) {
+                    slot.fetch = FetchState::Idle;
+                }
+            }
+            self.dirty = true;
+            self.publish();
+        }
+        Ok(())
     }
 
     fn set_reminders(&mut self, rules: Vec<ReminderRule>) -> Result<(), String> {
@@ -937,6 +1059,10 @@ impl Session {
             tracing::warn!(error = %err, "统计相遇次数失败");
             EncounterSummary::default()
         });
+        let note = self.store.note(id).unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "读取备注失败");
+            None
+        });
         Slot {
             id,
             log_name,
@@ -944,6 +1070,7 @@ impl Session {
             record,
             profile,
             encounters,
+            note: note.map(|n| n.body),
             fetch: FetchState::Idle,
             failures: 0,
         }
@@ -1115,6 +1242,7 @@ impl Session {
                         profile_current: fetched_at.is_some_and(|at| at >= m.times.discovered_at),
                         fetch: slot.fetch,
                         encounters: slot.encounters,
+                        note: slot.note.clone(),
                     }
                 })
                 .collect();

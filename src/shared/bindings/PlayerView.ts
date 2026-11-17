@@ -29,4 +29,8 @@ profileCurrent: boolean, fetch: FetchState,
 /**
  * 以前同场的次数，不含这一场。
  */
-encounters: EncounterSummary, };
+encounters: EncounterSummary, 
+/**
+ * 用户写的备注。
+ */
+note: string | null, };

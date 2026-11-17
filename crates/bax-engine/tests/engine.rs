@@ -15,7 +15,7 @@ use bax_engine::{
     CommandError, Engine, EngineConfig, FetchState, ManualClock, PlayerView, Snapshot,
 };
 use bax_gamelog::{LogTime, LogZone};
-use bax_store::{ProfileUpdate, Store};
+use bax_store::{ProfileUpdate, Relation, Store};
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
@@ -875,5 +875,104 @@ async fn invalid_reminder_rules_are_rejected_and_nothing_changes() {
         .expect_err("编号重复");
     assert!(matches!(err, CommandError::Rejected(_)));
     assert_eq!(engine.snapshot().reminders, before);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn notes_show_up_in_the_match_and_in_the_player_detail() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+
+    engine
+        .set_note(PlayerId(101), "爱推坦克")
+        .await
+        .expect("写入备注");
+    let snapshot = wait_for(&engine, "快照里有备注", |s| {
+        player(s, 101).is_some_and(|p| p.note.as_deref() == Some("爱推坦克"))
+    })
+    .await;
+    assert_eq!(player(&snapshot, 201).and_then(|p| p.note.clone()), None);
+
+    let detail = engine
+        .player_detail(PlayerId(101))
+        .await
+        .expect("查询")
+        .expect("有档案");
+    assert_eq!(detail.note.map(|n| n.body), Some("爱推坦克".to_owned()));
+    assert_eq!(detail.log_name.as_deref(), Some("Ash"));
+    assert_eq!(detail.matches.len(), 1);
+    assert_eq!(detail.matches[0].relation, Relation::Opponent);
+    assert_eq!(detail.encounters.total, 1);
+    assert!(!detail.is_self);
+    let me = engine
+        .player_detail(PlayerId(ME))
+        .await
+        .expect("查询")
+        .expect("有档案");
+    assert!(me.is_self);
+    assert!(
+        engine
+            .player_detail(PlayerId(424_242))
+            .await
+            .expect("查询")
+            .is_none()
+    );
+
+    let hits = engine.search_players("ash", 10).await.expect("查找");
+    assert_eq!(
+        hits.iter().map(|h| h.id.get()).collect::<Vec<_>>(),
+        vec![101]
+    );
+    assert!(hits[0].has_note);
+
+    engine.set_note(PlayerId(101), "").await.expect("删除备注");
+    wait_for(&engine, "备注已删除", |s| {
+        player(s, 101).is_some_and(|p| p.note.is_none())
+    })
+    .await;
+    let err = engine
+        .set_note(PlayerId(101), "字".repeat(2001))
+        .await
+        .expect_err("太长");
+    assert!(matches!(err, CommandError::Rejected(_)));
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_single_player_can_be_refreshed_on_demand() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| {
+        s.log.ready && s.current.is_some()
+    })
+    .await;
+
+    engine.refresh_player(PlayerId(201)).await.expect("刷新");
+    let snapshot = wait_for(&engine, "当前比赛里的资料更新", |s| {
+        is_current_profile(s, 201)
+    })
+    .await;
+    assert_eq!(
+        player(&snapshot, 201)
+            .and_then(|p| p.profile.as_ref())
+            .and_then(|p| p.rating),
+        Some(1201.0)
+    );
+    let detail = engine
+        .player_detail(PlayerId(201))
+        .await
+        .expect("查询")
+        .expect("有档案");
+    assert_eq!(detail.history.len(), 1);
+    assert_eq!(detail.name.as_deref(), Some("API-201"));
+    assert_eq!(fx.requests().await, vec![(201, 1)]);
     engine.shutdown().await;
 }

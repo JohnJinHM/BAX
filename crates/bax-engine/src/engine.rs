@@ -8,12 +8,13 @@ use std::time::Instant;
 use bax_batrace::{ApiError, BatraceClient};
 use bax_core::PlayerId;
 use bax_core::reminder::{self, ReminderRule};
-use bax_store::{Store, StoreError};
+use bax_store::{PlayerHit, Store, StoreError};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::clock::Clock;
 use crate::config::EngineConfig;
+use crate::player::PlayerDetail;
 use crate::session::{Command, LOG_DIR_KEY, Parts, REMINDERS_KEY, SELF_ID_KEY, Session, UI_PREFIX};
 use crate::snapshot::Snapshot;
 
@@ -42,6 +43,8 @@ pub struct Engine {
     commands: mpsc::Sender<Command>,
     snapshots: watch::Receiver<Arc<Snapshot>>,
     task: JoinHandle<()>,
+    /// 单独刷新一名玩家时直接用它发请求，不占用会话。
+    client: BatraceClient,
 }
 
 impl Engine {
@@ -75,7 +78,7 @@ impl Engine {
             config,
             clock,
             store,
-            client,
+            client: client.clone(),
             log_dir,
             self_hint,
             rules,
@@ -93,6 +96,7 @@ impl Engine {
             commands,
             snapshots,
             task,
+            client,
         })
     }
 
@@ -149,6 +153,62 @@ impl Engine {
         reply(wait).await
     }
 
+    /// 一名玩家的完整档案；长期库里没有这名玩家时为 `None`。
+    pub async fn player_detail(&self, id: PlayerId) -> Result<Option<PlayerDetail>, CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::PlayerDetail { id, done }).await?;
+        reply_with(wait).await
+    }
+
+    /// 按名字或 ID 查找玩家；查询为空时列出最近见过的玩家。
+    pub async fn search_players(
+        &self,
+        query: impl Into<String>,
+        limit: u32,
+    ) -> Result<Vec<PlayerHit>, CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SearchPlayers {
+            query: query.into(),
+            limit,
+            done,
+        })
+        .await?;
+        reply_with(wait).await
+    }
+
+    /// 保存一名玩家的备注；内容为空时删除。
+    pub async fn set_note(
+        &self,
+        id: PlayerId,
+        body: impl Into<String>,
+    ) -> Result<(), CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SetNote {
+            id,
+            body: body.into(),
+            done,
+        })
+        .await?;
+        reply(wait).await
+    }
+
+    /// 立即从接口取一次这名玩家的资料并保存，不管他在不在当前比赛里。
+    pub async fn refresh_player(&self, id: PlayerId) -> Result<(), CommandError> {
+        let fetched = self
+            .client
+            .player_info(id)
+            .await
+            .map_err(|err| CommandError::Rejected(err.to_string()))?;
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SaveProfile {
+            id,
+            fetched: Box::new(fetched),
+            done,
+        })
+        .await?;
+        reply(wait).await
+    }
+
     /// 停下引擎，等它收尾。
     pub async fn shutdown(self) {
         let Engine { commands, task, .. } = self;
@@ -167,6 +227,14 @@ impl Engine {
 async fn reply(wait: oneshot::Receiver<Result<(), String>>) -> Result<(), CommandError> {
     match wait.await {
         Ok(Ok(())) => Ok(()),
+        Ok(Err(reason)) => Err(CommandError::Rejected(reason)),
+        Err(_) => Err(CommandError::Stopped),
+    }
+}
+
+async fn reply_with<T>(wait: oneshot::Receiver<Result<T, String>>) -> Result<T, CommandError> {
+    match wait.await {
+        Ok(Ok(value)) => Ok(value),
         Ok(Err(reason)) => Err(CommandError::Rejected(reason)),
         Err(_) => Err(CommandError::Stopped),
     }
