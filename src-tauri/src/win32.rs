@@ -3,6 +3,10 @@
 //! Tauri（tao）对已经创建的窗口调用 `show()` 时用的是 `SW_SHOW`，会激活窗口；
 //! 用快捷键显示悬浮窗时，Windows 允许收到快捷键的程序抢前台，于是焦点会从游戏移走。
 //! 这里改用 `SW_SHOWNOACTIVATE`。
+//!
+//! 鼠标穿透也不用 tao 的 `set_ignore_cursor_events`：它改窗口样式时会按 tao 自己记的可见状态
+//! 重新显示或隐藏窗口，而悬浮窗是用上面的 `SW_SHOWNOACTIVATE` 显示的，tao 一直以为它是隐藏的，
+//! 于是一锁定窗口就被藏起来；它还加上 `WS_EX_LAYERED` 却不设置分层属性，分层窗口不设置属性时不会绘制。
 
 #![allow(unsafe_code)]
 
@@ -14,8 +18,10 @@ use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowThreadProcessId, HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow,
+    GWL_EXSTYLE, GetForegroundWindow, GetWindowLongW, GetWindowThreadProcessId, HWND_TOPMOST,
+    LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
+    WS_EX_LAYERED, WS_EX_TRANSPARENT,
 };
 
 /// 显示窗口但不激活它，并保持在最上层。
@@ -40,6 +46,33 @@ pub fn hide(hwnd: *mut c_void) {
     // SAFETY: 同上。
     unsafe {
         ShowWindow(hwnd as HWND, SW_HIDE);
+    }
+}
+
+/// 打开或关闭鼠标穿透。打开时窗口成为不透明度 100% 的分层窗口，点击落到下面的窗口上；
+/// 不改变窗口是否可见。返回是否成功。
+pub fn set_click_through(hwnd: *mut c_void, enabled: bool) -> bool {
+    let hwnd = hwnd as HWND;
+    // SAFETY: 句柄来自 Tauri 窗口，窗口存活期间有效。这几个函数只读写窗口样式，句柄失效时返回失败。
+    unsafe {
+        let old = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+        let bits = WS_EX_LAYERED | WS_EX_TRANSPARENT;
+        let new = if enabled { old | bits } else { old & !bits };
+        if new != old {
+            SetWindowLongW(hwnd, GWL_EXSTYLE, new as i32);
+        }
+        let layered_ok = !enabled || SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA) != 0;
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+        let applied = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 & bits;
+        layered_ok && applied == if enabled { bits } else { 0 }
     }
 }
 

@@ -247,7 +247,7 @@ stateDiagram-v2
 悬浮窗的实现：
 
 - 无边框、透明、置顶、不进任务栏、不能获得焦点（Tauri 的 `focusable(false)`，对应 `WS_EX_NOACTIVATE`）。
-- 锁定时用 Tauri 的 `set_ignore_cursor_events` 让鼠标穿透；解锁时标题栏可以拖动。
+- 锁定时给窗口加上 `WS_EX_LAYERED | WS_EX_TRANSPARENT` 并把分层不透明度设为 100%，鼠标穿透；解锁时去掉，标题栏可以拖动。不用 Tauri 的 `set_ignore_cursor_events`：悬浮窗用 `SW_SHOWNOACTIVATE` 显示，tao 记的可见状态一直是“隐藏”，它改样式时会顺手把窗口藏起来，而且只加分层样式不设分层属性的窗口不会绘制。代码在 `src-tauri/src/win32.rs`。
 - 显示与隐藏走 `src-tauri/src/win32.rs`：用 `SW_SHOWNOACTIVATE` 显示，不激活窗口。Tauri 对已创建的窗口调用 `show()` 时会激活它，用快捷键显示时可能把焦点从游戏抢走。这是项目里唯一的 `unsafe` 代码。
 - 窗口大小跟随页面内容；位置在拖动停下 0.6 秒后保存，下次启动时恢复，没有保存过时放在主显示器右上角。
 

@@ -96,7 +96,7 @@ pub fn create(
         window.set_position(position)?;
     }
     log_placement(&window, saved);
-    window.set_ignore_cursor_events(settings.locked)?;
+    apply_click_through(&window, settings.locked);
 
     let state = OverlayState {
         settings: Mutex::new(settings),
@@ -204,10 +204,27 @@ pub fn toggle_visible(app: &AppHandle, via: &'static str) {
     set_visible(app, !visible, via);
 }
 
+/// 锁定时鼠标穿透。不用 tao 的 `set_ignore_cursor_events`，原因见 `win32` 模块的说明。
+fn apply_click_through(window: &WebviewWindow, locked: bool) {
+    #[cfg(windows)]
+    match window.hwnd() {
+        Ok(hwnd) => {
+            if !crate::win32::set_click_through(hwnd.0, locked) {
+                tracing::warn!(locked, "设置悬浮窗鼠标穿透失败");
+            }
+        }
+        Err(err) => tracing::warn!(error = %err, "取不到悬浮窗的窗口句柄"),
+    }
+    #[cfg(not(windows))]
+    if let Err(err) = window.set_ignore_cursor_events(locked) {
+        tracing::warn!(error = %err, "设置悬浮窗鼠标穿透失败");
+    }
+}
+
 pub fn set_locked(app: &AppHandle, locked: bool, via: &'static str) -> tauri::Result<()> {
     tracing::info!(locked, via = %via, "悬浮窗锁定状态");
     if let Some(window) = app.get_webview_window(LABEL) {
-        window.set_ignore_cursor_events(locked)?;
+        apply_click_through(&window, locked);
     }
     app.state::<AppState>()
         .update_status(app, |s| s.overlay_locked = locked);
