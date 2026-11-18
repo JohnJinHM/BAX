@@ -765,15 +765,25 @@ async fn a_reminder_fires_once_and_not_again_after_a_restart() {
 async fn reminders_passed_before_bax_started_are_marked_missed() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
+    // 先在没有比赛的时候设好第 10 分钟的提醒；默认没有任何提醒
+    let engine = fx.start();
+    let snapshot = wait_for(&engine, "补读完成", |s| s.log.ready).await;
+    assert!(snapshot.reminders.is_empty(), "默认不设提醒");
+    engine
+        .set_reminders(vec![rule(1, 600, "第 10 分钟")])
+        .await
+        .expect("规则合法");
+    engine.shutdown().await;
+
+    // 开局 20 分钟后才打开 BAX，第 10 分钟的提醒已经过去
     fx.append(&match_in_progress(9_000_001));
-    // 开局 20 分钟后才打开 BAX，第 10 分钟的默认提醒已经过去
     fx.clock.set(ts("19:14:40.000"));
     let engine = fx.start();
     let snapshot = wait_for(&engine, "检查过提醒", |s| {
         s.reminders.first().is_some_and(|r| r.outcome.is_some())
     })
     .await;
-    assert_eq!(snapshot.reminders[0].at_secs, 600, "默认规则是第 10 分钟");
+    assert_eq!(snapshot.reminders[0].at_secs, 600);
     assert_eq!(snapshot.reminders[0].outcome, Some(ReminderOutcome::Missed));
     assert_eq!(snapshot.alert, None, "错过的不补发");
     engine.shutdown().await;

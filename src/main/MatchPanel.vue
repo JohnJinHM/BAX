@@ -42,10 +42,9 @@ const groups = computed(() => {
 const clockLine = computed(() => {
   const m = current.value;
   if (!m?.clock) return m?.rejoined ? "重连进入，没有计时基准，可以在“提醒与计时”里手动校准" : "";
+  if (m.phase === "ended") return "";
   const elapsed = now.value - m.clock.startAt;
-  const source = { logEstimate: "日志推算", manual: "手动校准", report: "战报" }[m.clock.source];
-  if (m.phase === "ended") return `计时来源：${source}`;
-  return `${elapsed < 0 ? `距开局 ${mmss(-elapsed)}` : `已开局 ${mmss(elapsed)}`}（${source}）`;
+  return elapsed < 0 ? `距开局 ${mmss(-elapsed)}` : `已开局 ${mmss(elapsed)}`;
 });
 
 function encounters(p: PlayerView): string {

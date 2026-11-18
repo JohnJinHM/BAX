@@ -22,14 +22,9 @@ pub struct ReminderRule {
     pub enabled: bool,
 }
 
-/// 默认规则：正式开局后第 10 分钟。
+/// 默认没有提醒。计时提醒是可选功能，由用户自己添加。
 pub fn default_rules() -> Vec<ReminderRule> {
-    vec![ReminderRule {
-        id: 1,
-        at_secs: 600,
-        label: "第 10 分钟".to_owned(),
-        enabled: true,
-    }]
+    Vec::new()
 }
 
 /// 规则在一场比赛里的结果。

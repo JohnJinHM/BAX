@@ -50,7 +50,7 @@ function edit() {
 
 function add() {
   const id = Math.max(0, ...drafts.value.map((d) => d.id)) + 1;
-  drafts.value.push({ id, time: "15:00", label: "第 15 分钟", enabled: true });
+  drafts.value.push({ id, time: "", label: "", enabled: true });
   edit();
 }
 
@@ -67,7 +67,10 @@ async function save() {
       message.value = { ok: false, text: `“${d.time}”不是有效的时间，格式为 分:秒，例如 10:00` };
       return;
     }
-    rules.push({ id: d.id, atSecs: Math.round(ms / 1000), label: d.label.trim(), enabled: d.enabled });
+    const secs = Math.round(ms / 1000);
+    // 不填提示文字时用时间本身
+    const label = d.label.trim() || `开局 ${mmss(secs * 1000)}`;
+    rules.push({ id: d.id, atSecs: secs, label, enabled: d.enabled });
   }
   try {
     await commands.setReminders(rules);
@@ -112,9 +115,10 @@ async function calibrate() {
 
 <template>
   <section class="card">
-    <h2>计时提醒</h2>
-    <p class="hint">时间从正式开局（准备阶段结束）算起。到点时响铃并在悬浮窗上闪烁；对局中途才打开 BAX 时，已经过去的提醒不会补发。</p>
-    <table>
+    <h2>计时提醒（可选）</h2>
+    <p class="hint">默认不设提醒。需要时添加一条：时间从正式开局（准备阶段结束）算起，到点时响铃并在悬浮窗上闪烁；对局中途才打开 BAX 时，已经过去的提醒不会补发。</p>
+    <p v-if="!drafts.length" class="hint">还没有提醒。</p>
+    <table v-else>
       <thead>
         <tr>
           <th>启用</th>
@@ -128,14 +132,14 @@ async function calibrate() {
         <tr v-for="(d, index) in drafts" :key="d.id">
           <td><input v-model="d.enabled" type="checkbox" @change="edit" /></td>
           <td><input v-model="d.time" type="text" class="time num" placeholder="10:00" @input="edit" /></td>
-          <td><input v-model="d.label" type="text" class="label" @input="edit" /></td>
+          <td><input v-model="d.label" type="text" class="label" placeholder="第 10 分钟" @input="edit" /></td>
           <td class="hint">{{ states.get(d.id) ?? "" }}</td>
           <td><button @click="remove(index)">删除</button></td>
         </tr>
       </tbody>
     </table>
     <div class="row actions">
-      <button @click="add">添加</button>
+      <button @click="add">添加提醒</button>
       <button class="primary" :disabled="!dirty" @click="save">保存</button>
       <button :disabled="!dirty" @click="discard">放弃修改</button>
       <span v-if="message" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</span>
@@ -145,7 +149,7 @@ async function calibrate() {
   <section class="card">
     <h2>计时校准</h2>
     <p class="hint">
-      BAX 按“场景加载完成后 60 秒”推算开局时刻，与战报相比误差通常在 2 秒以内。重连进入的比赛没有推算值，或者觉得不准时，对照游戏画面填写此刻的时间。
+      重连进入的比赛没有计时基准，可以对照游戏画面填写此刻的时间。
     </p>
     <div class="row">
       <select v-model="calibrationMode">
