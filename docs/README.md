@@ -5,6 +5,7 @@
 | 位置 | 内容 | 回答的问题 |
 |---|---|---|
 | [planning/project-plan.md](planning/project-plan.md) | 项目规划：范围、数据来源与实测、技术方案、推进顺序 | 要做什么，依据是什么 |
+| [planning/next-steps.md](planning/next-steps.md) | 已知问题与下一步要做的功能 | 接下来做什么 |
 | [architecture/overview.md](architecture/overview.md) | 总体架构：模块、数据流、仓库结构、存储与通信 | 系统怎么组成 |
 | [adr/](adr/README.md) | 架构决策记录 | 为什么这样定 |
 | [validation/](validation/README.md) | 可行性验证的进度与记录 | 实测结果如何，影响了哪些设计 |
