@@ -4,7 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { shallowRef, type ShallowRef } from "vue";
 
+import type { HistoryRow } from "./bindings/HistoryRow";
 import type { ImportSummary } from "./bindings/ImportSummary";
+import type { MatchReportView } from "./bindings/MatchReportView";
 import type { PlayerDetail } from "./bindings/PlayerDetail";
 import type { PlayerHit } from "./bindings/PlayerHit";
 import type { ReminderRule } from "./bindings/ReminderRule";
@@ -95,6 +97,12 @@ export const commands = {
   /** 内容为空时删除备注。 */
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
   refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),
+  /** 比赛记录，新的在前，带战报状态。 */
+  matchHistory: (limit = 100, offset = 0) => invoke<HistoryRow[]>("match_history", { limit, offset }),
+  /** 一场比赛的战后分析；还没有战报时为 null。 */
+  matchReport: (id: number) => invoke<MatchReportView | null>("match_report", { id }),
+  /** 立即去取战报，取不到时按时间表继续等。 */
+  fetchReport: (id: number) => invoke<void>("fetch_report", { id }),
   /** 导入日志目录里的全部历史日志；重复导入不会重复计数。 */
   importHistory: () => invoke<ImportSummary>("import_history"),
 };

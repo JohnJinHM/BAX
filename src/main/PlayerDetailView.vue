@@ -6,6 +6,7 @@ import type { Relation } from "../shared/bindings/Relation";
 import { commands, errorText } from "../shared/engine";
 import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
+import { openMatch } from "./navigation";
 import Sparkline from "./Sparkline.vue";
 
 const props = defineProps<{ id: number }>();
@@ -156,7 +157,7 @@ async function refresh() {
             <td class="left">{{ m.logName ?? "–" }}</td>
             <td class="num">{{ m.durationMs != null ? mmss(m.durationMs) : "–" }}</td>
             <td>{{ phaseNames[m.phase] }}</td>
-            <td class="num hint">{{ m.matchId }}</td>
+            <td class="num"><a href="#" class="match" title="打开这场比赛" @click.prevent="openMatch(m.matchId)">{{ m.matchId }}</a></td>
           </tr>
         </tbody>
       </table>
@@ -244,6 +245,14 @@ th {
 
 .left {
   text-align: left;
+}
+
+a.match {
+  color: var(--bax-muted);
+}
+
+a.match:hover {
+  color: var(--bax-accent);
 }
 
 td.teammate {

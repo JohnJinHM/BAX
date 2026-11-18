@@ -2,7 +2,7 @@
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 
-import { fixtureDetail, fixtureHits, fixtureSnapshot } from "./fixture";
+import { fixtureDetail, fixtureHistory, fixtureHits, fixtureReport, fixtureSnapshot } from "./fixture";
 
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
   mockIPC((cmd, args) => {
@@ -25,6 +25,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         return "C:\\Users\\example\\AppData\\Local\\BAX\\diag\\export\\bax-diag-20261117-203015.txt";
       case "player_detail":
         return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
+      case "match_history":
+        return fixtureHistory;
+      case "match_report":
+        return fixtureReport(Number((args as { id?: number } | undefined)?.id));
       case "search_players":
         return fixtureHits(String((args as { query?: string } | undefined)?.query ?? ""));
       default:

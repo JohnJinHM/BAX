@@ -2,15 +2,23 @@
 
 import { ref } from "vue";
 
-export type Tab = "match" | "players" | "reminders" | "settings";
-export const tabs: Tab[] = ["match", "players", "reminders", "settings"];
+export type Tab = "match" | "history" | "players" | "reminders" | "settings";
+export const tabs: Tab[] = ["match", "history", "players", "reminders", "settings"];
 
 // 地址里的 ?tab= 与 ?player= 可以指定初始页面（预览用）
 const params = new URLSearchParams(location.search);
 const requestedPlayer = Number(params.get("player"));
+const requestedMatch = Number(params.get("match"));
 
 export const currentTab = ref<Tab>(tabs.find((t) => t === params.get("tab")) ?? "match");
 export const selectedPlayer = ref<number | null>(Number.isFinite(requestedPlayer) && requestedPlayer > 0 ? requestedPlayer : null);
+
+export const selectedMatch = ref<number | null>(Number.isFinite(requestedMatch) && requestedMatch > 0 ? requestedMatch : null);
+
+export function openMatch(id: number) {
+  selectedMatch.value = id;
+  currentTab.value = "history";
+}
 
 export function openPlayer(id: number) {
   selectedPlayer.value = id;

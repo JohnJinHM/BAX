@@ -1,11 +1,16 @@
 // 预览用的虚构快照：一场进行中的 5v5，玩家状态覆盖各种情况。只在 dev/ 预览页里使用。
 
 import type { EncounterRow } from "../shared/bindings/EncounterRow";
+import type { HistoryRow } from "../shared/bindings/HistoryRow";
+import type { MatchReportView } from "../shared/bindings/MatchReportView";
+import type { PlayerReport } from "../shared/bindings/PlayerReport";
 import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
 import type { PlayerHit } from "../shared/bindings/PlayerHit";
 import type { PlayerView } from "../shared/bindings/PlayerView";
 import type { RatingPoint } from "../shared/bindings/RatingPoint";
 import type { Snapshot } from "../shared/bindings/Snapshot";
+import type { Sortie } from "../shared/bindings/Sortie";
+import type { UnitClass } from "../shared/bindings/UnitClass";
 
 const now = Date.now();
 
@@ -110,6 +115,7 @@ export const fixtureSnapshot: Snapshot = {
     players,
     teams: [average("alpha"), average("bravo")],
   },
+  archive: { pending: 1, lastArchived: 8999963, seq: 3 },
 };
 
 /** 玩家档案：用快照里的玩家拼一份，加上虚构的历史与同场记录。 */
@@ -166,4 +172,188 @@ export function fixtureHits(query: string): PlayerHit[] {
       encounters: p.encounters.total,
       hasNote: p.note != null,
     }));
+}
+// ------------------------------------------------------------ 比赛记录与战后分析
+
+const maps = ["Airport", "Central Village", "Suwalki", "Baltiisk", "Coast"];
+
+export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) => {
+  const matchId = 9000001 - i * 37;
+  const report: HistoryRow["report"] =
+    i === 0
+      ? { state: "none" }
+      : i === 1
+        ? { state: "pending", attempts: 2, nextAt: now + 240_000 }
+        : i === 5
+          ? { state: "gaveUp", attempts: 13, lastError: "站点没有收录这条数据" }
+          : { state: "ready", fetchedAt: now - i * 3_600_000 };
+  return {
+    matchId,
+    at: now - i * 3_000_000 - 520_000,
+    map: maps[i % maps.length],
+    phase: i === 0 ? "inBattle" : "ended",
+    selfTeam: "bravo",
+    won: report.state === "ready" ? i % 3 !== 1 : null,
+    players: 10,
+    durationMs: i === 0 ? null : (19 + ((i * 7) % 20)) * 60_000 + 13_000,
+    report,
+  };
+});
+
+/** 固定种子的伪随机数，预览每次一样。 */
+function seeded(seed: number) {
+  let x = seed;
+  return () => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return x / 2147483648;
+  };
+}
+
+const fixtureUnits: { id: number; name: string; cls: UnitClass; cost: number }[] = [
+  { id: 1, name: "主战坦克 A", cls: "tank", cost: 260 },
+  { id: 2, name: "步战车 B", cls: "ifv", cost: 140 },
+  { id: 3, name: "步兵班 C", cls: "infantry", cost: 45 },
+  { id: 4, name: "侦察车 D", cls: "recon", cost: 70 },
+  { id: 5, name: "自行火炮 E", cls: "artillery", cost: 210 },
+  { id: 6, name: "近程防空 F", cls: "airDefense", cost: 150 },
+  { id: 7, name: "武装直升机 G", cls: "helicopter", cost: 230 },
+  { id: 8, name: "攻击机 H", cls: "jet", cost: 290 },
+  { id: 9, name: "补给车 I", cls: "supply", cost: 40 },
+  { id: 10, name: "运输车 J", cls: "transport", cost: 30 },
+];
+
+export function fixtureReport(id: number): MatchReportView | null {
+  const row = fixtureHistory.find((r) => r.matchId === id);
+  if (!row || row.report.state !== "ready") return null;
+  const rand = seeded(id);
+  const minutes = Math.ceil((row.durationMs ?? 1_500_000) / 60_000);
+  const won = row.won ?? false;
+  const sorties: Sortie[] = [];
+  const reports: PlayerReport[] = players.map((p, index) => {
+    const own: Sortie[] = [];
+    const total = 18 + Math.floor(rand() * 30);
+    for (let k = 0; k < total; k++) {
+      const u = fixtureUnits[Math.floor(rand() * fixtureUnits.length)];
+      const spawnSecs = k < 6 ? 3 : Math.floor(rand() * minutes * 60);
+      const dies = rand() < 0.55;
+      own.push({
+        player: p.id,
+        unitId: u.id,
+        class: u.cls,
+        spawnSecs,
+        deathSecs: dies ? Math.min(minutes * 60, spawnSecs + Math.floor(rand() * 600)) : null,
+        cost: Math.round(u.cost * (1.1 + rand() * 0.4)),
+        refunded: u.cls === "jet" && rand() < 0.4,
+        airdropped: false,
+        transferredTo: index === 3 && k === 7 ? players[2].id : null,
+        kills: dies ? Math.floor(rand() * 3) : Math.floor(rand() * 6),
+      });
+    }
+    sorties.push(...own);
+    const valueByMinute = Array.from({ length: minutes }, () => 0);
+    const comp = new Map<UnitClass, { count: number; value: number }>();
+    const units = new Map<number, PlayerReport["units"][number]>();
+    for (const s of own) {
+      const v = s.refunded ? 0 : s.cost;
+      valueByMinute[Math.min(minutes - 1, Math.floor(s.spawnSecs / 60))] += v;
+      const c = comp.get(s.class) ?? { count: 0, value: 0 };
+      c.count++;
+      c.value += v;
+      comp.set(s.class, c);
+      const r = units.get(s.unitId) ?? {
+        unitId: s.unitId,
+        class: s.class,
+        count: 0,
+        refunded: 0,
+        dead: 0,
+        kills: 0,
+        damage: 0,
+        value: 0,
+        firstSpawnSecs: s.spawnSecs,
+      };
+      r.count++;
+      r.refunded += s.refunded ? 1 : 0;
+      r.dead += s.deathSecs != null ? 1 : 0;
+      r.kills += s.kills;
+      r.damage += s.kills * 180 + 40;
+      r.value += v;
+      r.firstSpawnSecs = Math.min(r.firstSpawnSecs ?? s.spawnSecs, s.spawnSecs);
+      units.set(s.unitId, r);
+    }
+    const deployed = valueByMinute.reduce((a, b) => a + b, 0);
+    const old = p.profile?.rating ?? null;
+    const playerWon = (p.team === "bravo") === won;
+    return {
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      oldRating: old,
+      newRating: old == null ? null : old + (playerWon ? 9 + Math.round(rand() * 8) : -(8 + Math.round(rand() * 8))),
+      deployedValue: deployed,
+      destructionScore: Math.round(deployed * (0.6 + rand() * 0.9)),
+      lossesScore: Math.round(deployed * (0.4 + rand() * 0.5)),
+      destruction: Math.floor(10 + rand() * 40),
+      losses: Math.floor(8 + rand() * 30),
+      damageDealt: Math.round(rand() * 40000),
+      damageReceived: Math.round(rand() * 30000),
+      objectives: Math.floor(rand() * 6),
+      supplyConsumed: Math.floor(rand() * 3000),
+      supplyFromAllies: Math.floor(rand() * 500),
+      supplyByAllies: Math.floor(rand() * 500),
+      supplyCaptured: Math.floor(rand() * 400),
+      supplyAirdropped: null,
+      deserter: p.id === 103,
+      sorties: own.length,
+      refunded: own.filter((s) => s.refunded).length,
+      dead: own.filter((s) => s.deathSecs != null).length,
+      transferredOut: own.filter((s) => s.transferredTo != null).length,
+      lastSpawnSecs: Math.max(...own.map((s) => s.spawnSecs)),
+      valueByMinute,
+      composition: [...comp.entries()].map(([cls, c]) => ({ class: cls, ...c })).sort((a, b) => b.value - a.value),
+      units: [...units.values()].sort((a, b) => b.value - a.value),
+    };
+  });
+  sorties.sort((a, b) => a.spawnSecs - b.spawnSecs);
+  const team = (t: "alpha" | "bravo") => {
+    const ps = reports.filter((p) => p.team === t);
+    const sum = (f: (p: PlayerReport) => number | null) => ps.reduce((a, p) => a + (f(p) ?? 0), 0);
+    const ratings = ps.map((p) => p.oldRating).filter((r): r is number => r != null);
+    return {
+      team: t,
+      players: ps.length,
+      won: (t === "bravo") === won,
+      points: t === "bravo" ? (won ? 2000 : 1340) : won ? 1410 : 2000,
+      avgRating: ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null,
+      deployedValue: sum((p) => p.deployedValue),
+      destructionScore: sum((p) => p.destructionScore),
+      lossesScore: sum((p) => p.lossesScore),
+      destruction: sum((p) => p.destruction),
+      losses: sum((p) => p.losses),
+      objectives: sum((p) => p.objectives),
+      supplyConsumed: sum((p) => p.supplyConsumed),
+      valueByMinute: Array.from({ length: minutes }, (_, i) => ps.reduce((a, p) => a + p.valueByMinute[i], 0)),
+    };
+  };
+  return {
+    analysis: {
+      matchId: id,
+      startTime: row.at + 90_000,
+      durationSecs: Math.round((row.durationMs ?? 0) / 1000),
+      mapId: 3,
+      winner: won ? "bravo" : "alpha",
+      alphaPoints: won ? 1410 : 2000,
+      bravoPoints: won ? 2000 : 1340,
+      minutes,
+      catalogComplete: true,
+      teams: [team("alpha"), team("bravo")],
+      players: reports,
+      sorties,
+      unitNames: Object.fromEntries(fixtureUnits.map((u) => [u.id, u.name])),
+    },
+    map: row.map,
+    selfId: fixtureSnapshot.selfId,
+    selfTeam: "bravo",
+    fetchedAt: now - 3_600_000,
+    catalogFetchedAt: now - 86_400_000,
+  };
 }

@@ -16,7 +16,7 @@ import {
   teamNames,
 } from "../shared/format";
 import { useNow } from "../shared/useNow";
-import { openPlayer } from "./navigation";
+import { openMatch, openPlayer } from "./navigation";
 
 const snapshot = useSnapshot();
 const now = useNow(1000);
@@ -80,6 +80,12 @@ async function refresh() {
       <button class="refresh" :disabled="refreshing" @click="refresh">刷新资料</button>
     </div>
     <p v-if="message" class="error">{{ message }}</p>
+    <p v-if="current.phase === 'ended'" class="hint">
+      <template v-if="snapshot?.archive.lastArchived === current.matchId">
+        战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">查看战后分析</a>
+      </template>
+      <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
+    </p>
 
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>

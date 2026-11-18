@@ -17,6 +17,8 @@ export default defineConfig({
   build: {
     // WebView2 基于 Chromium，可以直接用较新的语法
     target: "chrome110",
+    // 图表库只在主窗口打开战后分析时按需加载，那一块本来就大（ADR-0006）
+    chunkSizeWarningLimit: 700,
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {

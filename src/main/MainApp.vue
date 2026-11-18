@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import { useSnapshot } from "../shared/engine";
 import { errorNames } from "../shared/format";
+import HistoryPanel from "./HistoryPanel.vue";
 import MatchPanel from "./MatchPanel.vue";
 import { currentTab as tab } from "./navigation";
 import PlayersPanel from "./PlayersPanel.vue";
@@ -34,16 +35,19 @@ const apiLine = computed(() => {
     <nav>
       <div class="brand">BAX</div>
       <button :class="{ active: tab === 'match' }" @click="tab = 'match'">当前对局</button>
+      <button :class="{ active: tab === 'history' }" @click="tab = 'history'">比赛记录</button>
       <button :class="{ active: tab === 'players' }" @click="tab = 'players'">玩家</button>
       <button :class="{ active: tab === 'reminders' }" @click="tab = 'reminders'">提醒与计时</button>
       <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
       <div class="status">
         <div :class="{ error: snapshot?.log.error }">{{ logLine }}</div>
         <div v-if="apiLine">{{ apiLine }}</div>
+        <div v-if="snapshot?.archive.pending">{{ snapshot.archive.pending }} 场在等战报</div>
       </div>
     </nav>
     <main>
       <MatchPanel v-if="tab === 'match'" />
+      <HistoryPanel v-else-if="tab === 'history'" />
       <PlayersPanel v-else-if="tab === 'players'" />
       <RemindersPanel v-else-if="tab === 'reminders'" />
       <SettingsPanel v-else />

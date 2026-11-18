@@ -2,6 +2,7 @@ import type { ErrorKind } from "./bindings/ErrorKind";
 import type { FetchState } from "./bindings/FetchState";
 import type { Phase } from "./bindings/Phase";
 import type { Team } from "./bindings/Team";
+import type { UnitClass } from "./bindings/UnitClass";
 
 /** 毫秒 → m:ss，负数带负号。 */
 export function mmss(ms: number): string {
@@ -81,4 +82,50 @@ export function ago(at: number | null | undefined, now: number): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`;
   return `${Math.floor(seconds / 86400)} 天前`;
+}
+
+export const unitClassNames: Record<UnitClass, string> = {
+  recon: "侦察",
+  infantry: "步兵",
+  tank: "坦克",
+  ifv: "步战与反坦克车",
+  transport: "运输车",
+  supply: "补给",
+  airDefense: "防空",
+  artillery: "火炮",
+  helicopter: "直升机",
+  jet: "固定翼",
+  other: "其他",
+};
+
+/**
+ * 兵种构成图的分组与配色。八个色位按固定顺序取用（dataviz 参考色板的暗色档，
+ * 已对 #161b22 底色验证相邻对），运输、补给与其他并作灰色。
+ */
+export const compositionGroups: { key: string; name: string; color: string; classes: UnitClass[] }[] = [
+  { key: "tank", name: "坦克", color: "#3987e5", classes: ["tank"] },
+  { key: "ifv", name: "步战与反坦克车", color: "#d95926", classes: ["ifv"] },
+  { key: "infantry", name: "步兵", color: "#199e70", classes: ["infantry"] },
+  { key: "recon", name: "侦察", color: "#c98500", classes: ["recon"] },
+  { key: "artillery", name: "火炮", color: "#d55181", classes: ["artillery"] },
+  { key: "airDefense", name: "防空", color: "#0ca30c", classes: ["airDefense"] },
+  { key: "helicopter", name: "直升机", color: "#9085e9", classes: ["helicopter"] },
+  { key: "jet", name: "固定翼", color: "#e66767", classes: ["jet"] },
+  { key: "logistics", name: "运输、补给与其他", color: "#5b636d", classes: ["transport", "supply", "other"] },
+];
+
+/**
+ * 出兵时间线（散点）的分组。散点里任意两组都可能相邻，参考色板只有前三个色位能两两区分，
+ * 所以只分三组加灰色，并用形状作第二种编码。
+ */
+export const sortieGroups: { key: string; name: string; color: string; symbol: string; classes: UnitClass[] }[] = [
+  { key: "ground", name: "地面作战", color: "#3987e5", symbol: "circle", classes: ["tank", "ifv", "infantry", "recon"] },
+  { key: "support", name: "火炮与防空", color: "#d95926", symbol: "triangle", classes: ["artillery", "airDefense"] },
+  { key: "air", name: "空中", color: "#199e70", symbol: "diamond", classes: ["helicopter", "jet"] },
+  { key: "logistics", name: "运输、补给与其他", color: "#8b949e", symbol: "rect", classes: ["transport", "supply", "other"] },
+];
+
+/** 整数加千位分隔；缺失为 –。 */
+export function count(value: number | null | undefined): string {
+  return value == null ? "–" : Math.round(value).toLocaleString("en-US");
 }
