@@ -6,6 +6,7 @@
 mod api;
 mod diag;
 mod logs;
+mod pregame;
 mod run;
 
 use std::path::PathBuf;
@@ -73,6 +74,16 @@ enum DiagCommand {
 enum LogsCommand {
     /// 显示自动找到的日志目录和全部候选位置
     Find,
+    /// 核查等待室线索与完整名单的覆盖率，不访问接口
+    Pregame {
+        /// 要核查的日志；省略时使用最新日志
+        file: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// 核查目录里的全部日志
+        #[arg(long, conflicts_with = "file")]
+        all: bool,
+    },
     /// 回放日志，检查解析与对局识别的结果
     Replay {
         /// 要回放的日志文件；省略时回放目录里最新的一份
@@ -157,6 +168,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Logs { command } => match command {
             LogsCommand::Find => logs::find(),
+            LogsCommand::Pregame { file, dir, all } => pregame::run(file, dir, all),
             LogsCommand::Replay {
                 file,
                 dir,

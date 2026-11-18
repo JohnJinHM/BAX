@@ -95,6 +95,7 @@ npx vite                          # 然后打开下面的地址
 | `bax logs replay [文件] [--events]` | 回放一份日志（默认最新的一份），列出每场比赛的识别结果 |
 | `bax logs replay --all [--tsv]` | 回放目录里全部日志，输出汇总；`--tsv` 每场比赛一行，用于和战报核对 |
 | `bax logs watch` | 实时打印日志事件与对局状态变化 |
+| `bax logs pregame [文件] [--all]` | 对照加载前玩家线索、跟踪器接收结果与正式名单，定位缺人来自日志还是状态合并 |
 | `bax logs import [--recent N]` | 把历史日志里的比赛导入长期库，用于统计以前同场的次数 |
 | `bax run [--json]` | 无界面运行引擎，打印每次状态变化（Ctrl+C 结束） |
 | `bax api player <ID>` / `match <ID>` / `units` | 访问 BATrace，`--raw` 输出响应原文 |

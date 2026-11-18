@@ -25,7 +25,10 @@ enum Mode {
     /// 当前记录与对局无关，跳过它的后续行。
     Skip,
     /// 正在收集名单。
-    PlayerList(Vec<RosterEntry>),
+    PlayerList {
+        players: Vec<RosterEntry>,
+        published: usize,
+    },
     /// 游戏启动信息，其中一行是版本号。
     StartupInfo,
 }
@@ -59,7 +62,7 @@ impl LogParser {
 
     /// 是否有一条多行记录还没收完。
     pub fn has_pending(&self) -> bool {
-        matches!(&self.mode, Mode::PlayerList(players) if !players.is_empty())
+        matches!(&self.mode, Mode::PlayerList { players, published } if players.len() > *published)
     }
 
     /// 接收一行（不含换行符），把解析出的事件追加到 `out`。
@@ -77,7 +80,7 @@ impl LogParser {
         match &mut self.mode {
             Mode::Skip => {}
             Mode::Header => self.mode = self.on_header(at, line, out),
-            Mode::PlayerList(players) => match parse_roster_line(line) {
+            Mode::PlayerList { players, .. } => match parse_roster_line(line) {
                 Some(RosterLine::Player(entry)) => players.push(entry),
                 // AI 玩家不进名单，但名单还没有结束
                 Some(RosterLine::Ai) => {}
@@ -101,10 +104,28 @@ impl LogParser {
         }
     }
 
-    /// 结束尚未收完的多行记录。读到文件末尾、或一段时间没有新内容时调用。
+    /// 发布目前收集到的名单，但保留记录，后续行到达时仍可补齐。
+    pub fn publish_pending(&mut self, out: &mut Vec<TimedEvent>) {
+        if let Mode::PlayerList { players, published } = &mut self.mode
+            && players.len() > *published
+            && let Some(at) = self.time
+        {
+            emit(
+                out,
+                at,
+                LogEvent::PlayerList {
+                    players: players.clone(),
+                },
+            );
+            *published = players.len();
+        }
+    }
+
+    /// 结束多行记录。遇到记录边界、换文件或离线回放结束时调用。
     pub fn flush(&mut self, out: &mut Vec<TimedEvent>) {
-        if let Mode::PlayerList(players) = std::mem::replace(&mut self.mode, Mode::Skip)
-            && !players.is_empty()
+        if let Mode::PlayerList { players, published } =
+            std::mem::replace(&mut self.mode, Mode::Skip)
+            && players.len() > published
             && let Some(at) = self.time
         {
             emit(out, at, LogEvent::PlayerList { players });
@@ -117,7 +138,10 @@ impl LogParser {
             return Mode::Skip;
         };
         if message.starts_with("Player list:") {
-            return Mode::PlayerList(Vec::with_capacity(10));
+            return Mode::PlayerList {
+                players: Vec::with_capacity(10),
+                published: 0,
+            };
         }
         if message.starts_with("BrokenArrow startup info:") {
             return Mode::StartupInfo;

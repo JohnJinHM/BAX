@@ -226,6 +226,9 @@ async fn diagnostics_keep_names_out_and_ids_in_their_fields() {
         "识别出本机玩家",
         "请求玩家资料",
         "本场资料请求汇总",
+        "房间玩家线索处理",
+        "reason=accepted",
+        "等待室线索覆盖情况",
         "比赛结束",
     ] {
         assert!(

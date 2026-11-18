@@ -349,6 +349,7 @@ pub fn watch(dir: Option<PathBuf>) -> Result<()> {
                     let at = event.at.to_utc(LogZone::System);
                     let updates = tracker.apply(at, &event.event);
                     if origin == Origin::Live {
+                        print!("[{}] ", event.at);
                         print_live(&event.event, &updates, &tracker);
                     }
                 }

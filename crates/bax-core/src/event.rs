@@ -102,8 +102,8 @@ pub enum LogEvent {
         cause: Option<ExitCause>,
         status: Option<RoomStatus>,
     },
-    /// 房间里出现了一名客户端（`Room: (WaitingRoom|…), Client: (名字|ID)`）。
-    /// 在等待室里它早于完整名单，可以用来提前查询玩家资料。
+    /// 房间客户端线索（`Room: (WaitingRoom|…), Client: (名字|ID)`）。
+    /// 当前版本由离开回调写出，只能预取资料，不能据此判断玩家加入或名单完整。
     RoomClient {
         room: RoomKind,
         player: PlayerId,

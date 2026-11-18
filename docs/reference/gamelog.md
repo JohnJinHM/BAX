@@ -36,7 +36,7 @@ Log: [NET_ROOM] WaitingRoom entered, fight id: 9000001
 | `[NET_ROOM] Network lifecycle \| Stage=Game \| Action=Exited \| Cause=… \| … \| Status=…` | 离开房间，带原因和状态 | 断线、结束 |
 | `[NET_ROOM] WaitingRoom entered, fight id: N`、`GameRoom entered, fight id: N` | 进入房间，不带状态 | 与上一行重复；旧版日志只有这一种 |
 | `[NET_ROOM] WaitingRoom exited`、`GameRoom exited` | 离开房间，不带原因 | 同上 |
-| `Room: (WaitingRoom\|房间号), Client: (名字\|ID)` | 等待室里出现一名玩家 | 名单之前提前查询 |
+| `Room: (WaitingRoom\|房间号), Client: (名字\|ID)` | 房间玩家身份线索（当前版本来自离开回调） | 名单之前预取，不代表加入或完整名单 |
 | `Start loading battle... map: 地图, scenario: - 场景` | 开始加载战场 | 地图与场景 |
 | `FID:比赛ID 版本 - 名字 (UTC 时间)` | 本机在这场比赛里的名字 | 识别本机玩家（最可靠） |
 | `Player list:` 后续行 `ID: N, Name: 名字, Team: 队伍` | 完整名单 | 队伍、名字 |
@@ -69,7 +69,7 @@ Log: [NET_ROOM] WaitingRoom entered, fight id: 9000001
 
 正常开局：
 
-1. 进入等待室（`Status=WaitClients`），陆续出现 `Room: … Client: …`
+1. 进入等待室（`Status=WaitClients`），可能出现零到多条 `Room: … Client: …` 身份线索
 2. 开始加载战场 → `FID:` 行
 3. 离开等待室（`ServerExitInstance`）→ 进入对局房间（`WaitClients`）→ 名单
 4. 场景加载完成：准备阶段开始
@@ -90,7 +90,9 @@ Log: [NET_ROOM] WaitingRoom entered, fight id: 9000001
 - 队伍：`Alpha`、`Bravo`、`Spectators`（观战，样本中 413 人次）。
 - 名字可以为空（样本中 16 人次），可以包含逗号、空格和 emoji。名字以 ID 为准，空名字用接口资料补全。
 - AI 玩家的 ID 是负数，例如 `ID: -12, Name: Bot 4, Team: Alpha`（样本中 43 份日志、230 行），出现在遭遇战和合作模式里，与真人混排。AI 的 ID 每场重新编号，BAX 不把它们放进名单。
-- 名单以空行结束。实时读取时如果一轮读取没有新内容，不再等结尾的空行。
+- 名单以空行或下一条记录结束。实时读取时一轮没有新内容会先发布已收到的部分，但继续接收后续行并补齐累计名单。
+
+等待室线索不能覆盖全员。当前版本的输出调用点、历史覆盖统计和核查命令见[选图阶段验证](../validation/pregame-roster.md)。
 
 ## 本机玩家
 

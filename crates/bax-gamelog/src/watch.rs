@@ -114,7 +114,7 @@ impl LogWatcher {
         // 名单以空行结束。补读到文件末尾、或者这一轮没有任何新内容时，
         // 不再等那个空行，把已经读到的名单交出去
         if (read == 0 || !self.backfill_done) && self.parser.has_pending() {
-            self.parser.flush(&mut self.scratch);
+            self.parser.publish_pending(&mut self.scratch);
             drain(&mut self.scratch, origin, sink);
         }
         if !self.backfill_done {
@@ -274,6 +274,40 @@ mod tests {
         assert_eq!(got.len(), 1);
         assert!(matches!(got[0].1, LogEvent::PlayerList { players } if players.len() == 2));
         assert_eq!(got[0].0, Origin::Live);
+    }
+
+    #[test]
+    fn player_list_continues_after_idle_publication_and_backfill() {
+        for during_backfill in [false, true] {
+            let dir = tempfile::tempdir().expect("临时目录");
+            let path = dir.path().join("Gamelog__2026_11_16__18_51.log");
+            append(&path, ENTERED);
+            let mut w = watcher(dir.path());
+            if !during_backfill {
+                poll(&mut w);
+            }
+            append(
+                &path,
+                "[2026-11-16 18:53:01.979]\nLog: Player list:\nID: 1, Name: Aster, Team: Alpha\n",
+            );
+            let first = poll(&mut w);
+            let partial = if during_backfill { first } else { poll(&mut w) };
+            assert!(events(&partial).iter().any(
+                |(_, event)| matches!(event, LogEvent::PlayerList { players } if players.len() == 1)
+            ));
+            assert!(events(&poll(&mut w)).is_empty(), "空闲期间不重复发布");
+            append(&path, "ID: 2, Name: Birch, Team: Bravo\n\n");
+            let complete = poll(&mut w);
+            assert!(
+                matches!(events(&complete)[0].1, LogEvent::PlayerList { players } if players.len() == 2)
+            );
+            assert_eq!(events(&complete)[0].0, Origin::Live);
+            append(&path, LOADED);
+            assert_eq!(
+                events(&poll(&mut w)),
+                vec![(Origin::Live, &LogEvent::ScenarioLoaded)]
+            );
+        }
     }
 
     #[test]

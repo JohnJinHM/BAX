@@ -533,6 +533,39 @@ impl Session {
                 let at = event.at.to_utc(self.config.log_zone);
                 self.cause = Some((kind, event.at));
                 let mut updates = self.tracker.apply(at, &event.event);
+                if let LogEvent::RoomClient { room, player, .. } = &event.event {
+                    let current = self.tracker.current();
+                    let accepted = updates.iter().any(|u| {
+                        matches!(u,
+                        Update::EarlyPlayers { players, .. } if players.contains(player))
+                    });
+                    let reason = if accepted {
+                        "accepted"
+                    } else if *room != bax_core::RoomKind::WaitingRoom {
+                        "not_waiting_room"
+                    } else if let Some(m) = current {
+                        if m.phase > Phase::Loading {
+                            "phase"
+                        } else if m.connection != bax_core::Connection::Connected {
+                            "connection"
+                        } else if !m.roster.is_empty() {
+                            "roster_known"
+                        } else if m.early.iter().any(|p| p.id == *player) {
+                            "duplicate"
+                        } else {
+                            "ignored"
+                        }
+                    } else {
+                        "no_match"
+                    };
+                    tracing::debug!(
+                        match_id = current.map(|m| tracing::field::display(m.match_id)),
+                        player = %player, room = ?room, accepted, reason = %reason, live,
+                        log_time = %event.at,
+                        early_players = current.map(|m| m.early.len()),
+                        "房间玩家线索处理"
+                    );
+                }
                 if !live {
                     updates.extend(self.tracker.advance(at));
                 }
@@ -674,7 +707,7 @@ impl Session {
                 Update::MatchDiscovered { match_id } => self.begin_match(match_id, live),
                 Update::EarlyPlayers { match_id, players } => {
                     if self.is_current(match_id) {
-                        tracing::debug!(count = players.len(), "等待室里出现新玩家");
+                        tracing::debug!(count = players.len(), "等待室玩家线索增加");
                         for player in players {
                             self.add_early_player(player, live);
                         }
@@ -682,6 +715,20 @@ impl Session {
                 }
                 Update::RosterReady { match_id } => {
                     if self.is_current(match_id) {
+                        if let Some(m) = self.tracker.current() {
+                            let covered = m
+                                .roster
+                                .iter()
+                                .filter(|p| m.early.iter().any(|e| e.id == p.id))
+                                .count();
+                            tracing::info!(
+                                early_players = m.early.len(),
+                                roster_players = m.roster.len(),
+                                covered,
+                                missing = m.roster.len() - covered,
+                                "等待室线索覆盖情况"
+                            );
+                        }
                         self.apply_roster(live);
                         let count =
                             |team| self.slots.iter().filter(|s| s.team == Some(team)).count();

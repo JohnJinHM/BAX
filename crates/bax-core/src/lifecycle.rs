@@ -176,7 +176,7 @@ impl MatchState {
         self.clock.map(|c| now.millis_since(c.start_at))
     }
 
-    /// 已知的全部玩家 ID：有名单用名单，否则用等待室里先到的玩家。
+    /// 已知的全部玩家 ID：有名单用名单，否则用等待室日志中的玩家线索。
     pub fn known_player_ids(&self) -> Vec<PlayerId> {
         if self.roster.is_empty() {
             self.early.iter().map(|p| p.id).collect()
@@ -198,7 +198,7 @@ pub enum Update {
     MatchDiscovered { match_id: MatchId },
     /// 上一场比赛没有等到结束信号就被新比赛取代。它可能在断线期间已经结束。
     MatchSuperseded { match_id: MatchId },
-    /// 等待室里新出现的玩家。
+    /// 等待室日志里新取得的玩家线索，不代表玩家加入。
     EarlyPlayers {
         match_id: MatchId,
         players: Vec<PlayerId>,
