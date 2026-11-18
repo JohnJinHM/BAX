@@ -80,7 +80,8 @@ npm run bindings                  # Rust 一侧改了快照类型之后，重新
 ```powershell
 npx vite                          # 然后打开下面的地址
 # http://localhost:1420/dev/overlay.html           悬浮窗（加 ?locked 看锁定状态，?collapsed 看收起状态）
-# http://localhost:1420/dev/main.html?tab=reminders 主窗口，tab 可为 match、reminders、settings
+# http://localhost:1420/dev/main.html?tab=reminders 主窗口，tab 可为 match、history、players、reminders、settings
+# http://localhost:1420/dev/main.html?tab=history&match=8999927 战后分析（虚构战报）
 ```
 
 这些页面不进发布包。改了快照结构时，`npm run typecheck` 会检查虚构快照是否还对得上。
@@ -100,6 +101,7 @@ npx vite                          # 然后打开下面的地址
 | `bax run [--json]` | 无界面运行引擎，打印每次状态变化（Ctrl+C 结束） |
 | `bax api player <ID>` / `match <ID>` / `units` | 访问 BATrace，`--raw` 输出响应原文 |
 | `bax api check-cache <原型缓存>` | 用原型 `elo_cache.sqlite` 里的真实响应检查数据模型，不联网 |
+| `bax reports [--limit N]` | 最近比赛的战报获取情况：比赛结束后多久取到、试了几次、还在等的下一次时刻（验证 3）；只读，不升级长期库 |
 | `bax diag path` | 显示诊断日志目录和其中的文件 |
 | `bax diag export [--runs N] [--out 文件]` | 导出最近 N 次运行（默认 2）的诊断包，玩家 ID、比赛 ID 和用户名已替换 |
 

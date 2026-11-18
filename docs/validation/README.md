@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | 1 | Overlay 实机兼容 | 未开始 | — | [ADR-0001](../adr/0001-desktop-stack.md)；Win32 补充的范围 |
 | 2 | 计时校准与重连 | 进行中 | [02-clock-calibration.md](02-clock-calibration.md) | 对局生命周期的切换点；提醒状态的持久化 |
-| 3 | 数据更新延迟 | 未开始 | — | 战后归档的重试策略 |
+| 3 | 数据更新延迟 | 进行中 | [03-data-delay.md](03-data-delay.md) | 战后归档的重试策略 |
 | 4 | 单位与专精口径 | 进行中 | [04-units-and-specs.md](04-units-and-specs.md) | 统计口径；表结构；近期专精使用率能否纳入 |
 | 5 | 资源占用 | 未开始 | — | [ADR-0001](../adr/0001-desktop-stack.md)；前端框架与图表库；主窗口的生命周期 |
 

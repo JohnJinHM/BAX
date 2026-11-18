@@ -18,6 +18,17 @@ BAX 自身采用 MIT 许可（见 [LICENSE](LICENSE)）。BAX 中移植自原型
 | `crates/bax-batrace/src/client.rs` | `fetch_json` | 接口路径、请求头、默认不走代理、检查返回的是 JSON |
 | `crates/bax-engine/src/session.rs`、`config.rs` | `EloService`、`_warm`、`_fill_levels`，常量 `WORKERS`、`INFO_TIMEOUT` | 5 路并发、单人请求 8 秒超时、旧资料兜底、换局后丢弃旧结果、12 秒与 24 秒后重试 |
 
+## ba-dragon
+
+战后归档与战报统计参考了 [ba-dragon](https://github.com/AlexanderHYu/ba-dragon)（MIT 许可，`Copyright (c) 2026 AlexanderHYu`）的做法，没有复制代码。参考的内容：
+
+| BAX 文件 | 参考的做法 |
+|---|---|
+| `crates/bax-core/src/report.rs` | 单位成本按目录基础价格加总后，等比例缩放到玩家官方的“出兵价值 − 回收价值”；`WasRefunded` 是回收（全额退款），每条记录算一次出兵 |
+| `crates/bax-engine/src/reports.rs`、`config.rs` | 按比赛 ID 取 `/api/match`、比赛结束后按一串时间点重试；请求串行并留间隔 |
+
+ba-dragon 的玩家水平评分、称号与挂机判断属于对玩家的判定，不在 BAX 的范围内（ADR-0002），没有参考。
+
 ### 许可全文
 
 ```text
