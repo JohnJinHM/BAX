@@ -1,0 +1,237 @@
+use bax_core::{LogEvent, PlayerId, RoomKind, RoomStatus, RosterEntry, Tracker};
+
+use super::*;
+
+fn t(secs: i64) -> Timestamp {
+    Timestamp::from_secs(secs)
+}
+
+/// 记录一场比赛：本机（500，名字 Me）在 Bravo，对面一人。`battle` 为假时没打起来（没有计时基准）。
+fn record(store: &mut Store, match_id: u64, at: i64, battle: bool, ended: bool) {
+    let id = MatchId(match_id);
+    let mut tracker = Tracker::default();
+    tracker.apply(t(at), &LogEvent::Persona { name: "Me".into() });
+    tracker.apply(
+        t(at),
+        &LogEvent::RoomEntered {
+            room: RoomKind::WaitingRoom,
+            match_id: id,
+            status: Some(RoomStatus::WaitClients),
+        },
+    );
+    tracker.apply(
+        t(at + 30),
+        &LogEvent::LoadingStarted {
+            map: format!("Map{match_id}"),
+            scenario: None,
+        },
+    );
+    tracker.apply(
+        t(at + 40),
+        &LogEvent::RoomEntered {
+            room: RoomKind::GameRoom,
+            match_id: id,
+            status: Some(RoomStatus::WaitClients),
+        },
+    );
+    tracker.apply(
+        t(at + 40),
+        &LogEvent::PlayerList {
+            players: vec![
+                RosterEntry {
+                    id: PlayerId(500),
+                    name: Some("Me".into()),
+                    team: Team::Bravo,
+                },
+                RosterEntry {
+                    id: PlayerId(101),
+                    name: Some("Ash".into()),
+                    team: Team::Alpha,
+                },
+            ],
+        },
+    );
+    if battle {
+        tracker.apply(t(at + 70), &LogEvent::ScenarioLoaded);
+    }
+    if ended {
+        tracker.apply(t(at + 1330), &LogEvent::MatchEnded { match_id: id });
+    }
+    store
+        .record_match(tracker.current().expect("有比赛"))
+        .expect("记录比赛");
+}
+
+fn meta(winner: Team) -> ReportMeta {
+    ReportMeta {
+        start_time: Some(t(1130)),
+        duration_secs: Some(1200),
+        map_id: Some(7),
+        winner: Some(winner),
+    }
+}
+
+#[test]
+fn a_queued_match_waits_until_its_time() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    let id = MatchId(1);
+    assert!(store.queue_report(id, t(100), t(220)).expect("排队"));
+    assert!(
+        !store.queue_report(id, t(100), t(220)).expect("再排"),
+        "重复排队不改变已有的记录"
+    );
+    assert_eq!(store.pending_reports().expect("计数"), 1);
+    assert_eq!(store.next_report_due().expect("下一次"), Some(t(220)));
+    assert!(store.due_reports(t(219), 10).expect("未到").is_empty());
+
+    let due = store.due_reports(t(220), 10).expect("到了");
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].attempts, 0);
+    assert_eq!(due[0].queued_at, t(100));
+
+    store
+        .report_attempt_failed(id, 1, Some(t(400)), "站点没有收录这条数据", t(220))
+        .expect("记失败");
+    let queued = store.queued_report(id).expect("读").expect("在队列里");
+    assert_eq!(queued.attempts, 1);
+    assert_eq!(queued.next_at, Some(t(400)));
+    assert_eq!(queued.last_error.as_deref(), Some("站点没有收录这条数据"));
+}
+
+#[test]
+fn giving_up_leaves_the_match_out_of_the_pending_count() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    let id = MatchId(1);
+    store.queue_report(id, t(100), t(220)).expect("排队");
+    store
+        .report_attempt_failed(id, 9, None, "请求超时", t(900))
+        .expect("放弃");
+    assert_eq!(store.pending_reports().expect("计数"), 0);
+    assert_eq!(store.next_report_due().expect("下一次"), None);
+
+    // 手动请求重新开始
+    assert!(store.request_report(id, t(1000)).expect("手动"));
+    let queued = store.queued_report(id).expect("读").expect("在队列里");
+    assert_eq!(queued.attempts, 0);
+    assert_eq!(queued.next_at, Some(t(1000)));
+    assert_eq!(queued.queued_at, t(1000));
+}
+
+#[test]
+fn saving_a_report_removes_it_from_the_queue() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    let id = MatchId(1);
+    store.queue_report(id, t(100), t(220)).expect("排队");
+    store
+        .save_report(id, "{\"x\":1}", meta(Team::Alpha), t(300))
+        .expect("保存");
+    assert!(store.queued_report(id).expect("读").is_none());
+    let stored = store.report(id).expect("读").expect("有战报");
+    assert_eq!(stored.raw, "{\"x\":1}");
+    assert_eq!(stored.fetched_at, t(300));
+    assert!(
+        !store.queue_report(id, t(400), t(500)).expect("排队"),
+        "有战报就不再排队"
+    );
+    assert!(!store.request_report(id, t(400)).expect("手动"));
+
+    // 再存一次覆盖旧的
+    store
+        .save_report(id, "{\"x\":2}", meta(Team::Alpha), t(600))
+        .expect("覆盖");
+    assert_eq!(store.report(id).expect("读").expect("有").raw, "{\"x\":2}");
+}
+
+#[test]
+fn unreported_matches_only_include_finished_battles() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    record(&mut store, 1, 1000, true, true);
+    record(&mut store, 2, 3000, false, true); // 没打起来
+    record(&mut store, 3, 5000, true, false); // 没结束
+    record(&mut store, 4, 7000, true, true);
+    record(&mut store, 5, 9000, true, true);
+    store
+        .save_report(MatchId(4), "{}", meta(Team::Bravo), t(9000))
+        .expect("已有战报");
+    store
+        .queue_report(MatchId(5), t(10330), t(10450))
+        .expect("已在队列");
+
+    let found = store.unreported_matches(t(0), 10).expect("查");
+    assert_eq!(found, vec![(MatchId(1), t(2330))]);
+    assert!(
+        store
+            .unreported_matches(t(2331), 10)
+            .expect("查")
+            .is_empty(),
+        "太早结束的不算"
+    );
+}
+
+#[test]
+fn history_rows_carry_report_state_and_result() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    record(&mut store, 1, 1000, true, true);
+    record(&mut store, 2, 3000, true, true);
+    record(&mut store, 3, 5000, true, true);
+    record(&mut store, 4, 7000, true, true);
+    store
+        .save_report(MatchId(1), "{}", meta(Team::Bravo), t(2400))
+        .expect("战报");
+    store
+        .queue_report(MatchId(2), t(4330), t(4450))
+        .expect("排队");
+    store
+        .queue_report(MatchId(3), t(6330), t(6450))
+        .expect("排队");
+    store
+        .report_attempt_failed(MatchId(3), 12, None, "请求超时", t(9000))
+        .expect("放弃");
+
+    let rows = store.match_history(10, 0).expect("列表");
+    assert_eq!(
+        rows.iter().map(|r| r.match_id.get()).collect::<Vec<_>>(),
+        vec![4, 3, 2, 1]
+    );
+    let one = &rows[3];
+    assert_eq!(one.won, Some(true), "本方 Bravo，胜方 Bravo");
+    assert_eq!(one.players, 2);
+    assert_eq!(one.duration_ms, Some(1_200_000), "有战报时用战报的时长");
+    assert_eq!(one.map.as_deref(), Some("Map1"));
+    assert_eq!(
+        one.report,
+        ReportState::Ready {
+            fetched_at: t(2400)
+        }
+    );
+    assert_eq!(
+        rows[2].report,
+        ReportState::Pending {
+            attempts: 0,
+            next_at: t(4450)
+        }
+    );
+    assert_eq!(
+        rows[1].report,
+        ReportState::GaveUp {
+            attempts: 12,
+            last_error: Some("请求超时".into())
+        }
+    );
+    assert_eq!(rows[0].report, ReportState::None);
+    assert_eq!(rows[0].won, None);
+
+    let page = store.match_history(2, 2).expect("翻页");
+    assert_eq!(page[0].match_id, MatchId(2));
+}
+
+#[test]
+fn reference_data_round_trips() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    assert!(store.reference("units").expect("读").is_none());
+    store.set_reference("units", "[1]", t(10)).expect("写");
+    store.set_reference("units", "[2]", t(20)).expect("改");
+    let stored = store.reference("units").expect("读").expect("有");
+    assert_eq!(stored.raw, "[2]");
+    assert_eq!(stored.fetched_at, t(20));
+}

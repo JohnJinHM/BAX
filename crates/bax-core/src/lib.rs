@@ -7,6 +7,7 @@ pub mod event;
 pub mod ids;
 pub mod lifecycle;
 pub mod reminder;
+pub mod report;
 pub mod roster;
 pub mod time;
 

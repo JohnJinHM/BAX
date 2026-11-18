@@ -2,7 +2,7 @@
 //!
 //! 有两个互相独立的 SQLite 文件（见 ADR-0005）：
 //!
-//! - [`Store`] 是长期库，保存玩家档案、比赛、相遇记录和设置。
+//! - [`Store`] 是长期库，保存玩家档案、比赛、相遇记录、战报和设置。
 //!   它没有任何自动过期或批量删除的操作。
 //! - [`CacheStore`] 是缓存库，保存可以随时重新获取的接口响应，可以按时间清理，也可以整个删掉。
 //!
@@ -14,11 +14,13 @@ mod archive;
 mod cache;
 mod db;
 mod error;
+mod reports;
 mod store;
 
 pub use archive::{EncounterRow, Note, PlayerHit, Relation};
 pub use cache::{CacheStore, CachedEntry};
 pub use error::StoreError;
+pub use reports::{HistoryRow, QueuedReport, ReportMeta, ReportState, StoredRaw};
 pub use store::{
     EncounterSummary, MatchPlayerRow, MatchRecord, PlayerRecord, ProfileUpdate, RatingPoint, Store,
 };

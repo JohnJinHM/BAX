@@ -93,6 +93,32 @@ const MIGRATIONS: &[&str] = &[
         updated_at INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX players_by_last_seen ON players(last_seen_at);",
+    // 第 4 版：战报归档、待获取队列与参考数据（单位目录）
+    "CREATE TABLE match_reports (
+        match_id      INTEGER PRIMARY KEY,
+        raw           TEXT NOT NULL,
+        fetched_at    INTEGER NOT NULL,
+        start_time    INTEGER,
+        duration_secs INTEGER,
+        map_id        INTEGER,
+        winner        TEXT
+    ) STRICT;
+
+    CREATE TABLE report_queue (
+        match_id   INTEGER PRIMARY KEY,
+        queued_at  INTEGER NOT NULL,
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        next_at    INTEGER,
+        last_error TEXT,
+        updated_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX report_queue_by_next ON report_queue(next_at);
+
+    CREATE TABLE reference_data (
+        key        TEXT PRIMARY KEY,
+        raw        TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL
+    ) STRICT, WITHOUT ROWID;",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -817,7 +843,7 @@ pub(crate) fn id_from_db(id: i64) -> u64 {
     id as u64
 }
 
-fn team_to_db(team: Team) -> &'static str {
+pub(crate) fn team_to_db(team: Team) -> &'static str {
     match team {
         Team::Alpha => "alpha",
         Team::Bravo => "bravo",
