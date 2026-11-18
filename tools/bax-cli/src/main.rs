@@ -4,6 +4,7 @@
 //! 输出里会出现玩家名字和 ID，只应在本机查看，不要贴到公开的地方。
 
 mod api;
+mod diag;
 mod logs;
 mod run;
 
@@ -18,6 +19,9 @@ struct Cli {
     /// 数据目录；省略时使用环境变量 BAX_DATA_DIR，再省略则是 %LOCALAPPDATA%\BAX
     #[arg(long, global = true)]
     data_dir: Option<PathBuf>,
+    /// 同时把诊断日志写进数据目录下的 diag\（与桌面应用相同的格式）
+    #[arg(long, global = true)]
+    diag_file: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -42,6 +46,26 @@ enum Command {
     Api {
         #[command(subcommand)]
         command: ApiCommand,
+    },
+    /// 诊断日志：查看位置，导出脱敏后的诊断包
+    Diag {
+        #[command(subcommand)]
+        command: DiagCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DiagCommand {
+    /// 显示诊断日志目录和其中的文件
+    Path,
+    /// 导出最近几次运行的诊断包，玩家 ID、比赛 ID 和 Windows 用户名已替换
+    Export {
+        /// 导出最近几次运行
+        #[arg(long, default_value_t = 2)]
+        runs: usize,
+        /// 输出文件；省略时写到诊断目录下的 export\
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -113,14 +137,6 @@ enum ApiCommand {
 }
 
 fn main() -> Result<()> {
-    // 库里的警告写到标准错误；RUST_LOG 可以调整，例如 RUST_LOG=bax_engine=debug
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
-        .with_writer(std::io::stderr)
-        .init();
     let cli = Cli::parse();
     let data_dir = || -> Result<PathBuf> {
         cli.data_dir
@@ -128,6 +144,16 @@ fn main() -> Result<()> {
             .or_else(bax_engine::default_data_dir)
             .context("无法确定数据目录，请用 --data-dir 指定")
     };
+    // 库里的警告写到标准错误，BAX_LOG 或 RUST_LOG 可以调整，例如 bax_engine=debug。
+    // 加 --diag-file 时另外写一份诊断日志文件（ADR-0007）
+    let mut config = bax_engine::diag::DiagConfig::new("bax");
+    config.stderr = bax_engine::diag::StderrOutput::Env { default: "warn" };
+    config.panic_hook = cli.diag_file;
+    if cli.diag_file {
+        config.file_dir = Some(bax_engine::diag::diag_dir(&data_dir()?));
+    }
+    let _diag = bax_engine::diag::init(config);
+
     match cli.command {
         Command::Logs { command } => match command {
             LogsCommand::Find => logs::find(),
@@ -143,5 +169,9 @@ fn main() -> Result<()> {
         },
         Command::Run { dir, json } => run::run(data_dir()?, dir, json),
         Command::Api { command } => api::api(command),
+        Command::Diag { command } => match command {
+            DiagCommand::Path => diag::path(&data_dir()?),
+            DiagCommand::Export { runs, out } => diag::export(&data_dir()?, runs, out),
+        },
     }
 }

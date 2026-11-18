@@ -102,6 +102,16 @@ impl LogTime {
     }
 }
 
+/// 与日志里的写法相同，例如 `2026-11-16 18:52:05.319`。
+impl std::fmt::Display for LogTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.naive() {
+            Some(naive) => write!(f, "{}", naive.format("%Y-%m-%d %H:%M:%S%.3f")),
+            None => write!(f, "{}", self.naive_ms),
+        }
+    }
+}
+
 /// 把日志的本地时间换算成 UTC 时使用的时区。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LogZone {
@@ -124,6 +134,12 @@ mod tests {
             t.millis_since(midnight),
             ((18 * 60 + 52) * 60 + 5) * 1000 + 319
         );
+    }
+
+    #[test]
+    fn displays_like_the_log() {
+        let t = LogTime::parse_bracketed("[2026-11-16 18:52:05.019]").expect("应当解析成功");
+        assert_eq!(t.to_string(), "2026-11-16 18:52:05.019");
     }
 
     #[test]

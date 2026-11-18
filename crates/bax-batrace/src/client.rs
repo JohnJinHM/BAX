@@ -100,6 +100,7 @@ impl BatraceClient {
     pub async fn player_info(&self, id: PlayerId) -> Result<Fetched<PlayerInfoResponse>, ApiError> {
         let fetched: Fetched<PlayerInfoResponse> = self
             .get(
+                "players.info",
                 &format!("/api/players/info?stbid={id}"),
                 Some(self.player_info_timeout),
             )
@@ -118,6 +119,7 @@ impl BatraceClient {
         limit: u32,
     ) -> Result<Fetched<PlayerMatchesResponse>, ApiError> {
         self.get(
+            "players.matches",
             &format!("/api/players/matches?stbid={id}&offset={offset}&limit={limit}"),
             None,
         )
@@ -126,8 +128,9 @@ impl BatraceClient {
 
     /// 完整战报。比赛尚未收录、或者战报还是空壳时返回 [`ApiError::NotFound`]。
     pub async fn match_report(&self, id: MatchId) -> Result<Fetched<MatchInfo>, ApiError> {
-        let fetched: Fetched<MatchReportResponse> =
-            self.get(&format!("/api/match?matchid={id}"), None).await?;
+        let fetched: Fetched<MatchReportResponse> = self
+            .get("match", &format!("/api/match?matchid={id}"), None)
+            .await?;
         match fetched.data.match_info {
             Some(info) if !info.is_empty() => Ok(Fetched {
                 data: info,
@@ -139,16 +142,19 @@ impl BatraceClient {
 
     /// 单位目录。
     pub async fn units(&self) -> Result<Fetched<UnitsResponse>, ApiError> {
-        self.get("/api/units", None).await
+        self.get("units", "/api/units", None).await
     }
 
     /// 专精目录。响应结构尚未确认，先按原样返回。
     pub async fn specializations(&self) -> Result<Fetched<serde_json::Value>, ApiError> {
-        self.get("/api/dek/specializations", None).await
+        self.get("specializations", "/api/dek/specializations", None)
+            .await
     }
 
+    /// `endpoint` 是写进诊断日志的端点类别。路径里有玩家 ID，不进诊断日志（ADR-0007）。
     async fn get<T: DeserializeOwned>(
         &self,
+        endpoint: &'static str,
         path: &str,
         timeout: Option<Duration>,
     ) -> Result<Fetched<T>, ApiError> {
@@ -160,7 +166,7 @@ impl BatraceClient {
         let status = response.status();
         if !status.is_success() {
             let err = status_error(status, &response);
-            tracing::debug!(%status, path, "请求失败");
+            tracing::debug!(%status, endpoint = %endpoint, "请求失败");
             return Err(err);
         }
         let is_json = response

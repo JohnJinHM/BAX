@@ -15,7 +15,12 @@ export function installMock(options: { locked?: boolean } = {}) {
           overlayLocked: options.locked ?? false,
           hotkeyErrors: [],
           dataDir: "C:\\Users\\example\\AppData\\Local\\BAX",
+          diagDir: "C:\\Users\\example\\AppData\\Local\\BAX\\diag",
+          diagLockedBy: null,
+          diagError: null,
         };
+      case "export_diag":
+        return "C:\\Users\\example\\AppData\\Local\\BAX\\diag\\export\\bax-diag-20261117-203015.txt";
       default:
         // 事件订阅、窗口大小等调用一律当作成功
         return null;

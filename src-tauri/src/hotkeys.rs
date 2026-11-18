@@ -78,7 +78,10 @@ pub fn apply(app: &AppHandle, ui: &BTreeMap<String, serde_json::Value>) {
             continue;
         }
         match shortcuts.register(shortcut) {
-            Ok(()) => bound.push((shortcut, action)),
+            Ok(()) => {
+                tracing::info!(action = %name, shortcut = %text, "快捷键已注册");
+                bound.push((shortcut, action));
+            }
             // 最常见的原因是被别的程序占用了
             Err(err) => errors.push(format!(
                 "{name}：“{text}”注册失败，可能已被其他程序占用（{err}）"
@@ -86,6 +89,9 @@ pub fn apply(app: &AppHandle, ui: &BTreeMap<String, serde_json::Value>) {
         }
     }
 
+    for error in &errors {
+        tracing::warn!(reason = %error, "快捷键不可用");
+    }
     if let Ok(mut state) = app.state::<HotkeyState>().bound.lock() {
         *state = bound;
     }
@@ -110,8 +116,8 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
                 .map(|(_, action)| *action)
         });
     match action {
-        Some(Action::ToggleOverlay) => overlay::toggle_visible(app),
-        Some(Action::ToggleLock) => overlay::toggle_locked(app),
+        Some(Action::ToggleOverlay) => overlay::toggle_visible(app, "快捷键"),
+        Some(Action::ToggleLock) => overlay::toggle_locked(app, "快捷键"),
         None => {}
     }
 }

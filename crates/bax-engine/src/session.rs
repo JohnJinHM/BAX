@@ -17,15 +17,16 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bax_batrace::model::PlayerInfoResponse;
 use bax_batrace::{ApiError, BatraceClient, Fetched};
 use bax_core::reminder::{self, ReminderOutcome, ReminderRule};
 use bax_core::{
-    BattleClock, ClockSource, MatchId, Phase, PlayerId, Team, Timestamp, Tracker, Update,
+    BattleClock, ClockSource, Connection, LogEvent, MatchId, Phase, PlayerId, Team, Timestamp,
+    Tracker, Update,
 };
-use bax_gamelog::{Origin, WatchItem};
+use bax_gamelog::{LogTime, Origin, WatchItem};
 use bax_store::{EncounterSummary, PlayerRecord, ProfileUpdate, Store};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::MissedTickBehavior;
@@ -51,6 +52,8 @@ pub(crate) const UI_PREFIX: &str = "ui.";
 const UI_VALUE_LIMIT: usize = 64 * 1024;
 
 pub(crate) const LOG_CHANNEL_CAPACITY: usize = 256;
+/// 详细档位下，多久写一行运行摘要。
+const SUMMARY_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// 界面发给会话的命令。
 #[derive(Debug)]
@@ -86,7 +89,26 @@ struct FetchResult {
     /// 发起请求时的比赛代次。比赛换了之后到达的结果不再更新界面。
     generation: u64,
     at: Timestamp,
+    elapsed_ms: u64,
     result: Result<Fetched<PlayerInfoResponse>, ApiError>,
+}
+
+/// 上一次记录诊断日志时的比赛状态，用来发现变化。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Seen {
+    match_id: MatchId,
+    phase: Phase,
+    connection: Connection,
+    clock: Option<BattleClock>,
+}
+
+/// 一场比赛里资料请求的统计，比赛结束或被取代时写一行汇总。
+#[derive(Debug, Default)]
+struct FetchStats {
+    requests: u32,
+    ok: u32,
+    failures: BTreeMap<String, u32>,
+    total_ms: u64,
 }
 
 /// 当前比赛里的一名玩家。
@@ -155,6 +177,17 @@ pub(crate) struct Session {
     outcomes: Vec<(u32, ReminderOutcome, Timestamp)>,
     alert: Option<AlertView>,
     ui: BTreeMap<String, serde_json::Value>,
+
+    // 诊断日志（ADR-0007）
+    /// 当前比赛的 span。比赛相关的记录都在它里面，按 match_id 可以过滤出一场。
+    match_span: tracing::Span,
+    seen: Option<Seen>,
+    /// 正在处理的游戏日志事件，记阶段变化的起因。
+    cause: Option<(&'static str, LogTime)>,
+    fetch_stats: FetchStats,
+    backfill_events: u64,
+    log_started: Instant,
+    last_summary: Instant,
 }
 
 impl Session {
@@ -200,6 +233,13 @@ impl Session {
             outcomes: Vec::new(),
             alert: None,
             ui,
+            match_span: tracing::Span::none(),
+            seen: None,
+            cause: None,
+            fetch_stats: FetchStats::default(),
+            backfill_events: 0,
+            log_started: Instant::now(),
+            last_summary: Instant::now(),
         };
         session.start_log_thread(log_dir);
         session
@@ -208,23 +248,39 @@ impl Session {
     pub(crate) async fn run(mut self, mut commands: mpsc::Receiver<Command>) {
         let mut tick = tokio::time::interval(self.config.tick_interval);
         tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        tracing::info!(
+            rules = self.rules.len(),
+            self_known = self.self_hint.is_some(),
+            "对局会话启动"
+        );
         self.publish();
         loop {
-            tokio::select! {
+            let input = tokio::select! {
                 command = commands.recv() => match command {
-                    Some(command) => self.on_command(command),
+                    Some(command) => Input::Command(command),
                     // 引擎句柄被丢弃
                     None => break,
                 },
-                Some(msg) = self.log_rx.recv() => self.on_log(msg),
-                Some(result) = self.fetch_rx.recv() => self.on_fetched(result),
-                _ = tick.tick() => self.on_tick(),
+                Some(msg) = self.log_rx.recv() => Input::Log(msg),
+                Some(result) = self.fetch_rx.recv() => Input::Fetched(Box::new(result)),
+                _ = tick.tick() => Input::Tick,
+            };
+            // 处理过程中的诊断记录都挂在当前比赛的 span 下
+            let span = self.match_span.clone();
+            let _entered = span.enter();
+            match input {
+                Input::Command(command) => self.on_command(command),
+                Input::Log(msg) => self.on_log(msg),
+                Input::Fetched(result) => self.on_fetched(*result),
+                Input::Tick => self.on_tick(),
             }
             self.dispatch();
             if self.dirty && self.log.ready {
                 self.publish();
             }
         }
+        self.log_fetch_summary();
+        tracing::info!("对局会话结束");
         if let Some(handle) = self.log_thread.as_mut().and_then(LogThread::stop) {
             let _ = tokio::task::spawn_blocking(move || handle.join()).await;
         }
@@ -257,6 +313,10 @@ impl Session {
                 if let Err(err) = saved {
                     tracing::warn!(error = %err, "保存日志目录设置失败");
                 }
+                match &dir {
+                    Some(dir) => tracing::info!(dir = %dir.display(), "切换游戏日志目录"),
+                    None => tracing::info!("游戏日志目录改回自动定位"),
+                }
                 self.reset_match_state();
                 self.start_log_thread(dir);
                 self.publish();
@@ -280,6 +340,7 @@ impl Session {
             .set_setting(REMINDERS_KEY, &rules)
             .map_err(|err| err.to_string())?;
         self.rules = rules;
+        tracing::info!(rules = self.rules.len(), "提醒规则已更新");
         self.dirty = true;
         // 不等日志就绪：设置界面需要立刻看到结果
         self.publish();
@@ -294,10 +355,17 @@ impl Session {
             return Err("比赛已经结束".to_owned());
         }
         let match_id = m.match_id;
+        let previous = m.clock;
         let clock = BattleClock {
             start_at: self.clock.now().plus_millis(-elapsed_ms),
             source: ClockSource::Manual,
         };
+        tracing::info!(
+            elapsed_ms,
+            previous_source = previous.map(|c| tracing::field::debug(c.source)),
+            shift_ms = previous.map(|c| clock.start_at.millis_since(c.start_at)),
+            "手动校准计时"
+        );
         self.tracker.set_clock(match_id, clock);
         self.store
             .set_match_clock(match_id, clock)
@@ -320,6 +388,7 @@ impl Session {
         if self.ui.get(&key) == Some(&value) {
             return Ok(());
         }
+        tracing::debug!(key = %key, "保存界面设置");
         let saved = if value.is_null() {
             self.store.remove_setting(&key).map(|_| ())
         } else {
@@ -357,6 +426,14 @@ impl Session {
             |id| outcomes.iter().any(|(rule, _, _)| *rule == id),
         );
         for (rule_id, outcome) in due {
+            let rule = self.rules.iter().find(|r| r.id == rule_id);
+            tracing::info!(
+                rule_id,
+                outcome = ?outcome,
+                at_secs = rule.map(|r| r.at_secs),
+                late_ms = rule.map(|r| now.millis_since(reminder::fire_at(r, clock))),
+                "提醒结果"
+            );
             if let Err(err) = self.store.record_reminder(match_id, rule_id, outcome, now) {
                 tracing::warn!(error = %err, "保存提醒结果失败");
             }
@@ -411,7 +488,13 @@ impl Session {
 
     fn on_watch_item(&mut self, item: WatchItem) {
         match item {
-            WatchItem::FileOpened { path, .. } => {
+            WatchItem::FileOpened { path, origin } => {
+                tracing::info!(
+                    file = %path.display(),
+                    bytes = std::fs::metadata(&path).map(|m| m.len()).ok(),
+                    backfill = origin == Origin::Backfill,
+                    "开始读取游戏日志文件"
+                );
                 self.log.file = Some(path.to_string_lossy().into_owned());
                 self.dirty = true;
             }
@@ -419,6 +502,11 @@ impl Session {
                 tracing::warn!(file = %path.display(), "日志文件被截断，从头重读");
             }
             WatchItem::BackfillDone => {
+                tracing::info!(
+                    events = self.backfill_events,
+                    elapsed_ms = self.log_started.elapsed().as_millis() as u64,
+                    "补读完成，转入实时"
+                );
                 self.log.ready = true;
                 let now = self.clock.now();
                 let updates = self.tracker.advance(now);
@@ -435,12 +523,21 @@ impl Session {
             }
             WatchItem::Event { origin, event } => {
                 let live = origin == Origin::Live;
+                let kind = event_kind(&event.event);
+                if live {
+                    tracing::debug!(event = %kind, log_time = %event.at, "游戏日志事件");
+                } else {
+                    self.backfill_events += 1;
+                    tracing::trace!(event = %kind, log_time = %event.at, "补读的游戏日志事件");
+                }
                 let at = event.at.to_utc(self.config.log_zone);
+                self.cause = Some((kind, event.at));
                 let mut updates = self.tracker.apply(at, &event.event);
                 if !live {
                     updates.extend(self.tracker.advance(at));
                 }
                 self.handle_updates(updates, live);
+                self.cause = None;
             }
         }
     }
@@ -469,7 +566,19 @@ impl Session {
         }
         if self.paused_until.is_some_and(|until| until <= now) {
             self.paused_until = None;
+            tracing::info!("限流暂停结束，恢复请求");
             self.dirty = true;
+        }
+        if self.last_summary.elapsed() >= SUMMARY_INTERVAL {
+            self.last_summary = Instant::now();
+            tracing::debug!(
+                file = %self.log.file.as_deref().unwrap_or("-"),
+                players = self.slots.len(),
+                queued = self.queue.len(),
+                in_flight = self.in_flight,
+                revision = self.revision,
+                "运行摘要"
+            );
         }
     }
 
@@ -480,11 +589,22 @@ impl Session {
             player,
             generation,
             at,
+            elapsed_ms,
             result,
         } = result;
         let current = generation == self.generation;
+        if current {
+            self.fetch_stats.requests += 1;
+            self.fetch_stats.total_ms += elapsed_ms;
+        } else {
+            tracing::debug!(player = %player, "比赛已经切换，资料只入库，不更新界面");
+        }
         match result {
             Ok(fetched) => {
+                tracing::debug!(player = %player, elapsed_ms, "玩家资料已获取");
+                if current {
+                    self.fetch_stats.ok += 1;
+                }
                 self.last_error = None;
                 // 比赛已经换了也照样保存：这份资料本身是有效的
                 if let Err(err) = self
@@ -507,9 +627,14 @@ impl Session {
                 }
             }
             Err(err) => {
-                tracing::debug!(error = %err, "获取玩家资料失败");
+                let kind = format!("{:?}", err.kind());
+                tracing::debug!(player = %player, elapsed_ms, kind = %kind, error = %err, "获取玩家资料失败");
+                if current {
+                    *self.fetch_stats.failures.entry(kind).or_default() += 1;
+                }
                 if let ApiError::RateLimited { retry_after } = &err {
                     let pause = retry_after.unwrap_or(self.config.rate_limit_pause);
+                    tracing::warn!(pause_ms = millis(pause), "被限流，暂停全部请求");
                     self.paused_until = Some(at.plus_millis(millis(pause)));
                 }
                 self.last_error = Some(ApiErrorView {
@@ -542,10 +667,14 @@ impl Session {
             return;
         }
         for update in updates {
+            // 发现新比赛之后，同一批里余下的记录挂在新比赛的 span 下
+            let span = self.match_span.clone();
+            let _entered = span.enter();
             match update {
-                Update::MatchDiscovered { match_id } => self.begin_match(match_id),
+                Update::MatchDiscovered { match_id } => self.begin_match(match_id, live),
                 Update::EarlyPlayers { match_id, players } => {
                     if self.is_current(match_id) {
+                        tracing::debug!(count = players.len(), "等待室里出现新玩家");
                         for player in players {
                             self.add_early_player(player, live);
                         }
@@ -554,18 +683,106 @@ impl Session {
                 Update::RosterReady { match_id } => {
                     if self.is_current(match_id) {
                         self.apply_roster(live);
+                        let count =
+                            |team| self.slots.iter().filter(|s| s.team == Some(team)).count();
+                        tracing::info!(
+                            players = self.slots.len(),
+                            alpha = count(Team::Alpha),
+                            bravo = count(Team::Bravo),
+                            "名单已知"
+                        );
                     }
                 }
-                Update::MatchSuperseded { .. }
-                | Update::ClockSet { .. }
-                | Update::MatchEnded { .. }
-                | Update::Disconnected { .. }
-                | Update::Changed { .. } => {}
+                Update::MatchSuperseded { match_id } => {
+                    tracing::info!(
+                        match_id = %match_id,
+                        "上一场比赛没有等到结束信号就被新比赛取代"
+                    );
+                }
+                Update::ClockSet { clock, .. } => {
+                    let previous = self.seen.and_then(|s| s.clock);
+                    tracing::info!(
+                        source = ?clock.source,
+                        start = %local_time(clock.start_at),
+                        previous_source = previous.map(|c| tracing::field::debug(c.source)),
+                        shift_ms = previous.map(|c| clock.start_at.millis_since(c.start_at)),
+                        live,
+                        "计时基准已设定"
+                    );
+                }
+                Update::MatchEnded { .. } => {
+                    let cause = self.tracker.current().and_then(|m| m.end_cause);
+                    tracing::info!(cause = cause.map(tracing::field::debug), live, "比赛结束");
+                    self.log_fetch_summary();
+                }
+                Update::Disconnected { cause, .. } => {
+                    tracing::info!(cause = ?cause, live, "与房间断开");
+                }
+                Update::Changed { .. } => {}
             }
         }
+        let span = self.match_span.clone();
+        let _entered = span.enter();
         self.learn_self();
         self.record_current();
+        self.note_changes(live);
         self.dirty = true;
+    }
+
+    /// 把阶段与连接的变化写进诊断日志，并记下这次看到的状态。
+    fn note_changes(&mut self, live: bool) {
+        let Some(m) = self.tracker.current() else {
+            return;
+        };
+        let now = Seen {
+            match_id: m.match_id,
+            phase: m.phase,
+            connection: m.connection,
+            clock: m.clock,
+        };
+        let before = self.seen.filter(|s| s.match_id == now.match_id);
+        let (event, log_time) = match self.cause {
+            Some((kind, at)) => (kind, Some(at)),
+            None => ("计时", None),
+        };
+        if before.is_none_or(|b| b.phase != now.phase) {
+            tracing::info!(
+                from = before.map(|b| tracing::field::debug(b.phase)),
+                to = ?now.phase,
+                event = %event,
+                log_time = log_time.map(tracing::field::display),
+                live,
+                "比赛阶段变化"
+            );
+        }
+        if let Some(before) = before
+            && before.connection != now.connection
+        {
+            tracing::info!(
+                from = ?before.connection,
+                to = ?now.connection,
+                event = %event,
+                log_time = log_time.map(tracing::field::display),
+                live,
+                "连接状态变化"
+            );
+        }
+        self.seen = Some(now);
+    }
+
+    /// 写一行本场请求的汇总，然后清零。没有请求时不写。
+    fn log_fetch_summary(&mut self) {
+        let stats = std::mem::take(&mut self.fetch_stats);
+        if stats.requests == 0 {
+            return;
+        }
+        tracing::info!(
+            requests = stats.requests,
+            ok = stats.ok,
+            failures = ?stats.failures,
+            avg_ms = stats.total_ms / u64::from(stats.requests),
+            "本场资料请求汇总"
+        );
     }
 
     fn is_current(&self, match_id: MatchId) -> bool {
@@ -574,7 +791,15 @@ impl Session {
             .is_some_and(|m| m.match_id == match_id)
     }
 
-    fn begin_match(&mut self, match_id: MatchId) {
+    fn begin_match(&mut self, match_id: MatchId, live: bool) {
+        self.log_fetch_summary();
+        // 不挂在上一场比赛的 span 下面
+        self.match_span = tracing::info_span!(parent: None, "match", match_id = %match_id);
+        if let Some(m) = self.tracker.current().filter(|m| m.match_id == match_id) {
+            let (rejoined, phase) = (m.rejoined, m.phase);
+            self.match_span
+                .in_scope(|| tracing::info!(phase = ?phase, rejoined, live, "发现新比赛"));
+        }
         self.generation += 1;
         self.slots.clear();
         self.queue.clear();
@@ -595,6 +820,9 @@ impl Session {
             match self.store.match_record(match_id) {
                 Ok(Some(record)) => {
                     if let Some(clock) = record.clock {
+                        self.match_span.in_scope(|| {
+                            tracing::info!(source = ?clock.source, "从长期库恢复计时基准");
+                        });
                         self.tracker.set_clock(match_id, clock);
                     }
                 }
@@ -683,6 +911,7 @@ impl Session {
             return;
         }
         self.self_hint = Some(found);
+        tracing::info!(self_player = %found, "识别出本机玩家");
         self.tracker.set_self_hint(Some(found));
         if let Err(err) = self.store.set_setting(SELF_ID_KEY, &found) {
             tracing::warn!(error = %err, "保存本机玩家 ID 失败");
@@ -698,6 +927,9 @@ impl Session {
     }
 
     fn reset_match_state(&mut self) {
+        self.log_fetch_summary();
+        self.match_span = tracing::Span::none();
+        self.seen = None;
         let mut tracker = Tracker::new(self.config.tracker.clone());
         tracker.set_self_hint(self.self_hint);
         self.tracker = tracker;
@@ -715,6 +947,8 @@ impl Session {
         let (tx, rx) = mpsc::channel(LOG_CHANNEL_CAPACITY);
         self.log_rx = rx;
         self.log = LogStatus::default();
+        self.backfill_events = 0;
+        self.log_started = Instant::now();
         let timing = LogTiming {
             poll: self.config.log_poll_interval,
             discovery: self.config.log_discovery_interval,
@@ -782,17 +1016,20 @@ impl Session {
             slot.fetch = FetchState::Fetching;
             self.in_flight += 1;
             self.dirty = true;
+            tracing::debug!(player = %id, queued = self.queue.len(), "请求玩家资料");
 
             let client = self.client.clone();
             let tx = self.fetch_tx.clone();
             let clock = Arc::clone(&self.clock);
             let generation = self.generation;
             tokio::spawn(async move {
+                let started = Instant::now();
                 let result = client.player_info(id).await;
                 let _ = tx.send(FetchResult {
                     player: id,
                     generation,
                     at: clock.now(),
+                    elapsed_ms: started.elapsed().as_millis() as u64,
                     result,
                 });
             });
@@ -803,6 +1040,7 @@ impl Session {
 
     fn publish(&mut self) {
         self.revision += 1;
+        tracing::trace!(revision = self.revision, "发布快照");
         let snapshot = self.build_snapshot();
         self.snapshot_tx.send_replace(Arc::new(snapshot));
         self.dirty = false;
@@ -910,6 +1148,44 @@ fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> Profil
         rank: info.and_then(|i| i.rank),
         rating_games: info.and_then(|i| i.rating_games),
         raw_json: fetched.raw.clone(),
+    }
+}
+
+/// 会话循环一次处理的输入。
+enum Input {
+    Command(Command),
+    Log(LogMsg),
+    // 资料结果比其他输入大得多，装箱避免每次循环都搬动整块内存
+    Fetched(Box<FetchResult>),
+    Tick,
+}
+
+/// 事件类型的名字。诊断日志只记类型，不记内容：内容里有玩家名字和卡组名。
+fn event_kind(event: &LogEvent) -> &'static str {
+    match event {
+        LogEvent::GameVersion { .. } => "GameVersion",
+        LogEvent::Persona { .. } => "Persona",
+        LogEvent::DeckSelected { .. } => "DeckSelected",
+        LogEvent::ReconnectStarted => "ReconnectStarted",
+        LogEvent::RoomEntered { .. } => "RoomEntered",
+        LogEvent::RoomExited { .. } => "RoomExited",
+        LogEvent::RoomClient { .. } => "RoomClient",
+        LogEvent::LoadingStarted { .. } => "LoadingStarted",
+        LogEvent::FightInfo { .. } => "FightInfo",
+        LogEvent::PlayerList { .. } => "PlayerList",
+        LogEvent::ScenarioLoaded => "ScenarioLoaded",
+        LogEvent::MatchEnded { .. } => "MatchEnded",
+    }
+}
+
+/// 把时刻写成本地时间，与诊断日志的时间戳一致。
+fn local_time(at: Timestamp) -> String {
+    use chrono::TimeZone;
+    match chrono::Local.timestamp_millis_opt(at.0) {
+        chrono::LocalResult::Single(t) | chrono::LocalResult::Ambiguous(t, _) => {
+            t.format("%H:%M:%S%.3f").to_string()
+        }
+        chrono::LocalResult::None => at.0.to_string(),
     }
 }
 

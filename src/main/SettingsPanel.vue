@@ -2,7 +2,7 @@
 import { ref, watch } from "vue";
 
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
-import { saveSetting, useSetting } from "../shared/settings";
+import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
@@ -54,6 +54,21 @@ const saveHotkeys = () =>
       toggleLock: toggleLockKey.value.trim(),
     }),
   );
+
+// ---------------------------------------------------------------- 诊断
+
+const diag = useSetting(snapshot, "ui.diag");
+const setDiagLevel = (level: DiagSettings["level"]) =>
+  run(() => saveSetting(diag.value, "ui.diag", { level }));
+
+async function exportDiag() {
+  try {
+    const path = await commands.exportDiag();
+    message.value = { ok: true, text: `诊断包已导出：${path}` };
+  } catch (error) {
+    message.value = { ok: false, text: errorText(error) };
+  }
+}
 </script>
 
 <template>
@@ -145,6 +160,49 @@ const saveHotkeys = () =>
     <p class="hint">长期数据保存在 {{ status?.dataDir ?? "…" }}</p>
   </section>
 
+  <section class="card">
+    <h2>诊断</h2>
+    <p class="hint">
+      BAX 把运行过程记在诊断日志里，出问题时用来排查。日志里有玩家 ID，需要发给别人时请用“导出诊断包”：
+      导出时玩家 ID、比赛 ID 和 Windows 用户名会被替换，不包含玩家名字。
+    </p>
+    <div class="grid">
+      <label>位置</label>
+      <div class="row">
+        <span class="path">{{ status?.diagDir || "未写入" }}</span>
+        <button :disabled="!status?.diagDir" @click="run(() => commands.openDiagDir(), '已打开')">打开目录</button>
+      </div>
+      <label>详细程度</label>
+      <div class="row">
+        <label class="check">
+          <input
+            type="radio"
+            name="diag-level"
+            :checked="diag.level === 'standard'"
+            :disabled="!!status?.diagLockedBy"
+            @change="setDiagLevel('standard')"
+          />
+          标准
+        </label>
+        <label class="check">
+          <input
+            type="radio"
+            name="diag-level"
+            :checked="diag.level === 'verbose'"
+            :disabled="!!status?.diagLockedBy"
+            @change="setDiagLevel('verbose')"
+          />
+          详细（复现问题时打开）
+        </label>
+      </div>
+    </div>
+    <p v-if="status?.diagLockedBy" class="hint">当前档位由{{ status.diagLockedBy }}决定。</p>
+    <p v-if="status?.diagError" class="error">{{ status.diagError }}</p>
+    <div class="row actions">
+      <button class="primary" :disabled="!status?.diagDir" @click="exportDiag">导出诊断包</button>
+    </div>
+  </section>
+
   <p v-if="message" class="toast" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</p>
 </template>
 
@@ -183,5 +241,11 @@ const saveHotkeys = () =>
 
 .toast {
   margin-top: 16px;
+}
+
+.path {
+  font-family: var(--bax-mono);
+  font-size: 12px;
+  word-break: break-all;
 }
 </style>

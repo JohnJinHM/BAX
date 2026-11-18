@@ -4,7 +4,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-use crate::app::{AppState, show_main_window};
+use crate::app::{AppState, reveal_in_explorer, show_main_window};
 use crate::overlay;
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
@@ -13,8 +13,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let lock = MenuItem::with_id(app, "lock", "锁定 / 解锁悬浮窗", true, None::<&str>)?;
     let refresh = MenuItem::with_id(app, "refresh", "刷新玩家资料", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
+    let diag = MenuItem::with_id(app, "diag", "打开诊断日志目录", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出 BAX", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&main, &toggle, &lock, &refresh, &separator, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&main, &toggle, &lock, &refresh, &separator, &diag, &quit],
+    )?;
 
     let mut builder = TrayIconBuilder::with_id("bax")
         .tooltip("BAX")
@@ -22,15 +26,26 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "main" => show_main_window(app),
-            "toggle" => overlay::toggle_visible(app),
-            "lock" => overlay::toggle_locked(app),
+            "toggle" => overlay::toggle_visible(app, "托盘"),
+            "lock" => overlay::toggle_locked(app, "托盘"),
             "refresh" => {
+                tracing::info!(via = %"托盘", "刷新玩家资料");
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = app.state::<AppState>().engine.refresh_players().await;
                 });
             }
-            "quit" => app.exit(0),
+            "diag" => {
+                if let Some(dir) = app.state::<AppState>().diag.dir()
+                    && let Err(err) = reveal_in_explorer(dir, false)
+                {
+                    tracing::warn!(error = %err, "无法打开诊断日志目录");
+                }
+            }
+            "quit" => {
+                tracing::info!("从托盘退出");
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

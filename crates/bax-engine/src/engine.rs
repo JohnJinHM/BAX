@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use bax_batrace::{ApiError, BatraceClient};
 use bax_core::PlayerId;
@@ -46,20 +47,28 @@ pub struct Engine {
 impl Engine {
     /// 打开长期库并启动引擎。必须在 tokio 运行时里调用。
     pub fn start(config: EngineConfig, clock: Arc<dyn Clock>) -> Result<Engine, EngineError> {
-        let store = Store::open(&config.store_path)?;
+        let started = Instant::now();
+        let store = Store::open(&config.store_path).inspect_err(|err| {
+            tracing::error!(store = %config.store_path.display(), error = %err, "无法打开长期库");
+        })?;
         let client = BatraceClient::new(config.api.clone())?;
 
-        let log_dir = config.log_dir.clone().or_else(|| {
-            store
-                .setting::<String>(LOG_DIR_KEY)
-                .ok()
-                .flatten()
-                .map(PathBuf::from)
-        });
+        let saved_dir = store
+            .setting::<String>(LOG_DIR_KEY)
+            .ok()
+            .flatten()
+            .map(PathBuf::from);
+        let log_dir_source = match (&config.log_dir, &saved_dir) {
+            (Some(_), _) => "启动参数",
+            (None, Some(_)) => "设置",
+            (None, None) => "自动定位",
+        };
+        let log_dir = config.log_dir.clone().or(saved_dir);
         let self_hint = remembered_self(&store);
         let rules = saved_rules(&store);
         let ui = saved_ui_settings(&store);
 
+        let config_store = config.store_path.clone();
         let (snapshot_tx, snapshots) = watch::channel(Arc::new(Snapshot::initial()));
         let (commands, command_rx) = mpsc::channel(16);
         let session = Session::new(Parts {
@@ -74,6 +83,12 @@ impl Engine {
             snapshot_tx,
         });
         let task = tokio::spawn(session.run(command_rx));
+        tracing::info!(
+            store = %config_store.display(),
+            log_dir_source = %log_dir_source,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "引擎启动"
+        );
         Ok(Engine {
             commands,
             snapshots,

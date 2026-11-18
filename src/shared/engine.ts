@@ -18,6 +18,12 @@ export interface AppStatus {
   /** 注册失败的快捷键及原因 */
   hotkeyErrors: string[];
   dataDir: string;
+  /** 诊断日志目录；不写诊断日志时为空 */
+  diagDir: string;
+  /** 诊断档位被什么锁定（环境变量或启动参数）；没有锁定时为 null */
+  diagLockedBy: string | null;
+  /** 诊断日志写不了时的原因 */
+  diagError: string | null;
 }
 
 const snapshot = shallowRef<Snapshot | null>(null);
@@ -70,6 +76,12 @@ export const commands = {
   setOverlayLocked: (locked: boolean) => invoke<void>("set_overlay_locked", { locked }),
   setOverlayVisible: (visible: boolean) => invoke<void>("set_overlay_visible", { visible }),
   openMainWindow: () => invoke<void>("open_main_window"),
+  openDiagDir: () => invoke<void>("open_diag_dir"),
+  /** 导出诊断包，返回文件路径。 */
+  exportDiag: () => invoke<string>("export_diag"),
+  /** 前端错误交给 Rust 写进诊断日志（ADR-0007）。 */
+  reportUiError: (kind: string, message: string, stack: string | null) =>
+    invoke<void>("report_ui_error", { kind, message, stack }),
 };
 
 /** 把命令的失败原因转成一句话。 */

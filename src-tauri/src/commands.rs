@@ -1,15 +1,27 @@
 //! 前端可以调用的命令。参数名在前端写作 camelCase（Tauri 默认转换）。
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use bax_core::ReminderRule;
-use bax_engine::Snapshot;
-use tauri::{AppHandle, State};
+use bax_engine::diag::{self, ExportOptions};
+use bax_engine::{CommandError, Snapshot};
+use tauri::{AppHandle, State, Window};
 
-use crate::app::{AppState, AppStatus, show_main_window};
+use crate::app::{AppState, AppStatus, reveal_in_explorer, show_main_window};
 use crate::overlay;
 
 type CommandResult = Result<(), String>;
+
+/// 命令被拒绝或失败时记一条诊断日志，再把原因交给前端。
+fn rejected(command: &'static str) -> impl FnOnce(CommandError) -> String {
+    move |err| {
+        tracing::info!(command = %command, reason = %err, "命令没有执行");
+        err.to_string()
+    }
+}
 
 #[tauri::command]
 pub fn get_snapshot(state: State<'_, AppState>) -> Snapshot {
@@ -23,11 +35,12 @@ pub fn get_app_status(state: State<'_, AppState>) -> AppStatus {
 
 #[tauri::command]
 pub async fn refresh_players(state: State<'_, AppState>) -> CommandResult {
+    tracing::info!(via = %"界面", "刷新玩家资料");
     state
         .engine
         .refresh_players()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(rejected("refresh_players"))
 }
 
 /// `dir` 为空表示改回自动定位。
@@ -41,7 +54,7 @@ pub async fn set_log_dir(state: State<'_, AppState>, dir: Option<String>) -> Com
         .engine
         .set_log_dir(dir)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(rejected("set_log_dir"))
 }
 
 #[tauri::command]
@@ -50,7 +63,7 @@ pub async fn set_reminders(state: State<'_, AppState>, rules: Vec<ReminderRule>)
         .engine
         .set_reminders(rules)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(rejected("set_reminders"))
 }
 
 /// `elapsed_ms`：此刻处于正式开局后多少毫秒，准备阶段里为负数。
@@ -60,7 +73,7 @@ pub async fn calibrate(state: State<'_, AppState>, elapsed_ms: i64) -> CommandRe
         .engine
         .calibrate(elapsed_ms)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(rejected("calibrate"))
 }
 
 #[tauri::command]
@@ -77,17 +90,17 @@ pub async fn set_ui_setting(
         .engine
         .set_ui_setting(key, value)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(rejected("set_ui_setting"))
 }
 
 #[tauri::command]
 pub fn set_overlay_locked(app: AppHandle, locked: bool) -> CommandResult {
-    overlay::set_locked(&app, locked).map_err(|e| e.to_string())
+    overlay::set_locked(&app, locked, "界面").map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn set_overlay_visible(app: AppHandle, visible: bool) {
-    overlay::set_visible(&app, visible);
+    overlay::set_visible(&app, visible, "界面");
 }
 
 /// 窗口要在异步命令里创建：同步命令跑在主线程上，在那里建窗口会卡住事件循环。
@@ -95,4 +108,112 @@ pub fn set_overlay_visible(app: AppHandle, visible: bool) {
 pub async fn open_main_window(app: AppHandle) -> CommandResult {
     show_main_window(&app);
     Ok(())
+}
+
+// ---------------------------------------------------------------- 诊断（ADR-0007）
+
+/// 每个窗口每分钟最多记录的前端错误条数。
+const UI_ERRORS_PER_MINUTE: u32 = 20;
+const MESSAGE_LIMIT: usize = 2_000;
+const STACK_LIMIT: usize = 4_000;
+
+/// 前端错误的限流：按窗口计数，每分钟清零。
+#[derive(Debug, Default)]
+pub struct UiErrorLimiter {
+    windows: Mutex<HashMap<String, Budget>>,
+}
+
+#[derive(Debug)]
+struct Budget {
+    since: Instant,
+    count: u32,
+    suppressed: u32,
+}
+
+impl UiErrorLimiter {
+    /// 这一条是否记录；返回值的第二项是上一分钟里因限流没有记录的条数。
+    fn admit(&self, window: &str) -> (bool, u32) {
+        let Ok(mut windows) = self.windows.lock() else {
+            return (false, 0);
+        };
+        let entry = windows.entry(window.to_owned()).or_insert(Budget {
+            since: Instant::now(),
+            count: 0,
+            suppressed: 0,
+        });
+        let mut carried = 0;
+        if entry.since.elapsed() >= Duration::from_secs(60) {
+            carried = std::mem::take(&mut entry.suppressed);
+            entry.since = Instant::now();
+            entry.count = 0;
+        }
+        if entry.count < UI_ERRORS_PER_MINUTE {
+            entry.count += 1;
+            (true, carried)
+        } else {
+            entry.suppressed += 1;
+            (false, carried)
+        }
+    }
+}
+
+fn truncate(text: &str, limit: usize) -> &str {
+    match text.char_indices().nth(limit) {
+        Some((at, _)) => &text[..at],
+        None => text,
+    }
+}
+
+/// 前端未捕获的异常、未处理的 Promise 拒绝和 Vue 渲染错误。前端不写文件，交给这里记录。
+#[tauri::command]
+pub fn report_ui_error(
+    window: Window,
+    limiter: State<'_, UiErrorLimiter>,
+    kind: String,
+    message: String,
+    stack: Option<String>,
+) {
+    let label = window.label().to_owned();
+    let (admitted, suppressed) = limiter.admit(&label);
+    if suppressed > 0 {
+        tracing::warn!(target: "bax_ui", window = %label, suppressed, "前端错误过多，上一分钟有部分没有记录");
+    }
+    if !admitted {
+        return;
+    }
+    let kind = truncate(&kind, 32);
+    let message = truncate(&message, MESSAGE_LIMIT);
+    match stack.as_deref().map(|s| truncate(s, STACK_LIMIT)) {
+        Some(stack) => {
+            tracing::warn!(target: "bax_ui", window = %label, kind = %kind, stack = %stack, "前端错误：{message}")
+        }
+        None => {
+            tracing::warn!(target: "bax_ui", window = %label, kind = %kind, "前端错误：{message}")
+        }
+    }
+}
+
+#[tauri::command]
+pub fn open_diag_dir(state: State<'_, AppState>) -> CommandResult {
+    let dir = state.diag.dir().ok_or("没有写诊断日志")?;
+    reveal_in_explorer(dir, false).map_err(|e| format!("无法打开资源管理器：{e}"))
+}
+
+/// 导出最近两次运行的诊断包，在资源管理器里选中它，返回文件路径。
+#[tauri::command]
+pub async fn export_diag(state: State<'_, AppState>) -> Result<String, String> {
+    let Some(dir) = state.diag.dir().map(PathBuf::from) else {
+        return Err("没有写诊断日志".to_owned());
+    };
+    tracing::info!("导出诊断包");
+    state.diag.flush();
+    let exported =
+        tauri::async_runtime::spawn_blocking(move || diag::export(&dir, &ExportOptions::default()))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("导出失败：{e}"))?;
+    if let Err(err) = reveal_in_explorer(&exported.path, true) {
+        tracing::warn!(error = %err, "无法在资源管理器里显示诊断包");
+    }
+    Ok(exported.path.display().to_string())
 }

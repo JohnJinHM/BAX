@@ -3,6 +3,9 @@ import "./overlay.css";
 
 import { createApp } from "vue";
 
+import { reportErrors } from "../shared/diagnostics";
 import OverlayApp from "./OverlayApp.vue";
 
-createApp(OverlayApp).mount("#app");
+const app = createApp(OverlayApp);
+reportErrors(app);
+app.mount("#app");

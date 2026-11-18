@@ -1,7 +1,10 @@
 //! 应用的组装：启动引擎、创建窗口与托盘、转发快照。
 
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use bax_engine::diag::{self, DiagConfig, DiagHandle, DiagLevel, DiagSettings, StderrOutput};
 use bax_engine::{Engine, EngineConfig, Snapshot, SystemClock, default_data_dir};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
@@ -24,11 +27,18 @@ pub struct AppStatus {
     /// 注册失败的快捷键及原因。
     pub hotkey_errors: Vec<String>,
     pub data_dir: String,
+    /// 诊断日志目录；不写诊断日志时为空。
+    pub diag_dir: String,
+    /// 诊断档位被什么锁定（环境变量或启动参数）；没有锁定时为 `None`。
+    pub diag_locked_by: Option<String>,
+    /// 诊断日志写不了时的原因。
+    pub diag_error: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct AppState {
     pub engine: Engine,
+    pub diag: Arc<DiagHandle>,
     status: Mutex<AppStatus>,
 }
 
@@ -54,13 +64,19 @@ impl AppState {
 }
 
 pub fn run() {
-    init_tracing();
     // --hidden：启动时不显示悬浮窗，只有托盘图标（开机自启或调试时用）
     let start_hidden = std::env::args().any(|arg| arg == "--hidden");
+    // --verbose：本次运行使用详细诊断档位，不受设置影响
+    let verbose = std::env::args().any(|arg| arg == "--verbose");
+    let data_dir = default_data_dir();
+    let diag = Arc::new(init_diag(data_dir.as_deref(), verbose, start_hidden));
+    tracing::info!(hidden = start_hidden, verbose, "BAX 启动");
 
+    let setup_diag = Arc::clone(&diag);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 已经在运行时再次启动：打开主窗口
+            tracing::info!("再次启动，打开主窗口");
             show_main_window(app);
         }))
         .plugin(
@@ -79,9 +95,12 @@ pub fn run() {
             commands::set_overlay_locked,
             commands::set_overlay_visible,
             commands::open_main_window,
+            commands::report_ui_error,
+            commands::open_diag_dir,
+            commands::export_diag,
         ])
         .setup(move |app| {
-            let data_dir = default_data_dir().ok_or("无法确定数据目录")?;
+            let data_dir = data_dir.ok_or("无法确定数据目录")?;
             let config = EngineConfig::new(&data_dir);
             // 引擎需要在异步运行时里启动；Tauri 自带的就是 tokio
             let engine = tauri::async_runtime::block_on(async {
@@ -89,14 +108,23 @@ pub fn run() {
             })?;
             let snapshots = engine.subscribe();
             let ui = engine.snapshot().ui.clone();
+            apply_diag_setting(&setup_diag, &ui);
             app.manage(AppState {
                 engine,
                 status: Mutex::new(AppStatus {
                     data_dir: data_dir.display().to_string(),
+                    diag_dir: setup_diag
+                        .dir()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or_default(),
+                    diag_locked_by: locked_by(&setup_diag, verbose),
+                    diag_error: setup_diag.file_error().map(str::to_owned),
                     ..AppStatus::default()
                 }),
+                diag: setup_diag,
             });
             app.manage(hotkeys::HotkeyState::default());
+            app.manage(commands::UiErrorLimiter::default());
 
             let handle = app.handle();
             overlay::create(handle, &ui, !start_hidden)?;
@@ -111,20 +139,78 @@ pub fn run() {
         Ok(app) => app,
         Err(err) => {
             tracing::error!(error = %err, "BAX 启动失败");
+            diag.flush();
             std::process::exit(1);
         }
     };
-    app.run(|_app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
+    app.run(move |_app, event| match event {
+        RunEvent::ExitRequested { api, code, .. } => {
             // 关掉主窗口不退出：BAX 常驻托盘，只有托盘菜单的“退出”才结束
             if code.is_none() {
                 api.prevent_exit();
             }
         }
+        RunEvent::Exit => {
+            tracing::info!("BAX 退出");
+            diag.flush();
+        }
+        _ => {}
     });
 }
 
-/// 把引擎的每份快照转发给所有窗口，并处理需要外壳动作的变化（提醒、快捷键设置）。
+/// 诊断日志写到数据目录下的 `diag\`；开发版同时写到标准错误（ADR-0007）。
+fn init_diag(data_dir: Option<&Path>, verbose: bool, hidden: bool) -> DiagHandle {
+    let mut config = DiagConfig::new("bax-app");
+    config.file_dir = data_dir.map(diag::diag_dir);
+    config.stderr = if cfg!(debug_assertions) {
+        StderrOutput::FollowLevel
+    } else {
+        StderrOutput::Off
+    };
+    if verbose {
+        config.level = DiagLevel::Verbose;
+        config.level_forced = true;
+    }
+    let webview = tauri::webview_version().unwrap_or_else(|err| format!("未知（{err}）"));
+    config.extra = vec![
+        ("WebView2".to_owned(), webview),
+        (
+            "数据目录".to_owned(),
+            data_dir.map_or_else(|| "未知".to_owned(), |d| d.display().to_string()),
+        ),
+        (
+            "启动参数".to_owned(),
+            match (hidden, verbose) {
+                (false, false) => "无".to_owned(),
+                _ => [(hidden, "--hidden"), (verbose, "--verbose")]
+                    .iter()
+                    .filter(|(on, _)| *on)
+                    .map(|(_, flag)| *flag)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            },
+        ),
+    ];
+    diag::init(config)
+}
+
+fn locked_by(diag: &DiagHandle, verbose: bool) -> Option<String> {
+    if let Some(directives) = diag.env_directives() {
+        return Some(format!("环境变量 {}={directives}", diag::ENV_VAR));
+    }
+    verbose.then(|| "启动参数 --verbose".to_owned())
+}
+
+/// 按界面设置 `ui.diag` 切换诊断档位。档位被锁定时不变。
+fn apply_diag_setting(diag: &DiagHandle, ui: &BTreeMap<String, serde_json::Value>) {
+    let settings: DiagSettings = ui
+        .get(diag::SETTINGS_KEY)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    diag.set_level(settings.level);
+}
+
+/// 把引擎的每份快照转发给所有窗口，并处理需要外壳动作的变化（提醒、快捷键与诊断设置）。
 fn forward_snapshots(app: AppHandle, mut snapshots: watch::Receiver<Arc<Snapshot>>) {
     tauri::async_runtime::spawn(async move {
         let (mut last_alert, mut last_ui) = {
@@ -140,11 +226,15 @@ fn forward_snapshots(app: AppHandle, mut snapshots: watch::Receiver<Arc<Snapshot
                 && alert.seq > last_alert
             {
                 last_alert = alert.seq;
+                tracing::info!(rule_id = alert.rule_id, "提醒触发");
                 overlay::on_alert(&app, &snapshot.ui);
             }
             if snapshot.ui != last_ui {
                 if snapshot.ui.get(hotkeys::SETTINGS_KEY) != last_ui.get(hotkeys::SETTINGS_KEY) {
                     hotkeys::apply(&app, &snapshot.ui);
+                }
+                if snapshot.ui.get(diag::SETTINGS_KEY) != last_ui.get(diag::SETTINGS_KEY) {
+                    apply_diag_setting(&app.state::<AppState>().diag, &snapshot.ui);
                 }
                 last_ui = snapshot.ui.clone();
             }
@@ -160,6 +250,7 @@ pub fn show_main_window(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
+    tracing::info!("打开主窗口");
     let built = WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::App("index.html".into()))
         .title("BAX")
         .inner_size(1120.0, 720.0)
@@ -170,12 +261,24 @@ pub fn show_main_window(app: &AppHandle) {
     }
 }
 
-fn init_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
-        )
-        .with_writer(std::io::stderr)
-        .try_init();
+/// 在资源管理器里打开目录，或者打开所在目录并选中文件。
+pub fn reveal_in_explorer(path: &Path, select: bool) -> std::io::Result<()> {
+    let mut command = std::process::Command::new("explorer.exe");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // explorer 自己解析参数，路径要整体加引号，不能交给标准库按常规规则转义
+        if select {
+            command.raw_arg(format!("/select,\"{}\"", path.display()));
+        } else {
+            command.raw_arg(format!("\"{}\"", path.display()));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = select;
+        command.arg(path);
+    }
+    // explorer 的退出码不表示成败，不等它
+    command.spawn().map(|_| ())
 }

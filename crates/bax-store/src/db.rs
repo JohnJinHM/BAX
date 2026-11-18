@@ -44,6 +44,7 @@ pub(crate) fn open(
         return Err(StoreError::SchemaTooNew { found, supported });
     }
     if found < supported {
+        tracing::info!(from = found, to = supported, "数据库结构升级");
         if backup_before_migrating
             && found > 0
             && let Some(path) = path

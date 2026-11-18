@@ -317,7 +317,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "windows-sys 0.61.2",
 ]
 
@@ -351,7 +350,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -371,13 +369,16 @@ dependencies = [
  "bax-core",
  "bax-gamelog",
  "bax-store",
+ "chrono",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "ts-rs",
+ "winreg",
  "wiremock",
 ]
 

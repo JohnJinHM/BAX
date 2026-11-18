@@ -87,6 +87,7 @@ pub fn create(
         .visible(false)
         .build()?;
 
+    let saved = matches!((settings.x, settings.y), (Some(_), Some(_)));
     let position = match (settings.x, settings.y) {
         (Some(x), Some(y)) => Some(LogicalPosition::new(x, y)),
         _ => default_position(&window),
@@ -94,6 +95,7 @@ pub fn create(
     if let Some(position) = position {
         window.set_position(position)?;
     }
+    log_placement(&window, saved);
     window.set_ignore_cursor_events(settings.locked)?;
 
     let state = OverlayState {
@@ -112,9 +114,25 @@ pub fn create(
     });
 
     if show {
-        set_visible(app, true);
+        set_visible(app, true, "启动");
     }
     Ok(())
+}
+
+/// 悬浮窗所在的显示器与缩放，诊断多显示器和缩放问题时用。
+fn log_placement(window: &WebviewWindow, saved: bool) {
+    let monitor = window.current_monitor().ok().flatten();
+    tracing::debug!(
+        saved_position = saved,
+        monitor = %monitor
+            .as_ref()
+            .and_then(|m| m.name())
+            .map(String::as_str)
+            .unwrap_or("-"),
+        scale = monitor.as_ref().map(|m| m.scale_factor()),
+        monitors = window.available_monitors().map(|m| m.len()).ok(),
+        "悬浮窗位置"
+    );
 }
 
 /// 主显示器右上角，留出一点边距。
@@ -129,10 +147,16 @@ fn default_position(window: &WebviewWindow) -> Option<LogicalPosition<f64>> {
     ))
 }
 
-pub fn set_visible(app: &AppHandle, visible: bool) {
+/// `via` 写进诊断日志，说明是谁要求的：快捷键、托盘、界面、提醒或启动。
+pub fn set_visible(app: &AppHandle, visible: bool, via: &'static str) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
+    tracing::info!(visible, via = %via, "悬浮窗显示状态");
+    // 显示前后各看一次前台程序，确认显示悬浮窗不抢游戏的焦点（验收清单的要求）
+    #[cfg(windows)]
+    let focus_before = (visible && tracing::enabled!(tracing::Level::DEBUG))
+        .then(crate::win32::foreground_process_name);
     #[cfg(windows)]
     match window.hwnd() {
         Ok(hwnd) => {
@@ -154,14 +178,34 @@ pub fn set_visible(app: &AppHandle, visible: bool) {
     }
     app.state::<AppState>()
         .update_status(app, |s| s.overlay_visible = visible);
+    #[cfg(windows)]
+    if let Some(before) = focus_before {
+        check_focus_after_show(before);
+    }
 }
 
-pub fn toggle_visible(app: &AppHandle) {
+/// 显示悬浮窗 0.3 秒后，看前台窗口是否还是显示之前的那个程序。
+#[cfg(windows)]
+fn check_focus_after_show(before: Option<String>) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        let after = crate::win32::foreground_process_name();
+        tracing::debug!(
+            before = %before.as_deref().unwrap_or("-"),
+            after = %after.as_deref().unwrap_or("-"),
+            kept = before == after,
+            "显示悬浮窗后的前台程序"
+        );
+    });
+}
+
+pub fn toggle_visible(app: &AppHandle, via: &'static str) {
     let visible = app.state::<AppState>().status().overlay_visible;
-    set_visible(app, !visible);
+    set_visible(app, !visible, via);
 }
 
-pub fn set_locked(app: &AppHandle, locked: bool) -> tauri::Result<()> {
+pub fn set_locked(app: &AppHandle, locked: bool, via: &'static str) -> tauri::Result<()> {
+    tracing::info!(locked, via = %via, "悬浮窗锁定状态");
     if let Some(window) = app.get_webview_window(LABEL) {
         window.set_ignore_cursor_events(locked)?;
     }
@@ -175,9 +219,9 @@ pub fn set_locked(app: &AppHandle, locked: bool) -> tauri::Result<()> {
     Ok(())
 }
 
-pub fn toggle_locked(app: &AppHandle) {
+pub fn toggle_locked(app: &AppHandle, via: &'static str) {
     let locked = app.state::<AppState>().status().overlay_locked;
-    if let Err(err) = set_locked(app, !locked) {
+    if let Err(err) = set_locked(app, !locked, via) {
         tracing::warn!(error = %err, "切换悬浮窗锁定失败");
     }
 }
@@ -185,8 +229,13 @@ pub fn toggle_locked(app: &AppHandle) {
 /// 有提醒按时触发：按设置响铃、把隐藏的悬浮窗显示出来。闪烁由悬浮窗页面自己处理。
 pub fn on_alert(app: &AppHandle, ui: &BTreeMap<String, serde_json::Value>) {
     let alerts: AlertSettings = read(ui, ALERTS_KEY);
+    tracing::info!(
+        sound = alerts.sound,
+        show_overlay = alerts.show_overlay,
+        "提醒响应"
+    );
     if alerts.show_overlay && !app.state::<AppState>().status().overlay_visible {
-        set_visible(app, true);
+        set_visible(app, true, "提醒");
     }
     #[cfg(windows)]
     if alerts.sound {
@@ -224,6 +273,8 @@ fn remember_position(app: &AppHandle) {
         settings.x = Some(logical.x);
         settings.y = Some(logical.y);
         save(&app, *settings);
+        drop(settings);
+        log_placement(&window, true);
     });
 }
 

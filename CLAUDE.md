@@ -33,7 +33,8 @@ npx tauri build --no-bundle              # target\release\bax-app.exe
 - `unsafe` 只允许出现在 `src-tauri/src/win32.rs`；其余成员继承 workspace 的 `unsafe_code = "forbid"`。
 - 不要在用户玩游戏时启动带窗口的桌面应用做试验；需要时用 `--hidden` 或 `dev/` 预览页。
 - 长期库没有自动过期或批量删除；清理只针对缓存库（ADR-0005）。
-- 原始日志和接口响应含他人玩家 ID 与名称，只放 `.local/`。测试代码、`fixtures/` 和文档里只用虚构的名字、ID、卡组名和比赛编号。
+- 原始日志和接口响应含他人玩家 ID 与名称，只放 `.local/`。
+- 诊断日志（`tracing` 埋点）里玩家 ID 只放 `player`/`self_player` 字段、比赛 ID 只放 `match_id` 字段，不写名称、卡组名、URL 和游戏日志原文（ADR-0007）。测试代码、`fixtures/` 和文档里只用虚构的名字、ID、卡组名和比赛编号。
 - 自动测试不访问网络、不读本机游戏日志；用真实数据的检查走 `bax` 命令行，结论写进 `docs/validation/`。
 - 文档正文用中文，文件名用小写英文加连字符。改变模块边界或技术选型时先写 ADR。
 - 提交信息用 Conventional Commits 格式，摘要用中文。

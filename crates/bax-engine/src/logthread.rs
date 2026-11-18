@@ -74,14 +74,27 @@ impl Drop for LogThread {
 
 fn run(dir: Option<PathBuf>, timing: LogTiming, tx: &mpsc::Sender<LogMsg>, stop: &AtomicBool) {
     let dir = match dir {
-        Some(dir) => dir,
+        Some(dir) => {
+            tracing::info!(dir = %dir.display(), "使用指定的游戏日志目录");
+            dir
+        }
         None => {
             if tx.blocking_send(LogMsg::Searching).is_err() {
                 return;
             }
+            tracing::info!("自动定位游戏日志目录");
+            let mut attempts = 0u32;
             loop {
+                attempts += 1;
                 if let Some(found) = discovery::find_log_dir() {
+                    tracing::info!(dir = %found.display(), attempts, "找到游戏日志目录");
                     break found;
+                }
+                if attempts == 1 {
+                    tracing::info!(
+                        candidates = discovery::candidate_log_dirs().len(),
+                        "没有找到游戏日志目录，稍后重试"
+                    );
                 }
                 if !sleep_unless_stopped(timing.discovery, stop) {
                     return;
@@ -102,11 +115,11 @@ fn run(dir: Option<PathBuf>, timing: LogTiming, tx: &mpsc::Sender<LogMsg>, stop:
     while !stop.load(Ordering::SeqCst) {
         let result = watcher.poll(&mut |item| items.push(item));
         // 恢复的消息要先于这一轮读到的内容：界面不应该在“已就绪”之后还显示旧的错误
-        if result.is_ok()
-            && last_error.take().is_some()
-            && tx.blocking_send(LogMsg::Recovered).is_err()
-        {
-            return;
+        if result.is_ok() && last_error.take().is_some() {
+            tracing::info!(dir = %dir.display(), "游戏日志读取恢复正常");
+            if tx.blocking_send(LogMsg::Recovered).is_err() {
+                return;
+            }
         }
         for item in items.drain(..) {
             if tx.blocking_send(LogMsg::Item(item)).is_err() {

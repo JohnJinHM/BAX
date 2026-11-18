@@ -22,6 +22,7 @@
 
 mod clock;
 mod config;
+pub mod diag;
 mod engine;
 pub mod history;
 mod logthread;
