@@ -99,6 +99,32 @@ fn a_queued_match_waits_until_its_time() {
 }
 
 #[test]
+fn the_archive_remembers_when_the_report_was_still_missing() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    let id = MatchId(1);
+    store.queue_report(id, t(100), t(220)).expect("排队");
+    store
+        .report_attempt_failed(id, 2, Some(t(700)), "站点没有收录这条数据", t(400))
+        .expect("记失败");
+    store
+        .save_report(id, "{}", meta(Team::Alpha), t(700))
+        .expect("保存");
+    let timing = store.report_timing(id).expect("读").expect("有");
+    assert_eq!(timing.queued_at, Some(t(100)));
+    assert_eq!(timing.attempts, 2);
+    assert_eq!(timing.last_miss_at, Some(t(400)));
+    assert_eq!(timing.fetched_at, t(700));
+
+    // 不经过队列再存一次（例如手动重取）：时间记录保留
+    store
+        .save_report(id, "{}", meta(Team::Alpha), t(900))
+        .expect("覆盖");
+    let timing = store.report_timing(id).expect("读").expect("有");
+    assert_eq!(timing.last_miss_at, Some(t(400)));
+    assert_eq!(timing.fetched_at, t(900));
+}
+
+#[test]
 fn giving_up_leaves_the_match_out_of_the_pending_count() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let id = MatchId(1);
@@ -126,6 +152,10 @@ fn saving_a_report_removes_it_from_the_queue() {
         .save_report(id, "{\"x\":1}", meta(Team::Alpha), t(300))
         .expect("保存");
     assert!(store.queued_report(id).expect("读").is_none());
+    let timing = store.report_timing(id).expect("读").expect("有");
+    assert_eq!(timing.queued_at, Some(t(100)));
+    assert_eq!(timing.attempts, 0);
+    assert_eq!(timing.last_miss_at, None);
     let stored = store.report(id).expect("读").expect("有战报");
     assert_eq!(stored.raw, "{\"x\":1}");
     assert_eq!(stored.fetched_at, t(300));

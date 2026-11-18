@@ -7,6 +7,7 @@ mod api;
 mod diag;
 mod logs;
 mod pregame;
+mod reports;
 mod run;
 
 use std::path::PathBuf;
@@ -47,6 +48,12 @@ enum Command {
     Api {
         #[command(subcommand)]
         command: ApiCommand,
+    },
+    /// 最近比赛的战报获取情况：比赛结束后多久取到（验证 3）。只读，不升级长期库
+    Reports {
+        /// 列出多少场
+        #[arg(long, default_value_t = 30)]
+        limit: u32,
     },
     /// 诊断日志：查看位置，导出脱敏后的诊断包
     Diag {
@@ -181,6 +188,7 @@ fn main() -> Result<()> {
         },
         Command::Run { dir, json } => run::run(data_dir()?, dir, json),
         Command::Api { command } => api::api(command),
+        Command::Reports { limit } => reports::list(&data_dir()?, limit),
         Command::Diag { command } => match command {
             DiagCommand::Path => diag::path(&data_dir()?),
             DiagCommand::Export { runs, out } => diag::export(&data_dir()?, runs, out),

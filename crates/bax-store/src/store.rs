@@ -101,7 +101,10 @@ const MIGRATIONS: &[&str] = &[
         start_time    INTEGER,
         duration_secs INTEGER,
         map_id        INTEGER,
-        winner        TEXT
+        winner        TEXT,
+        queued_at     INTEGER,
+        attempts      INTEGER,
+        last_miss_at  INTEGER
     ) STRICT;
 
     CREATE TABLE report_queue (

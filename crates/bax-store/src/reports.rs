@@ -26,6 +26,18 @@ pub struct ReportMeta {
     pub winner: Option<Team>,
 }
 
+/// 一份战报是什么时候取到的。用于验证 3：战报在 `last_miss_at` 之后、`fetched_at` 之前出现。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReportTiming {
+    pub fetched_at: Timestamp,
+    /// 开始等待的时刻（通常是比赛结束）；没经过队列直接取到的为 `None`。
+    pub queued_at: Option<Timestamp>,
+    /// 取到之前失败了几次。
+    pub attempts: u32,
+    /// 最后一次没取到的时刻。
+    pub last_miss_at: Option<Timestamp>,
+}
+
 /// 待获取队列里的一场比赛。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueuedReport {
@@ -94,13 +106,35 @@ impl Store {
         at: Timestamp,
     ) -> Result<()> {
         let tx = self.conn.transaction()?;
+        // 队列里记着等了多久、失败过几次，一并留下（验证 3 要用）
+        let queued: Option<(i64, u32, i64)> = tx
+            .query_row(
+                "SELECT queued_at, attempts, updated_at FROM report_queue WHERE match_id = ?1",
+                [id_to_db(id.get())],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let (queued_at, attempts, last_miss_at) = match queued {
+            Some((queued_at, attempts, updated_at)) => (
+                Some(queued_at),
+                attempts,
+                (attempts > 0).then_some(updated_at),
+            ),
+            None => (None, 0, None),
+        };
         tx.execute(
-            "INSERT INTO match_reports(match_id, raw, fetched_at, start_time, duration_secs, map_id, winner)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO match_reports(match_id, raw, fetched_at, start_time, duration_secs, map_id,
+                                       winner, queued_at, attempts, last_miss_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(match_id) DO UPDATE SET
                  raw = excluded.raw, fetched_at = excluded.fetched_at,
                  start_time = excluded.start_time, duration_secs = excluded.duration_secs,
-                 map_id = excluded.map_id, winner = excluded.winner",
+                 map_id = excluded.map_id, winner = excluded.winner,
+                 queued_at = COALESCE(excluded.queued_at, match_reports.queued_at),
+                 attempts = CASE WHEN excluded.queued_at IS NULL THEN match_reports.attempts
+                                 ELSE excluded.attempts END,
+                 last_miss_at = CASE WHEN excluded.queued_at IS NULL THEN match_reports.last_miss_at
+                                     ELSE excluded.last_miss_at END",
             params![
                 id_to_db(id.get()),
                 raw,
@@ -109,6 +143,9 @@ impl Store {
                 meta.duration_secs,
                 meta.map_id,
                 meta.winner.map(team_to_db),
+                queued_at,
+                attempts,
+                last_miss_at,
             ],
         )?;
         tx.execute(
@@ -130,6 +167,26 @@ impl Store {
                     Ok(StoredRaw {
                         raw: row.get(0)?,
                         fetched_at: Timestamp::from_millis(row.get(1)?),
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// 一份战报是什么时候取到的。
+    pub fn report_timing(&self, id: MatchId) -> Result<Option<ReportTiming>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT fetched_at, queued_at, attempts, last_miss_at FROM match_reports
+                 WHERE match_id = ?1",
+                [id_to_db(id.get())],
+                |row| {
+                    Ok(ReportTiming {
+                        fetched_at: Timestamp::from_millis(row.get(0)?),
+                        queued_at: row.get::<_, Option<i64>>(1)?.map(Timestamp::from_millis),
+                        attempts: row.get::<_, Option<u32>>(2)?.unwrap_or(0),
+                        last_miss_at: row.get::<_, Option<i64>>(3)?.map(Timestamp::from_millis),
                     })
                 },
             )
