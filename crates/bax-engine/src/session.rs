@@ -435,6 +435,8 @@ impl Session {
         self.store
             .set_note(id, body, now)
             .map_err(|e| e.to_string())?;
+        // 备注正文是使用者写的，可能含名字，诊断日志只记字数（ADR-0007）
+        tracing::info!(player = %id, chars = body.chars().count(), "保存备注");
         let note = self.store.note(id).ok().flatten().map(|n| n.body);
         if let Some(slot) = self.slot_mut(id) {
             slot.note = note;
