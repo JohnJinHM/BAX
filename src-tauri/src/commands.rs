@@ -98,6 +98,12 @@ pub fn set_overlay_locked(app: AppHandle, locked: bool) -> CommandResult {
     overlay::set_locked(&app, locked, "界面").map_err(|e| e.to_string())
 }
 
+/// 悬浮窗报告锁按钮的位置（物理像素，相对窗口左上角），锁定后鼠标在这里时仍可点击。
+#[tauri::command]
+pub fn set_overlay_hotspot(app: AppHandle, hotspot: Option<overlay::Hotspot>) {
+    overlay::set_hotspot(&app, hotspot);
+}
+
 #[tauri::command]
 pub fn set_overlay_visible(app: AppHandle, visible: bool) {
     overlay::set_visible(&app, visible, "界面");

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { PlayerView } from "../shared/bindings/PlayerView";
 import type { Team } from "../shared/bindings/Team";
@@ -52,9 +53,15 @@ const activeAlert = computed(() => {
 
 // ---------------------------------------------------------------- 队伍
 
+/** 知道本机在哪一队时按敌我区分，否则按 Alpha/Bravo。决定颜色。 */
+type Tone = "mine" | "enemy" | "alpha" | "bravo";
+
 interface TeamBlock {
   team: Team;
+  tone: Tone;
   title: string;
+  /** 有 ELO 的玩家的平均分。 */
+  averageValue: number | null;
   average: string;
   rated: number;
   count: number;
@@ -70,13 +77,35 @@ const teams = computed<TeamBlock[]>(() => {
     const summary = m.teams.find((t) => t.team === team);
     return {
       team,
+      tone: mine ? (team === mine ? "mine" : "enemy") : (team as Tone),
       title: mine ? (team === mine ? "我方" : "敌方") : teamNames[team],
+      averageValue: summary?.averageRating ?? null,
       average: rating(summary?.averageRating),
       rated: summary?.rated ?? 0,
       count: summary?.players ?? 0,
       players: m.players.filter((p) => p.team === team),
     };
   });
+});
+
+/**
+ * 收起时的双色计量条：按 ELO 的期望得分公式，由两队均分差算出左边一队的胜率，
+ * E = 1 / (1 + 10^((右 − 左) / 400))。均分只算有 ELO 的玩家。
+ */
+const meter = computed(() => {
+  const [left, right] = teams.value;
+  if (!left || !right) return null;
+  const a = left.averageValue;
+  const b = right.averageValue;
+  if (a == null || b == null) return { left, right, share: 0.5, known: false, title: "" };
+  const share = 1 / (1 + 10 ** ((b - a) / 400));
+  const diff = Math.round(a - b);
+  const title = [
+    `${left.title}胜率 ${percent(share)}，${right.title}胜率 ${percent(1 - share)}（按 ELO 均分差估算）`,
+    `均分差 ${diff > 0 ? "+" : ""}${diff}`,
+    `有 ELO 的玩家：${left.title} ${left.rated}/${left.count}，${right.title} ${right.rated}/${right.count}`,
+  ].join("\n");
+  return { left, right, share, known: true, title };
 });
 
 const waiting = computed(() => {
@@ -119,6 +148,34 @@ async function run(action: () => Promise<void>) {
 const toggleExpanded = () =>
   run(() => saveSetting(appearance.value, "ui.overlay", { expanded: !appearance.value.expanded }));
 
+// ---------------------------------------------------------------- 锁定后锁按钮仍可点
+
+// 锁定时窗口整体鼠标穿透。外壳轮询鼠标位置，鼠标落在这里报告的锁按钮上时暂时不穿透，
+// 并用事件告诉页面显示悬停样式：恢复穿透后页面收不到鼠标离开，`:hover` 会卡住。
+const lockButton = ref<HTMLElement | null>(null);
+const lockHot = ref(false);
+let lastHotspot = "";
+
+function reportHotspot() {
+  const rect = lockButton.value?.getBoundingClientRect();
+  const scale = window.devicePixelRatio || 1;
+  const hotspot = rect
+    ? { x: rect.left * scale, y: rect.top * scale, width: rect.width * scale, height: rect.height * scale }
+    : null;
+  const key = JSON.stringify(hotspot);
+  if (key === lastHotspot) return;
+  lastHotspot = key;
+  commands.setOverlayHotspot(hotspot).catch(() => {
+    lastHotspot = "";
+  });
+}
+
+watch(locked, async () => {
+  lockHot.value = false;
+  await nextTick();
+  reportHotspot();
+});
+
 // ---------------------------------------------------------------- 窗口大小跟随内容
 
 const panel = ref<HTMLElement | null>(null);
@@ -137,12 +194,28 @@ function fitWindow() {
   void getCurrentWindow().setSize(new LogicalSize(width, height));
 }
 
-onMounted(() => {
-  observer = new ResizeObserver(fitWindow);
+function relayout() {
+  fitWindow();
+  reportHotspot();
+}
+
+let unlistenHover: (() => void) | null = null;
+
+onMounted(async () => {
+  observer = new ResizeObserver(relayout);
   if (panel.value) observer.observe(panel.value);
+  // 换到缩放比例不同的显示器时 devicePixelRatio 会变
+  window.addEventListener("resize", reportHotspot);
+  unlistenHover = await getCurrentWebviewWindow().listen<boolean>("bax://overlay-lock-hover", (event) => {
+    lockHot.value = event.payload;
+  });
 });
-onUnmounted(() => observer?.disconnect());
-watch(appearance, () => requestAnimationFrame(fitWindow));
+onUnmounted(() => {
+  observer?.disconnect();
+  window.removeEventListener("resize", reportHotspot);
+  unlistenHover?.();
+});
+watch(appearance, () => requestAnimationFrame(relayout));
 </script>
 
 <template>
@@ -158,13 +231,31 @@ watch(appearance, () => requestAnimationFrame(fitWindow));
       </span>
       <span class="map" :data-tauri-drag-region="locked ? undefined : ''">{{ current?.map ?? "" }}</span>
       <span class="timer num" :class="{ countdown: (elapsed ?? 0) < 0 }">{{ timer }}</span>
-      <span v-if="!locked" class="tools">
-        <button :title="appearance.expanded ? '收起' : '展开'" @click="toggleExpanded">
-          {{ appearance.expanded ? "▴" : "▾" }}
+      <span class="tools">
+        <template v-if="!locked">
+          <button :title="appearance.expanded ? '收起' : '展开'" @click="toggleExpanded">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path :d="appearance.expanded ? 'M3.5 10L8 5.5l4.5 4.5' : 'M3.5 6L8 10.5L12.5 6'" />
+            </svg>
+          </button>
+          <button title="打开主窗口" @click="run(commands.openMainWindow)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h10" /></svg>
+          </button>
+        </template>
+        <button
+          ref="lockButton"
+          :class="{ hot: lockHot }"
+          :title="locked ? '解锁：可以拖动、点击' : '锁定：鼠标穿透到游戏'"
+          @click="run(() => commands.setOverlayLocked(!locked))"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="3.5" y="7.25" width="9" height="6.25" rx="1.5" />
+            <path :d="locked ? 'M5.5 7.25V5.5a2.5 2.5 0 0 1 5 0v1.75' : 'M5.5 7.25V5.5a2.5 2.5 0 0 1 4.85-.85'" />
+          </svg>
         </button>
-        <button title="打开主窗口" @click="run(commands.openMainWindow)">☰</button>
-        <button title="锁定：鼠标穿透到游戏" @click="run(() => commands.setOverlayLocked(true))">🔒</button>
-        <button title="隐藏" @click="run(() => commands.setOverlayVisible(false))">✕</button>
+        <button v-if="!locked" title="隐藏" @click="run(() => commands.setOverlayVisible(false))">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg>
+        </button>
       </span>
     </header>
 
@@ -174,13 +265,40 @@ watch(appearance, () => requestAnimationFrame(fitWindow));
     </div>
 
     <template v-if="current">
-      <section v-for="block in teams" :key="block.team" class="team" :class="block.team">
+      <section v-if="!appearance.expanded && meter" class="meter" :title="meter.title">
+        <div class="meter-head">
+          <span class="side" :class="meter.left.tone">
+            <span class="side-title">{{ meter.left.title }}</span>
+            <span class="side-avg num">{{ meter.left.average }}</span>
+          </span>
+          <span v-if="meter.known" class="odds num">
+            <span :class="meter.left.tone">{{ percent(meter.share) }}</span>
+            <span class="odds-label">胜率</span>
+            <span :class="meter.right.tone">{{ percent(1 - meter.share) }}</span>
+          </span>
+          <span v-else class="odds odds-label">等待资料</span>
+          <span class="side" :class="meter.right.tone">
+            <span class="side-avg num">{{ meter.right.average }}</span>
+            <span class="side-title">{{ meter.right.title }}</span>
+          </span>
+        </div>
+        <div class="bar" :class="{ unknown: !meter.known }">
+          <span class="fill" :class="meter.left.tone" :style="{ width: `${meter.share * 100}%` }" />
+          <span class="fill" :class="meter.right.tone" />
+        </div>
+      </section>
+      <section
+        v-for="block in appearance.expanded ? teams : []"
+        :key="block.team"
+        class="team"
+        :class="block.tone"
+      >
         <div class="team-head">
           <span class="team-title">{{ block.title }}</span>
           <span class="team-avg num">均分 {{ block.average }}</span>
           <span class="team-count num">{{ block.rated }}/{{ block.count }}</span>
         </div>
-        <ul v-if="appearance.expanded">
+        <ul>
           <li
             v-for="p in block.players"
             :key="p.id"
@@ -299,20 +417,121 @@ header {
 }
 
 .tools button {
-  width: 22px;
-  height: 22px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--bax-muted);
   cursor: pointer;
-  font-size: 12px;
 }
 
-.tools button:hover {
+.tools svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 锁定时页面收不到鼠标离开，悬停样式由外壳的事件驱动（.hot），不用 :hover */
+.panel.unlocked .tools button:hover,
+.tools button.hot {
   background: var(--bax-surface-2);
   color: var(--bax-fg);
+}
+
+/* ---------------------------------------------------------------- 颜色 */
+
+.mine {
+  --tone: var(--bax-friend);
+}
+
+.enemy {
+  --tone: var(--bax-foe);
+}
+
+.alpha {
+  --tone: var(--bax-alpha);
+}
+
+.bravo {
+  --tone: var(--bax-bravo);
+}
+
+/* ---------------------------------------------------------------- 收起时的计量条 */
+
+.meter {
+  margin-top: 8px;
+}
+
+.meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.side {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.side-title {
+  font-weight: 600;
+  color: var(--tone);
+}
+
+.side-avg {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.odds {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.odds .mine,
+.odds .enemy,
+.odds .alpha,
+.odds .bravo {
+  color: var(--tone);
+}
+
+.odds-label {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--bax-faint);
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  margin-top: 4px;
+}
+
+.bar .fill {
+  border-radius: 3px;
+  background: var(--tone);
+  transition: width 0.4s ease;
+}
+
+.bar .fill:last-child {
+  flex: 1;
+}
+
+.bar.unknown .fill {
+  background: var(--bax-surface-2);
 }
 
 .alert {
@@ -344,14 +563,7 @@ header {
 
 .team-title {
   font-weight: 600;
-}
-
-.team.alpha .team-title {
-  color: var(--bax-alpha);
-}
-
-.team.bravo .team-title {
-  color: var(--bax-bravo);
+  color: var(--tone, var(--bax-fg));
 }
 
 .team-avg {

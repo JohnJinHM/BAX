@@ -79,7 +79,7 @@ npm run bindings                  # Rust 一侧改了快照类型之后，重新
 
 ```powershell
 npx vite                          # 然后打开下面的地址
-# http://localhost:1420/dev/overlay.html           悬浮窗（加 ?locked 看锁定状态）
+# http://localhost:1420/dev/overlay.html           悬浮窗（加 ?locked 看锁定状态，?collapsed 看收起状态）
 # http://localhost:1420/dev/main.html?tab=reminders 主窗口，tab 可为 match、reminders、settings
 ```
 

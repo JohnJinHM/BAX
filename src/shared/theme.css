@@ -16,6 +16,9 @@
   --bax-accent: #4cc2ff;
   --bax-alpha: #5ea8ff;
   --bax-bravo: #ff8f6b;
+  /* 知道本机在哪一队时按敌我着色，不再按 Alpha/Bravo */
+  --bax-friend: #5ea8ff;
+  --bax-foe: #ff7a6b;
   --bax-good: #5fd38d;
   --bax-warn: #f2c14e;
   --bax-bad: #f0616d;

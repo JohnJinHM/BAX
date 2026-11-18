@@ -74,6 +74,9 @@ export const commands = {
   calibrate: (elapsedMs: number) => invoke<void>("calibrate", { elapsedMs }),
   setUiSetting: (key: string, value: JsonValue) => invoke<void>("set_ui_setting", { key, value }),
   setOverlayLocked: (locked: boolean) => invoke<void>("set_overlay_locked", { locked }),
+  /** 锁按钮的位置，物理像素，相对窗口左上角；锁定后鼠标在这里时仍可点击。 */
+  setOverlayHotspot: (hotspot: { x: number; y: number; width: number; height: number } | null) =>
+    invoke<void>("set_overlay_hotspot", { hotspot }),
   setOverlayVisible: (visible: boolean) => invoke<void>("set_overlay_visible", { visible }),
   openMainWindow: () => invoke<void>("open_main_window"),
   openDiagDir: () => invoke<void>("open_diag_dir"),

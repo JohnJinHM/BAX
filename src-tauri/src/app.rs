@@ -93,6 +93,7 @@ pub fn run() {
             commands::calibrate,
             commands::set_ui_setting,
             commands::set_overlay_locked,
+            commands::set_overlay_hotspot,
             commands::set_overlay_visible,
             commands::open_main_window,
             commands::report_ui_error,

@@ -4,11 +4,13 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 
 import { fixtureSnapshot } from "./fixture";
 
-export function installMock(options: { locked?: boolean } = {}) {
+export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
   mockIPC((cmd) => {
     switch (cmd) {
       case "get_snapshot":
-        return fixtureSnapshot;
+        return options.collapsed
+          ? { ...fixtureSnapshot, ui: { ...fixtureSnapshot.ui, "ui.overlay": { opacity: 0.88, scale: 1, expanded: false } } }
+          : fixtureSnapshot;
       case "get_app_status":
         return {
           overlayVisible: true,

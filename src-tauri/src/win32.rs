@@ -7,21 +7,25 @@
 //! 鼠标穿透也不用 tao 的 `set_ignore_cursor_events`：它改窗口样式时会按 tao 自己记的可见状态
 //! 重新显示或隐藏窗口，而悬浮窗是用上面的 `SW_SHOWNOACTIVATE` 显示的，tao 一直以为它是隐藏的，
 //! 于是一锁定窗口就被藏起来；它还加上 `WS_EX_LAYERED` 却不设置分层属性，分层窗口不设置属性时不会绘制。
+//!
+//! 锁定后悬浮窗上的锁按钮仍要能点：外壳轮询鼠标位置，鼠标在按钮上时暂时去掉 `WS_EX_TRANSPARENT`，
+//! 离开后再加上（见 `overlay` 模块）。
 
 #![allow(unsafe_code)]
 
 use std::ffi::c_void;
 
-use windows_sys::Win32::Foundation::{CloseHandle, HWND};
+use windows_sys::Win32::Foundation::{CloseHandle, HWND, POINT, RECT};
 use windows_sys::Win32::System::Diagnostics::Debug::Beep;
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GetForegroundWindow, GetWindowLongW, GetWindowThreadProcessId, HWND_TOPMOST,
-    LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
-    WS_EX_LAYERED, WS_EX_TRANSPARENT,
+    GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect,
+    GetWindowThreadProcessId, HWND_TOPMOST, LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow, WS_EX_LAYERED,
+    WS_EX_TRANSPARENT,
 };
 
 /// 显示窗口但不激活它，并保持在最上层。
@@ -73,6 +77,45 @@ pub fn set_click_through(hwnd: *mut c_void, enabled: bool) -> bool {
         );
         let applied = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 & bits;
         layered_ok && applied == if enabled { bits } else { 0 }
+    }
+}
+
+/// 只切换 `WS_EX_TRANSPARENT`：`true` 时点击穿透，`false` 时窗口接收鼠标。
+/// 用于锁定期间鼠标经过锁按钮的那一小会儿，分层属性保持不变，窗口不重绘。
+/// 会给窗口发样式变化的消息，要在窗口所在的线程（主线程）上调用。
+pub fn set_passthrough(hwnd: *mut c_void, enabled: bool) {
+    let hwnd = hwnd as HWND;
+    // SAFETY: 同 `set_click_through`。
+    unsafe {
+        let old = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+        let new = if enabled {
+            old | WS_EX_TRANSPARENT
+        } else {
+            old & !WS_EX_TRANSPARENT
+        };
+        if new != old {
+            SetWindowLongW(hwnd, GWL_EXSTYLE, new as i32);
+        }
+    }
+}
+
+/// 鼠标相对窗口左上角的位置，物理像素。悬浮窗没有边框，窗口左上角就是页面左上角。
+/// 只读取系统状态，可以在任何线程调用。
+pub fn cursor_in_window(hwnd: *mut c_void) -> Option<(i32, i32)> {
+    let hwnd = hwnd as HWND;
+    // SAFETY: 两个结构体都在栈上，指针只在调用期间使用；句柄失效时函数返回失败。
+    unsafe {
+        let mut cursor = POINT { x: 0, y: 0 };
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        if GetCursorPos(&mut cursor) == 0 || GetWindowRect(hwnd, &mut rect) == 0 {
+            return None;
+        }
+        Some((cursor.x - rect.left, cursor.y - rect.top))
     }
 }
 

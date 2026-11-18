@@ -15,7 +15,8 @@
     <div id="app"></div>
     <script type="module">
       import { installMock } from "/src/dev/mock.ts";
-      installMock({ locked: new URLSearchParams(location.search).has("locked") });
+      const params = new URLSearchParams(location.search);
+      installMock({ locked: params.has("locked"), collapsed: params.has("collapsed") });
       await import("/src/overlay/main.ts");
     </script>
   </body>

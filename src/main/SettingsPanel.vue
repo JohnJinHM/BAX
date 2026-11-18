@@ -118,7 +118,7 @@ async function exportDiag() {
       <label>锁定</label>
       <div class="row">
         <span :class="status?.overlayLocked ? 'ok' : 'hint'">
-          {{ status?.overlayLocked ? "已锁定：鼠标穿透到游戏，不能拖动和点击" : "未锁定：可以拖动、点击悬浮窗上的按钮" }}
+          {{ status?.overlayLocked ? "已锁定：鼠标穿透到游戏，只有锁按钮可以点" : "未锁定：可以拖动、点击悬浮窗上的按钮" }}
         </span>
         <button @click="run(() => commands.setOverlayLocked(!status?.overlayLocked), '已切换')">
           {{ status?.overlayLocked ? "解锁" : "锁定" }}
