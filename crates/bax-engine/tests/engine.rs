@@ -12,7 +12,7 @@ use bax_core::{
     RoomKind, RoomStatus, RosterEntry, Team, Timestamp, Tracker,
 };
 use bax_engine::{
-    CommandError, Engine, EngineConfig, FetchState, ManualClock, PlayerView, Snapshot,
+    CommandError, Engine, EngineConfig, FetchState, ManualClock, PlayerView, ReportState, Snapshot,
 };
 use bax_gamelog::{LogTime, LogZone};
 use bax_store::{ProfileUpdate, Relation, Store};
@@ -1012,5 +1012,185 @@ async fn importing_history_updates_encounter_counts() {
         Some(1),
         "重复导入不会重复计数"
     );
+    engine.shutdown().await;
+}
+
+// ---------------------------------------------------------------- 战后归档
+
+const REPORT: &str = include_str!("../../../fixtures/batrace/match_report.json");
+const UNITS: &str = include_str!("../../../fixtures/batrace/units.json");
+
+fn json(body: &str) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_raw(body.to_owned(), "application/json")
+}
+
+/// 战报请求了几次。
+async fn report_requests(fx: &Fixture) -> usize {
+    fx.server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r.url.path() == "/api/match")
+        .count()
+}
+
+fn quick_reports(mut config: EngineConfig) -> EngineConfig {
+    config.report_schedule = vec![
+        Duration::from_secs(1),
+        Duration::from_secs(2),
+        Duration::from_secs(60),
+    ];
+    config.report_poll_interval = Duration::from_millis(30);
+    config.report_spacing = Duration::from_millis(5);
+    config
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_finished_match_is_archived_once_the_report_appears() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    // 第一次还没收录，第二次有了
+    Mock::given(method("GET"))
+        .and(path("/api/match"))
+        .and(query_param("matchid", "9000001"))
+        .respond_with(ResponseTemplate::new(404))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&fx.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/match"))
+        .and(query_param("matchid", "9000001"))
+        .respond_with(json(REPORT))
+        .mount(&fx.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/units"))
+        .respond_with(json(UNITS))
+        .mount(&fx.server)
+        .await;
+
+    let engine = fx.start_with(quick_reports(fx.config()));
+    fx.append(&finished_match(9_000_001));
+    wait_for(&engine, "比赛结束", |s| {
+        s.current.as_ref().is_some_and(|m| m.phase == Phase::Ended)
+    })
+    .await;
+    wait_for(&engine, "排队等战报", |s| s.archive.pending == 1).await;
+    assert_eq!(report_requests(&fx).await, 0, "没到时间不请求");
+
+    // 结束后 1 秒：第一次尝试，还没有
+    fx.clock.set(ts("19:06:21.200"));
+    let mut tries = 0;
+    while report_requests(&fx).await == 0 {
+        tries += 1;
+        assert!(tries < 200, "应该已经试过一次");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let history = engine.match_history(10, 0).await.expect("比赛记录");
+    assert!(
+        matches!(history[0].report, ReportState::Pending { attempts: 1, .. }),
+        "{:?}",
+        history[0].report
+    );
+    assert!(
+        engine
+            .match_report(MatchId(9_000_001))
+            .await
+            .expect("读")
+            .is_none()
+    );
+
+    // 结束后 2 秒：第二次，取到了
+    fx.clock.set(ts("19:06:22.200"));
+    let snapshot = wait_for(&engine, "战报归档", |s| {
+        s.archive.last_archived == Some(MatchId(9_000_001))
+    })
+    .await;
+    assert_eq!(snapshot.archive.pending, 0);
+    assert_eq!(report_requests(&fx).await, 2);
+
+    let history = engine.match_history(10, 0).await.expect("比赛记录");
+    assert_eq!(history[0].match_id, MatchId(9_000_001));
+    assert!(matches!(history[0].report, ReportState::Ready { .. }));
+
+    // 有了战报之后取单位目录
+    let mut view = None;
+    for _ in 0..200 {
+        let v = engine
+            .match_report(MatchId(9_000_001))
+            .await
+            .expect("读")
+            .expect("有战报");
+        if v.catalog_fetched_at.is_some() {
+            view = Some(v);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let view = view.expect("单位目录应该已经取到");
+    assert_eq!(view.map.as_deref(), Some("Airport"));
+    assert_eq!(view.self_id, Some(PlayerId(ME)));
+    assert!(!view.analysis.players.is_empty());
+
+    // 已经有战报：手动请求什么也不做
+    engine
+        .fetch_report(MatchId(9_000_001))
+        .await
+        .expect("手动请求");
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(report_requests(&fx).await, 2);
+    engine.shutdown().await;
+
+    // 战报的开始时间修正了计时基准
+    let store = Store::open(&fx.store_path()).expect("长期库");
+    let record = store
+        .match_record(MatchId(9_000_001))
+        .expect("读")
+        .expect("有比赛");
+    assert_eq!(record.clock.map(|c| c.source), Some(ClockSource::Report));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_report_that_never_appears_is_given_up_and_can_be_requested_again() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    Mock::given(method("GET"))
+        .and(path("/api/match"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&fx.server)
+        .await;
+
+    // 应用关着的时候比赛就结束了，而且已经过了全部时间点：启动后只试一次
+    fx.append(&finished_match(9_000_002));
+    fx.clock.set(ts("19:30:00.000"));
+    let engine = fx.start_with(quick_reports(fx.config()));
+    let mut tries = 0;
+    loop {
+        let history = engine.match_history(10, 0).await.expect("比赛记录");
+        if history
+            .first()
+            .is_some_and(|r| matches!(r.report, ReportState::GaveUp { .. }))
+        {
+            break;
+        }
+        tries += 1;
+        assert!(tries < 200, "应该已经放弃：{history:?}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(report_requests(&fx).await, 1);
+
+    // 手动再试：马上请求一次
+    engine
+        .fetch_report(MatchId(9_000_002))
+        .await
+        .expect("手动请求");
+    let mut tries = 0;
+    while report_requests(&fx).await < 2 {
+        tries += 1;
+        assert!(tries < 200, "手动请求应该马上发出");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     engine.shutdown().await;
 }

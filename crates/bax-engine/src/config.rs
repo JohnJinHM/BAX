@@ -34,6 +34,16 @@ pub struct EngineConfig {
     pub rate_limit_pause: Duration,
     /// 提醒到点后多长时间内仍算按时，毫秒。超过这段时间才第一次检查到的记为错过，不补发。
     pub reminder_grace_ms: i64,
+    /// 比赛结束后等战报：从结束算起的各个尝试时间点，过了最后一个就放弃。
+    pub report_schedule: Vec<Duration>,
+    /// 战报队列没有新消息时多久检查一次。
+    pub report_poll_interval: Duration,
+    /// 战后归档两次请求之间至少隔多久。
+    pub report_spacing: Duration,
+    /// 启动时补上多久以内结束、还没有战报的比赛。
+    pub report_catch_up: Duration,
+    /// 单位目录多久刷新一次。
+    pub catalog_max_age: Duration,
 }
 
 impl EngineConfig {
@@ -52,6 +62,15 @@ impl EngineConfig {
             retry_delays: vec![Duration::from_secs(12), Duration::from_secs(24)],
             rate_limit_pause: Duration::from_secs(30),
             reminder_grace_ms: bax_core::reminder::DEFAULT_GRACE_MS,
+            // ba-dragon 实测多在一两分钟内收录；本机观察疑似每 10 分钟左右刷新一次（验证 3）
+            report_schedule: [2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 240, 480, 1440]
+                .into_iter()
+                .map(|m| Duration::from_secs(m * 60))
+                .collect(),
+            report_poll_interval: Duration::from_secs(30),
+            report_spacing: Duration::from_millis(1500),
+            report_catch_up: Duration::from_secs(3 * 24 * 3600),
+            catalog_max_age: Duration::from_secs(7 * 24 * 3600),
         }
     }
 }

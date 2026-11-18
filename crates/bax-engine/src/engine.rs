@@ -2,21 +2,23 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use bax_batrace::{ApiError, BatraceClient};
-use bax_core::PlayerId;
 use bax_core::reminder::{self, ReminderRule};
+use bax_core::{MatchId, PlayerId};
 use bax_gamelog::LogZone;
-use bax_store::{PlayerHit, Store, StoreError};
+use bax_store::{HistoryRow, PlayerHit, Store, StoreError};
 use serde::Serialize;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::clock::Clock;
 use crate::config::EngineConfig;
 use crate::player::PlayerDetail;
+use crate::postmatch::{self, MatchReportView};
+use crate::reports::{ReportTiming, ReportWorker};
 use crate::session::{Command, LOG_DIR_KEY, Parts, REMINDERS_KEY, SELF_ID_KEY, Session, UI_PREFIX};
 use crate::snapshot::Snapshot;
 
@@ -62,6 +64,12 @@ pub struct Engine {
     client: BatraceClient,
     store_path: PathBuf,
     log_zone: LogZone,
+    /// 战后归档任务。
+    reports: JoinHandle<()>,
+    report_notify: Arc<Notify>,
+    /// 按需读取比赛记录与战报用的连接，不经过对局会话。
+    reader: Arc<Mutex<Store>>,
+    clock: Arc<dyn Clock>,
 }
 
 impl Engine {
@@ -93,9 +101,23 @@ impl Engine {
         let config_store = config.store_path.clone();
         let (snapshot_tx, snapshots) = watch::channel(Arc::new(Snapshot::initial()));
         let (commands, command_rx) = mpsc::channel(16);
+
+        // 战后归档与按需读取各用自己的连接；WAL 下读写互不阻塞
+        let report_notify = Arc::new(Notify::new());
+        let (report_tx, report_rx) = mpsc::unbounded_channel();
+        let worker = ReportWorker {
+            store: Store::open(&config.store_path)?,
+            client: client.clone(),
+            clock: Arc::clone(&clock),
+            timing: ReportTiming::from_config(&config),
+            notify: Arc::clone(&report_notify),
+            events: report_tx,
+        };
+        let reader = Arc::new(Mutex::new(Store::open(&config.store_path)?));
+
         let session = Session::new(Parts {
             config,
-            clock,
+            clock: Arc::clone(&clock),
             store,
             client: client.clone(),
             log_dir,
@@ -103,8 +125,11 @@ impl Engine {
             rules,
             ui,
             snapshot_tx,
+            report_notify: Arc::clone(&report_notify),
+            report_rx,
         });
         let task = tokio::spawn(session.run(command_rx));
+        let reports = tokio::spawn(worker.run());
         tracing::info!(
             store = %config_store.display(),
             log_dir_source = %log_dir_source,
@@ -118,6 +143,10 @@ impl Engine {
             client,
             store_path,
             log_zone,
+            reports,
+            report_notify,
+            reader,
+            clock,
         })
     }
 
@@ -267,11 +296,68 @@ impl Engine {
         Ok(summary)
     }
 
+    /// 比赛记录，新的在前，带战报状态。
+    pub async fn match_history(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<HistoryRow>, CommandError> {
+        self.read(move |store| {
+            store
+                .match_history(limit.min(500), offset)
+                .map_err(|e| e.to_string())
+        })
+        .await
+    }
+
+    /// 一场比赛的战后分析；还没有战报时为 `None`。
+    pub async fn match_report(&self, id: MatchId) -> Result<Option<MatchReportView>, CommandError> {
+        self.read(move |store| postmatch::load_view(store, id))
+            .await
+    }
+
+    /// 立即去取一场比赛的战报；取不到时按时间表继续等。已经有战报时什么也不做。
+    pub async fn fetch_report(&self, id: MatchId) -> Result<(), CommandError> {
+        let now = self.clock.now();
+        let queued = self
+            .read(move |store| store.request_report(id, now).map_err(|e| e.to_string()))
+            .await?;
+        if queued {
+            tracing::info!(match_id = %id, "手动请求战报");
+            self.report_notify.notify_one();
+        }
+        Ok(())
+    }
+
+    /// 在阻塞线程池里用读取连接做一件事。
+    async fn read<T, F>(&self, f: F) -> Result<T, CommandError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&mut Store) -> Result<T, String> + Send + 'static,
+    {
+        let reader = Arc::clone(&self.reader);
+        tokio::task::spawn_blocking(move || {
+            let mut store = reader.lock().map_err(|_| "读取连接不可用".to_owned())?;
+            f(&mut store)
+        })
+        .await
+        .map_err(|err| CommandError::Rejected(err.to_string()))?
+        .map_err(CommandError::Rejected)
+    }
+
     /// 停下引擎，等它收尾。
     pub async fn shutdown(self) {
-        let Engine { commands, task, .. } = self;
+        let Engine {
+            commands,
+            task,
+            reports,
+            ..
+        } = self;
         drop(commands);
         let _ = task.await;
+        // 会话停下后归档任务会自己退出；正在等网络的请求不必等完
+        reports.abort();
+        let _ = reports.await;
     }
 
     async fn send(&self, command: Command) -> Result<(), CommandError> {

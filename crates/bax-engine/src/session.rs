@@ -28,7 +28,7 @@ use bax_core::{
 };
 use bax_gamelog::{LogTime, Origin, WatchItem};
 use bax_store::{EncounterSummary, PlayerHit, PlayerRecord, ProfileUpdate, Store};
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{Notify, mpsc, oneshot, watch};
 use tokio::time::MissedTickBehavior;
 
 use crate::clock::Clock;
@@ -36,9 +36,10 @@ use crate::config::EngineConfig;
 use crate::logthread::{LogMsg, LogThread, LogTiming};
 use crate::player::PlayerDetail;
 use crate::profile::ProfileSummary;
+use crate::reports::ReportEvent;
 use crate::snapshot::{
-    AlertView, ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, ReminderView,
-    Snapshot, TeamSummary,
+    AlertView, ApiErrorView, ApiStatus, ArchiveStatus, FetchState, LogStatus, MatchView,
+    PlayerView, ReminderView, Snapshot, TeamSummary,
 };
 
 /// 设置项：本机玩家的 ID。
@@ -176,6 +177,9 @@ pub(crate) struct Parts {
     pub rules: Vec<ReminderRule>,
     pub ui: BTreeMap<String, serde_json::Value>,
     pub snapshot_tx: watch::Sender<Arc<Snapshot>>,
+    /// 比赛结束时叫醒战后归档任务。
+    pub report_notify: Arc<Notify>,
+    pub report_rx: mpsc::UnboundedReceiver<ReportEvent>,
 }
 
 pub(crate) struct Session {
@@ -209,6 +213,10 @@ pub(crate) struct Session {
     alert: Option<AlertView>,
     ui: BTreeMap<String, serde_json::Value>,
 
+    report_notify: Arc<Notify>,
+    report_rx: mpsc::UnboundedReceiver<ReportEvent>,
+    archive: ArchiveStatus,
+
     // 诊断日志（ADR-0007）
     /// 当前比赛的 span。比赛相关的记录都在它里面，按 match_id 可以过滤出一场。
     match_span: tracing::Span,
@@ -233,6 +241,8 @@ impl Session {
             rules,
             ui,
             snapshot_tx,
+            report_notify,
+            report_rx,
         } = parts;
         let mut tracker = Tracker::new(config.tracker.clone());
         tracker.set_self_hint(self_hint);
@@ -264,6 +274,9 @@ impl Session {
             outcomes: Vec::new(),
             alert: None,
             ui,
+            report_notify,
+            report_rx,
+            archive: ArchiveStatus::default(),
             match_span: tracing::Span::none(),
             seen: None,
             cause: None,
@@ -294,6 +307,7 @@ impl Session {
                 },
                 Some(msg) = self.log_rx.recv() => Input::Log(msg),
                 Some(result) = self.fetch_rx.recv() => Input::Fetched(Box::new(result)),
+                Some(event) = self.report_rx.recv() => Input::Report(event),
                 _ = tick.tick() => Input::Tick,
             };
             // 处理过程中的诊断记录都挂在当前比赛的 span 下
@@ -303,6 +317,7 @@ impl Session {
                 Input::Command(command) => self.on_command(command),
                 Input::Log(msg) => self.on_log(msg),
                 Input::Fetched(result) => self.on_fetched(*result),
+                Input::Report(event) => self.on_report_event(event),
                 Input::Tick => self.on_tick(),
             }
             self.dispatch();
@@ -833,12 +848,23 @@ impl Session {
         }
     }
 
+    fn on_report_event(&mut self, event: ReportEvent) {
+        let archive = &mut self.archive;
+        archive.pending = event.pending;
+        if event.archived.is_some() {
+            archive.last_archived = event.archived;
+        }
+        archive.seq += 1;
+        self.dirty = true;
+    }
+
     // ------------------------------------------------------------ 对局变化
 
     fn handle_updates(&mut self, updates: Vec<Update>, live: bool) {
         if updates.is_empty() {
             return;
         }
+        let mut ended = false;
         for update in updates {
             // 发现新比赛之后，同一批里余下的记录挂在新比赛的 span 下
             let span = self.match_span.clone();
@@ -898,6 +924,7 @@ impl Session {
                     );
                 }
                 Update::MatchEnded { .. } => {
+                    ended = true;
                     let cause = self.tracker.current().and_then(|m| m.end_cause);
                     tracing::info!(cause = cause.map(tracing::field::debug), live, "比赛结束");
                     self.log_fetch_summary();
@@ -912,6 +939,10 @@ impl Session {
         let _entered = span.enter();
         self.learn_self();
         self.record_current();
+        if ended {
+            // 结束时刻已经写进长期库，归档任务据此排队等战报
+            self.report_notify.notify_one();
+        }
         self.note_changes(live);
         self.dirty = true;
     }
@@ -1286,6 +1317,7 @@ impl Session {
             }
         });
         Snapshot {
+            archive: self.archive,
             revision: self.revision,
             log: self.log.clone(),
             persona: self.tracker.persona().map(str::to_owned),
@@ -1350,6 +1382,7 @@ enum Input {
     Log(LogMsg),
     // 资料结果比其他输入大得多，装箱避免每次循环都搬动整块内存
     Fetched(Box<FetchResult>),
+    Report(ReportEvent),
     Tick,
 }
 

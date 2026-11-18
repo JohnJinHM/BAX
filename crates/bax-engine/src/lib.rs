@@ -27,17 +27,25 @@ mod engine;
 pub mod history;
 mod logthread;
 mod player;
+mod postmatch;
 mod profile;
+mod reports;
 mod session;
 mod snapshot;
 
-pub use bax_store::{EncounterRow, Note, PlayerHit, RatingPoint, Relation};
+pub use bax_core::report::{
+    ClassShare, MatchAnalysis, PlayerReport, Sortie, TeamReport, UnitClass, UnitRow,
+};
+pub use bax_store::{
+    EncounterRow, HistoryRow, Note, PlayerHit, RatingPoint, Relation, ReportState,
+};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use config::{EngineConfig, cache_path, default_data_dir, store_path};
 pub use engine::{CommandError, Engine, EngineError, ImportSummary};
 pub use player::PlayerDetail;
+pub use postmatch::MatchReportView;
 pub use profile::{ProfileSummary, RankedStats};
 pub use snapshot::{
-    AlertView, ApiErrorView, ApiStatus, FetchState, LogStatus, MatchView, PlayerView, ReminderView,
-    Snapshot, TeamSummary,
+    AlertView, ApiErrorView, ApiStatus, ArchiveStatus, FetchState, LogStatus, MatchView,
+    PlayerView, ReminderView, Snapshot, TeamSummary,
 };

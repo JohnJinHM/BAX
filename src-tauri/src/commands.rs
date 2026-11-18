@@ -5,9 +5,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use bax_core::{PlayerId, ReminderRule};
+use bax_core::{MatchId, PlayerId, ReminderRule};
 use bax_engine::diag::{self, ExportOptions};
-use bax_engine::{CommandError, ImportSummary, PlayerDetail, PlayerHit, Snapshot};
+use bax_engine::{
+    CommandError, HistoryRow, ImportSummary, MatchReportView, PlayerDetail, PlayerHit, Snapshot,
+};
 use tauri::{AppHandle, State, Window};
 
 use crate::app::{AppState, AppStatus, reveal_in_explorer, show_main_window};
@@ -152,6 +154,43 @@ pub async fn refresh_player(state: State<'_, AppState>, id: u64) -> CommandResul
         .refresh_player(PlayerId(id))
         .await
         .map_err(rejected("refresh_player"))
+}
+
+/// 比赛记录，新的在前。
+#[tauri::command]
+pub async fn match_history(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<HistoryRow>, String> {
+    state
+        .engine
+        .match_history(limit.unwrap_or(100), offset.unwrap_or(0))
+        .await
+        .map_err(rejected("match_history"))
+}
+
+/// 一场比赛的战后分析；还没有战报时为 null。
+#[tauri::command]
+pub async fn match_report(
+    state: State<'_, AppState>,
+    id: u64,
+) -> Result<Option<MatchReportView>, String> {
+    state
+        .engine
+        .match_report(MatchId(id))
+        .await
+        .map_err(rejected("match_report"))
+}
+
+/// 立即去取一场比赛的战报。
+#[tauri::command]
+pub async fn fetch_report(state: State<'_, AppState>, id: u64) -> CommandResult {
+    state
+        .engine
+        .fetch_report(MatchId(id))
+        .await
+        .map_err(rejected("fetch_report"))
 }
 
 /// 导入日志目录里的全部历史日志。

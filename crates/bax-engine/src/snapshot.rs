@@ -37,6 +37,21 @@ pub struct Snapshot {
     pub ui: BTreeMap<String, serde_json::Value>,
     /// 当前比赛；还没见过任何比赛时为 `None`。比赛结束后仍然保留，直到下一场开始。
     pub current: Option<MatchView>,
+    /// 战后归档的情况。
+    pub archive: ArchiveStatus,
+}
+
+/// 战后归档的情况。战报本身按需另外读取。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ArchiveStatus {
+    /// 还在等战报的比赛数。
+    pub pending: u32,
+    /// 本次运行里最近存进来的战报。
+    pub last_archived: Option<MatchId>,
+    /// 归档的情况每变一次加一，界面看到它变了就重新读取比赛列表。
+    pub seq: u64,
 }
 
 impl Snapshot {
@@ -52,6 +67,7 @@ impl Snapshot {
             alert: None,
             ui: BTreeMap::new(),
             current: None,
+            archive: ArchiveStatus::default(),
         }
     }
 }
