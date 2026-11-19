@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "resources": {
+      "../.local/ocr-dist/bax-ocr/": "ocr-runtime/"
+    },
+    "shortDescription": "《断箭》对局辅助工具，含离线赛前 OCR"
+  },
+  "productName": "BAX"
+}

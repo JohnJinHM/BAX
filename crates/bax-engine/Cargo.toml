@@ -17,6 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+unicode-normalization = "0.1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ts-rs = { workspace = true, optional = true }
@@ -25,6 +26,8 @@ ts-rs = { workspace = true, optional = true }
 winreg.workspace = true
 
 [features]
+default = []
+ocr = ["tokio/process", "tokio/io-util"]
 ts = ["dep:ts-rs", "bax-core/ts", "bax-batrace/ts", "bax-store/ts"]
 
 [dev-dependencies]

@@ -78,6 +78,21 @@ fn like_pattern(query: &str) -> String {
 }
 
 impl Store {
+    /// OCR 的本地名称索引，包含历史日志别名；调用方做 Unicode 比较。
+    pub fn player_aliases(&self) -> Result<Vec<(PlayerId, String, Option<i64>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, a.name, p.level FROM players p JOIN (
+                SELECT id AS player_id, name FROM players WHERE name IS NOT NULL
+                UNION SELECT id, last_log_name FROM players WHERE last_log_name IS NOT NULL
+                UNION SELECT player_id, log_name FROM match_players WHERE log_name IS NOT NULL
+            ) a ON a.player_id = p.id WHERE a.name <> ''",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((PlayerId(id_from_db(row.get(0)?)), row.get(1)?, row.get(2)?))
+        })?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
     /// 一名玩家的备注。
     pub fn note(&self, player: PlayerId) -> Result<Option<Note>> {
         Ok(self

@@ -34,6 +34,7 @@ export interface DiagSettings {
 }
 
 interface Settings {
+  "ui.ocr": { enabled: boolean };
   "ui.overlay": OverlayAppearance;
   "ui.alerts": AlertSettings;
   "ui.hotkeys": Hotkeys;
@@ -41,6 +42,7 @@ interface Settings {
 }
 
 export const defaults: Settings = {
+  "ui.ocr": { enabled: true },
   "ui.overlay": { opacity: 0.88, scale: 1, expanded: true },
   "ui.alerts": { sound: true, showOverlay: true },
   "ui.hotkeys": { toggleOverlay: "Ctrl+Alt+B", toggleLock: "Ctrl+Alt+L" },

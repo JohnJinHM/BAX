@@ -22,6 +22,7 @@ pub const MAIN_LABEL: &str = "main";
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppStatus {
+    pub ocr_supported: bool,
     pub overlay_visible: bool,
     pub overlay_locked: bool,
     /// 注册失败的快捷键及原因。
@@ -111,6 +112,20 @@ pub fn run() {
         .setup(move |app| {
             let data_dir = data_dir.ok_or("无法确定数据目录")?;
             let config = EngineConfig::new(&data_dir);
+            #[cfg(feature = "ocr")]
+            let config = {
+                let mut config = config;
+                let bundled_ocr = app.path().resource_dir()?.join("ocr-runtime");
+                config.ocr_runtime = Some(
+                    if cfg!(debug_assertions) && !bundled_ocr.join("bax-ocr.exe").is_file() {
+                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("../.local/ocr-dist/bax-ocr")
+                    } else {
+                        bundled_ocr
+                    },
+                );
+                config
+            };
             // 引擎需要在异步运行时里启动；Tauri 自带的就是 tokio
             let engine = tauri::async_runtime::block_on(async {
                 Engine::start(config, Arc::new(SystemClock))
@@ -121,6 +136,7 @@ pub fn run() {
             app.manage(AppState {
                 engine,
                 status: Mutex::new(AppStatus {
+                    ocr_supported: cfg!(feature = "ocr"),
                     data_dir: data_dir.display().to_string(),
                     diag_dir: setup_diag
                         .dir()

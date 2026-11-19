@@ -62,3 +62,20 @@ cargo build --release -p bax-cli
 BAX 采用 MIT 许可，见 [LICENSE](LICENSE)。
 
 BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型同样采用 MIT 许可，来源与许可声明见 [NOTICE.md](NOTICE.md)。
+
+## Full 与 Lite
+
+Full 的“赛前玩家识别”默认启用；Lite 不提供 OCR，继续从日志获取正式名单。先按画面昵称与等级匹配本地账号，必要时查询在线候选；正式日志 ID 到达后更新。候选不会写成比赛参与记录。首版支持双侧卡片布局，只采集前台游戏客户区，不保存或上传截图。
+
+两个版本在 `main` 共用一套代码，通过构建选项区分，共享数据目录并支持覆盖安装切换。
+
+Full 安装包包含 C++/ONNX Runtime 工作进程和两个文字识别模型，不需要 Python 或 OpenCV，首次识别不下载模型。按双侧五行卡片的固定区域识别昵称与等级；当前验证覆盖约 16:9 的加载/部署截图，其他布局等待日志。支持现有 v5 数据库，v4 会在备份后自动升级。
+
+构建一键安装包：
+
+```powershell
+pwsh -File scripts/build-installer.ps1 -Edition Full
+pwsh -File scripts/build-installer.ps1 -Edition Lite
+```
+
+构建依赖、产物位置和增量构建方法见 [打包指南](docs/guides/packaging.md)。CLI 不自动采集画面；游戏内验收范围见 [赛前验证](docs/validation/pregame-roster.md)。

@@ -52,7 +52,7 @@ cargo build --release -p bax-cli                # 构建命令行工具 target\r
 npm install                       # 第一次
 npm run tauri dev                 # 开发：启动 Vite 并运行调试版，前端改动即时生效
 npx tauri build --no-bundle       # 发布版 target\release\bax-app.exe，不打安装包
-npx tauri build                   # 发布版并打 NSIS 安装包
+npx tauri build                   # 默认 Lite；Full/Lite 发行构建见打包指南
 npm run typecheck                 # 前端类型检查
 npm run bindings                  # Rust 一侧改了快照类型之后，重新生成 src/shared/bindings
 ```
@@ -119,3 +119,5 @@ npx vite                          # 然后打开下面的地址
 - 测试和 `fixtures/` 只用虚构的玩家名、ID、卡组名和比赛编号。真实日志里抄出来的片段要先替换。
 - 需要真实数据的检查（全量回放、原型缓存解析）通过命令行工具手动运行，结论写进 [validation/](../validation/README.md) 的记录，不进自动测试。
 - `fixtures/` 下的文件按原始字节保存（见 `.gitattributes`），不要用会改写换行或编码的编辑器处理。
+
+Full / Lite 安装包使用 [打包指南](packaging.md) 的统一脚本。默认 Cargo/Tauri 构建不启用 OCR；开发 Full 使用 `npx tauri dev --features ocr`，并先构建原生 OCR。

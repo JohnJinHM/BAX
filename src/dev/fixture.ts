@@ -112,6 +112,7 @@ export const fixtureSnapshot: Snapshot = {
     endedAt: null,
     selfTeam: "bravo",
     rosterKnown: true,
+      pregame: { players: [], status: "" },
     players,
     teams: [average("alpha"), average("bravo")],
   },

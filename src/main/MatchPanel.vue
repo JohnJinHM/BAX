@@ -1,8 +1,7 @@
 <script setup lang="ts">
+import { rosterGroups, type RosterRow } from "../shared/roster";
 import { computed, ref } from "vue";
 
-import type { PlayerView } from "../shared/bindings/PlayerView";
-import type { Team } from "../shared/bindings/Team";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import {
   ago,
@@ -13,7 +12,6 @@ import {
   phaseNames,
   rating,
   ratio,
-  teamNames,
 } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import { openMatch, openPlayer } from "./navigation";
@@ -24,21 +22,9 @@ const current = computed(() => snapshot.value?.current ?? null);
 const message = ref<string | null>(null);
 const refreshing = ref(false);
 
-const groups = computed(() => {
-  const m = current.value;
-  if (!m) return [];
-  if (!m.rosterKnown) return [{ key: "waiting", title: "等待室（队伍未定）", players: m.players }];
-  const order: Team[] = m.selfTeam === "bravo" ? ["bravo", "alpha", "spectators"] : ["alpha", "bravo", "spectators"];
-  return order
-    .map((team) => {
-      const players = m.players.filter((p) => p.team === team);
-      const summary = m.teams.find((t) => t.team === team);
-      const mine = m.selfTeam === team ? "（本方）" : "";
-      const avg = summary ? `  均分 ${rating(summary.averageRating)}（${summary.rated}/${summary.players} 人有分）` : "";
-      return { key: team, title: `${teamNames[team]}${mine}${avg}`, players };
-    })
-    .filter((g) => g.players.length > 0);
-});
+const groups = computed(() => rosterGroups(current.value).map(g => ({
+  ...g, title: `${g.title}  均分 ${rating(g.averageValue)}（${g.rated}/${g.count} 人有分）`,
+})));
 
 const clockLine = computed(() => {
   const m = current.value;
@@ -48,7 +34,7 @@ const clockLine = computed(() => {
   return elapsed < 0 ? `距开局 ${mmss(-elapsed)}` : `已开局 ${mmss(elapsed)}`;
 });
 
-function encounters(p: PlayerView): string {
+function encounters(p: RosterRow): string {
   const e = p.encounters;
   return e.total === 0 ? "–" : `${e.total}（友 ${e.asTeammate} / 敌 ${e.asOpponent}）`;
 }
@@ -87,6 +73,7 @@ async function refresh() {
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>
 
+    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.pregame.players.length ? `OCR 识别可能不准确 · ${current.pregame.status}` : "等待玩家名单" }}</p>
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>
       <table>
@@ -113,14 +100,15 @@ async function refresh() {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in group.players" :key="p.id" :class="{ self: p.isSelf }">
+          <tr v-for="p in group.players" :key="p.key" :class="{ self: p.isSelf }">
             <td class="left">
-              <a class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name ?? "（无名）" }}</a>
-              <div class="hint">ID {{ p.id }}<template v-if="p.logName && p.logName !== p.name"> · {{ p.logName }}</template></div>
+              <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
+              <span v-else class="name" title="OCR 识别可能不准确，以日志确认结果为准">{{ p.name }}</span>
+              <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
               <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
             </td>
             <td class="num strong">{{ rating(p.profile?.rating) }}</td>
-            <td class="num">{{ p.profile?.level ?? "–" }}</td>
+            <td class="num">{{ p.displayLevel ?? "–" }}</td>
             <td class="num">{{ p.profile?.rank ?? "–" }}</td>
             <td class="num">{{ p.profile?.ratingGames ?? "–" }}</td>
             <td class="num">{{ percent(p.profile?.ranked?.winRate) }}</td>
@@ -130,7 +118,7 @@ async function refresh() {
             <td class="num">{{ minutes(p.profile?.ranked?.averageMinutes) }}</td>
             <td class="num">{{ encounters(p) }}</td>
             <td>
-              <span :class="{ stale: p.profile && !p.profileCurrent }">{{ ago(p.profileFetchedAt, now) }}</span>
+              <span :class="{ stale: p.profile && !p.profileCurrent }">{{ p.provisional ? "待日志确认" : ago(p.profileFetchedAt, now) }}</span>
               <span v-if="fetchText(p.fetch)" class="state" :class="p.fetch.state"> · {{ fetchText(p.fetch) }}</span>
             </td>
           </tr>

@@ -13,6 +13,7 @@
 | [reference/batrace-api.md](reference/batrace-api.md) | BATrace 接口：路径、错误分类、字段含义与特殊取值 | 接口返回什么，哪些值要特殊对待 |
 | [reference/sortie-explorer.md](reference/sortie-explorer.md) | 出兵分析：时间筛选、批次、价值、存续与单位图标 | 图表如何呈现与计算 |
 | [guides/development.md](guides/development.md) | 开发环境、构建、测试与命令行工具 | 怎么在本机把项目跑起来 |
+| [guides/packaging.md](guides/packaging.md) | Windows Full / Lite 安装包 | 怎么一键编译打包 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 分支、提交、版本与发布约定 | 怎么提交改动 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 变更日志 | 每个版本变了什么 |
 | [../NOTICE.md](../NOTICE.md) | 原型来源与许可声明 | 复用了谁的代码 |

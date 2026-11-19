@@ -845,3 +845,37 @@ fn a_version_one_database_upgrades_with_a_backup() {
     );
     assert!(db::backup_path(&path, 1).exists(), "升级前留了备份");
 }
+
+#[test]
+fn version_four_migrates_to_five_and_existing_five_reopens_without_data_loss() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("bax.db");
+    {
+        let conn = db::open(Some(&path), &MIGRATIONS[..4], true).expect("v4");
+        let mut old = Store { conn };
+        old.set_note(PlayerId(101), "保留备注", Timestamp::from_millis(1000))
+            .expect("note");
+        old.record_match(state(&played(1, 1000, standard_roster())))
+            .expect("match");
+    }
+    {
+        let store = Store::open(&path).expect("v4 -> v5");
+        assert_eq!(store.schema_version().expect("version"), 5);
+        assert!(db::backup_path(&path, 4).exists());
+        let _: u32 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM cancelled_matches", [], |r| r.get(0))
+            .expect("v5 view");
+    }
+    let store = Store::open(&path).expect("open existing v5");
+    assert_eq!(
+        store
+            .note(PlayerId(101))
+            .expect("note")
+            .expect("exists")
+            .body,
+        "保留备注"
+    );
+    assert!(store.match_record(MatchId(1)).expect("match").is_some());
+    assert_eq!(store.schema_version().expect("version"), 5);
+}

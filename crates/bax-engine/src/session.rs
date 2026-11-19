@@ -183,6 +183,8 @@ pub(crate) struct Parts {
 }
 
 pub(crate) struct Session {
+    pregame: crate::pregame::PregameView,
+    pregame_cutoff: u64,
     config: EngineConfig,
     clock: Arc<dyn Clock>,
     store: Store,
@@ -250,6 +252,8 @@ impl Session {
         // 先放一个空的接收端，马上由 start_log_thread 换成真正的
         let (_, log_rx) = mpsc::channel(1);
         let mut session = Session {
+            pregame: Default::default(),
+            pregame_cutoff: 0,
             config,
             clock,
             store,
@@ -298,6 +302,21 @@ impl Session {
             "对局会话启动"
         );
         self.publish();
+        let (ocr_tx, mut ocr_rx) = mpsc::channel(4);
+        #[cfg(feature = "ocr")]
+        let ocr_task = self.config.ocr_runtime.clone().map(|root| {
+            tokio::spawn(crate::pregame::worker::run(
+                root,
+                self.config.store_path.clone(),
+                self.client.clone(),
+                self.snapshot_tx.subscribe(),
+                ocr_tx,
+            ))
+        });
+        #[cfg(feature = "ocr")]
+        let _ocr_guard = OcrGuard(ocr_task);
+        #[cfg(not(feature = "ocr"))]
+        drop(ocr_tx);
         loop {
             let input = tokio::select! {
                 command = commands.recv() => match command {
@@ -308,17 +327,26 @@ impl Session {
                 Some(msg) = self.log_rx.recv() => Input::Log(msg),
                 Some(result) = self.fetch_rx.recv() => Input::Fetched(Box::new(result)),
                 Some(event) = self.report_rx.recv() => Input::Report(event),
+                Some(message) = ocr_rx.recv() => Input::Pregame(message),
                 _ = tick.tick() => Input::Tick,
             };
             // 处理过程中的诊断记录都挂在当前比赛的 span 下
             let span = self.match_span.clone();
             let _entered = span.enter();
             match input {
+                Input::Pregame(message) => self.on_pregame(message),
                 Input::Command(command) => self.on_command(command),
                 Input::Log(msg) => self.on_log(msg),
                 Input::Fetched(result) => self.on_fetched(*result),
                 Input::Report(event) => self.on_report_event(event),
                 Input::Tick => self.on_tick(),
+            }
+            if crate::pregame::ticket(&self.build_snapshot()).is_none() {
+                if self.pregame != Default::default() {
+                    self.dirty = true;
+                }
+                self.pregame = Default::default();
+                self.pregame_cutoff = self.revision + 1;
             }
             self.dispatch();
             if self.dirty && self.log.ready {
@@ -334,7 +362,21 @@ impl Session {
 
     // ------------------------------------------------------------ 输入
 
+    fn on_pregame(&mut self, message: crate::pregame::Message) {
+        if message.revision >= self.pregame_cutoff
+            && crate::pregame::ticket(&self.build_snapshot()).as_ref() == Some(&message.ticket)
+            && self.pregame != message.view
+        {
+            self.pregame = message.view;
+            self.dirty = true;
+        }
+    }
+
     fn on_command(&mut self, command: Command) {
+        if matches!(&command, Command::SetUiSetting { key, .. } if key == "ui.ocr") {
+            self.pregame = Default::default();
+            self.pregame_cutoff = self.revision + 1;
+        }
         match command {
             Command::RefreshPlayers => {
                 let ids: Vec<PlayerId> = self.slots.iter().map(|s| s.id).collect();
@@ -1018,6 +1060,8 @@ impl Session {
             self.match_span
                 .in_scope(|| tracing::info!(phase = ?phase, rejoined, live, "发现新比赛"));
         }
+        self.pregame = Default::default();
+        self.pregame_cutoff = self.revision + 1;
         self.generation += 1;
         self.slots.clear();
         self.queue.clear();
@@ -1156,6 +1200,8 @@ impl Session {
         let mut tracker = Tracker::new(self.config.tracker.clone());
         tracker.set_self_hint(self.self_hint);
         self.tracker = tracker;
+        self.pregame = Default::default();
+        self.pregame_cutoff = self.revision + 1;
         self.generation += 1;
         self.slots.clear();
         self.queue.clear();
@@ -1300,6 +1346,24 @@ impl Session {
                 .map(|team| TeamSummary::of(team, &players))
                 .collect();
             MatchView {
+                pregame: if m.roster.is_empty()
+                    && !m.rejoined
+                    && m.connection == Connection::Connected
+                    && matches!(
+                        m.phase,
+                        Phase::WaitingRoom | Phase::Loading | Phase::Deployment
+                    )
+                    && self
+                        .ui
+                        .get("ui.ocr")
+                        .and_then(|v| v.get("enabled"))
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(true)
+                {
+                    self.pregame.clone()
+                } else {
+                    Default::default()
+                },
                 match_id: m.match_id,
                 phase: m.phase,
                 connection: m.connection,
@@ -1378,6 +1442,7 @@ fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> Profil
 
 /// 会话循环一次处理的输入。
 enum Input {
+    Pregame(crate::pregame::Message),
     Command(Command),
     Log(LogMsg),
     // 资料结果比其他输入大得多，装箱避免每次循环都搬动整块内存
@@ -1418,3 +1483,18 @@ fn local_time(at: Timestamp) -> String {
 fn millis(duration: Duration) -> i64 {
     i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
 }
+
+#[cfg(feature = "ocr")]
+struct OcrGuard(Option<tokio::task::JoinHandle<()>>);
+#[cfg(feature = "ocr")]
+impl Drop for OcrGuard {
+    fn drop(&mut self) {
+        if let Some(task) = &self.0 {
+            task.abort();
+        }
+    }
+}
+
+#[cfg(all(test, feature = "ocr"))]
+#[path = "pregame/session_tests.rs"]
+mod pregame_tests;

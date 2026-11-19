@@ -11,6 +11,10 @@ publish.workspace = true
 name = "bax-app"
 path = "src/main.rs"
 
+[features]
+default = []
+ocr = ["bax-engine/ocr"]
+
 [build-dependencies]
 tauri-build = { version = "~2.6", features = [] }
 

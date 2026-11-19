@@ -1,10 +1,21 @@
 // 在浏览器里预览界面：用 Tauri 官方的 mockIPC 冒充 Rust 一侧。只在 dev/ 预览页里使用，不进发布包。
 
-import { mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
 import { fixtureDetail, fixtureHistory, fixtureHits, fixtureReport, fixtureSnapshot } from "./fixture";
 
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
+  mockWindows("main");
+  if (new URLSearchParams(location.search).has("pregame") && fixtureSnapshot.current) {
+    const m = fixtureSnapshot.current;
+    fixtureSnapshot.alert = null;
+    m.phase = "waitingRoom"; m.rosterKnown = false; m.clock = null;
+    m.pregame = { status: "候选待日志确认", players: m.players.map((p, i) => ({
+      observed: { side: i < 5 ? "left" : "right", row: i % 5, friendly: i < 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
+      candidates: i === 4 ? [] : [{ id: p.id, name: p.name ?? "Raven", level: p.profile?.level ?? 50, local: i % 2 === 0, profile: p.profile }],
+      ambiguous: i === 3,
+    })) }; m.players = []; m.teams = [];
+  }
   mockIPC((cmd, args) => {
     switch (cmd) {
       case "get_snapshot":
@@ -13,6 +24,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
           : fixtureSnapshot;
       case "get_app_status":
         return {
+          ocrSupported: !new URLSearchParams(location.search).has("lite"),
           overlayVisible: true,
           overlayLocked: options.locked ?? false,
           hotkeyErrors: [],

@@ -28,6 +28,7 @@ pub mod history;
 mod logthread;
 mod player;
 mod postmatch;
+pub mod pregame;
 mod profile;
 mod reports;
 mod session;

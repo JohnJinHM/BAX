@@ -1,6 +1,11 @@
 //! HTTP 客户端。
 
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::time::Instant;
 
 use bax_core::{MatchId, PlayerId};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue, RETRY_AFTER};
@@ -54,10 +59,17 @@ pub struct Fetched<T> {
     pub raw: String,
 }
 
+#[derive(Debug, Default)]
+struct SharedRequests {
+    ocr_profiles: HashMap<PlayerId, (Instant, Fetched<PlayerInfoResponse>)>,
+    cooldown: Option<Instant>,
+}
+
 /// BATrace 客户端。克隆的代价很低，内部共用同一个连接池。
 #[derive(Debug, Clone)]
 pub struct BatraceClient {
     http: reqwest::Client,
+    shared: Arc<Mutex<SharedRequests>>,
     base_url: String,
     player_info_timeout: Duration,
 }
@@ -91,6 +103,7 @@ impl BatraceClient {
             .map_err(|err| ApiError::Config(err.to_string()))?;
         Ok(BatraceClient {
             http,
+            shared: Arc::new(Mutex::new(SharedRequests::default())),
             base_url,
             player_info_timeout: config.player_info_timeout,
         })
@@ -98,6 +111,19 @@ impl BatraceClient {
 
     /// 玩家资料、累计统计和近期比赛 ID。站点没有这名玩家时返回 [`ApiError::NotFound`]。
     pub async fn player_info(&self, id: PlayerId) -> Result<Fetched<PlayerInfoResponse>, ApiError> {
+        // Only OCR-prefetched profiles are reused, once, when the authoritative ID arrives.
+        let cached = self
+            .shared
+            .lock()
+            .expect("request state")
+            .ocr_profiles
+            .remove(&id);
+        if let Some((at, fetched)) = cached
+            && at.elapsed() < Duration::from_secs(120)
+        {
+            tracing::debug!(endpoint = "players.info", "复用 OCR 已获取资料");
+            return Ok(fetched);
+        }
         let fetched: Fetched<PlayerInfoResponse> = self
             .get(
                 "players.info",
@@ -109,6 +135,39 @@ impl BatraceClient {
             return Err(ApiError::NotFound);
         }
         Ok(fetched)
+    }
+
+    /// 赛前只保存按 ID 获取的资料响应；不把 OCR 名单或身份推断写入数据库。
+    pub async fn prefetch_player_info(
+        &self,
+        id: PlayerId,
+    ) -> Result<Fetched<PlayerInfoResponse>, ApiError> {
+        let fetched = self.player_info(id).await?;
+        let mut shared = self.shared.lock().expect("request state");
+        shared
+            .ocr_profiles
+            .retain(|_, (at, _)| at.elapsed() < Duration::from_secs(120));
+        if shared.ocr_profiles.len() < 64 {
+            shared
+                .ocr_profiles
+                .insert(id, (Instant::now(), fetched.clone()));
+        }
+        Ok(fetched)
+    }
+
+    /// 名称搜索；URL 编码后复用统一错误分类，不记录查询文本。
+    pub async fn search_players(
+        &self,
+        name: &str,
+    ) -> Result<Fetched<crate::model::PlayerSearchResponse>, ApiError> {
+        let mut url = reqwest::Url::parse("https://localhost/api/players/search")
+            .map_err(|_| ApiError::Config("无效搜索地址".into()))?;
+        url.query_pairs_mut()
+            .append_pair("q", name)
+            .append_pair("limit", "50");
+        let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
+        self.get("players.search", &path, Some(self.player_info_timeout))
+            .await
     }
 
     /// 玩家的比赛摘要，按时间从新到旧分页。
@@ -158,6 +217,15 @@ impl BatraceClient {
         path: &str,
         timeout: Option<Duration>,
     ) -> Result<Fetched<T>, ApiError> {
+        let cooldown = self.shared.lock().expect("request state").cooldown;
+        if let Some(until) = cooldown
+            && until > Instant::now()
+        {
+            return Err(ApiError::RateLimited {
+                retry_after: Some(until.saturating_duration_since(Instant::now())),
+            });
+        }
+        tracing::debug!(endpoint, "API 请求开始");
         let mut request = self.http.get(format!("{}{path}", self.base_url));
         if let Some(timeout) = timeout {
             request = request.timeout(timeout);
@@ -166,6 +234,12 @@ impl BatraceClient {
         let status = response.status();
         if !status.is_success() {
             let err = status_error(status, &response);
+            if let ApiError::RateLimited { retry_after } = &err {
+                let delay = retry_after
+                    .unwrap_or(Duration::from_secs(30))
+                    .max(Duration::from_secs(30));
+                self.shared.lock().expect("request state").cooldown = Some(Instant::now() + delay);
+            }
             tracing::debug!(%status, endpoint = %endpoint, "请求失败");
             return Err(err);
         }

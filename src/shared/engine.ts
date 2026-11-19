@@ -18,6 +18,7 @@ const APP_STATUS_EVENT = "bax://app";
 
 /** 外壳自己的状态：悬浮窗与快捷键。对应 src-tauri/src/app.rs 的 AppStatus。 */
 export interface AppStatus {
+  ocrSupported: boolean;
   overlayVisible: boolean;
   overlayLocked: boolean;
   /** 注册失败的快捷键及原因 */
