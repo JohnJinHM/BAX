@@ -111,7 +111,14 @@ pub fn run() {
         .setup(move |app| {
             let data_dir = data_dir.ok_or("无法确定数据目录")?;
             let mut config = EngineConfig::new(&data_dir);
-            config.ocr_runtime = Some(data_dir.join("ocr"));
+            let bundled_ocr = app.path().resource_dir()?.join("ocr-runtime");
+            config.ocr_runtime = Some(
+                if cfg!(debug_assertions) && !bundled_ocr.join("bax-ocr.exe").is_file() {
+                    data_dir.join("ocr")
+                } else {
+                    bundled_ocr
+                },
+            );
             // 引擎需要在异步运行时里启动；Tauri 自带的就是 tokio
             let engine = tauri::async_runtime::block_on(async {
                 Engine::start(config, Arc::new(SystemClock))

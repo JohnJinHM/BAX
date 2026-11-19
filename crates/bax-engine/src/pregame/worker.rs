@@ -22,13 +22,18 @@ struct Process {
 }
 impl Process {
     async fn start(root: &std::path::Path) -> Result<Self, String> {
+        let executable = root.join("bax-ocr.exe");
         let python = root.join("Scripts/python.exe");
-        if !python.is_file() {
-            return Err("OCR 未安装，请运行 scripts/setup-ocr.ps1".into());
-        }
-        let mut command = tokio::process::Command::new(python);
+        let mut command = if executable.is_file() {
+            tokio::process::Command::new(executable)
+        } else if cfg!(debug_assertions) && python.is_file() {
+            let mut command = tokio::process::Command::new(python);
+            command.args(["-u", "-c", include_str!("../../../../ocr/worker.py")]);
+            command
+        } else {
+            return Err("OCR 运行组件缺失，请重新安装 BAX".into());
+        };
         command
-            .args(["-u", "-c", include_str!("../../../../ocr/worker.py")])
             .arg(root.join("models"))
             .env("PYTHONUTF8", "1")
             .stdin(Stdio::piped())
@@ -49,7 +54,7 @@ impl Process {
         };
         let hello = process.read().await?;
         if hello.get("ready").and_then(serde_json::Value::as_bool) != Some(true) {
-            return Err("OCR 模型未就绪，请重新运行安装脚本".into());
+            return Err("OCR 模型未就绪，请重新安装 BAX".into());
         }
         Ok(process)
     }

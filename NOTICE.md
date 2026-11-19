@@ -67,11 +67,11 @@ SOFTWARE.
 
 ## 本地 OCR 运行时
 
-赛前 OCR 使用 RapidOCR、PaddleOCR 模型与 ONNX Runtime，通过 `scripts/setup-ocr.ps1` 安装在本机数据目录；模型和 Python 环境不入库、不随当前安装包捆绑。采集使用 Pillow，图像处理使用 OpenCV/NumPy。源代码与许可证由各项目提供：
+赛前 OCR 使用 RapidOCR、PaddleOCR 模型与 ONNX Runtime，通过 `scripts/build-installer.ps1` 打包，随安装程序分发在 `ocr-runtime/`；二进制产物与模型不入库。采集使用 Pillow，图像处理使用 OpenCV/NumPy。源代码与许可证由各项目提供：
 
 - [RapidOCR](https://github.com/RapidAI/RapidOCR)
 - [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
 - [ONNX Runtime](https://github.com/microsoft/onnxruntime)
 - [Pillow](https://github.com/python-pillow/Pillow)、[OpenCV](https://github.com/opencv/opencv)、[NumPy](https://github.com/numpy/numpy)
 
-未来捆绑分发运行时须一并携带其许可证与第三方声明。
+运行时附带 `licenses/` 许可证与第三方声明，以及 `manifest.json` 的构建依赖版本和模型来源/哈希。

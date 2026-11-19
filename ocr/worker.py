@@ -3,6 +3,7 @@ import contextlib
 import ctypes
 from ctypes import wintypes
 import json
+import socket
 from pathlib import Path
 import re
 import sys
@@ -115,6 +116,15 @@ def capture_game():
 
 def main():
     model_root = Path(sys.argv[1])
+    # OCR is entirely local, including first startup. Missing assets must fail, not download.
+    def offline(*args, **kwargs):
+        raise OSError("OCR network access disabled")
+    socket.socket.connect = offline
+    required = ["PP-OCRv6_det_small.onnx", "PP-OCRv6_rec_small.onnx", "eslav_PP-OCRv5_rec_mobile.onnx"]
+    if not all((model_root / name).is_file() for name in required):
+        print(json.dumps({"ready": False, "error": "missing_models"}), flush=True)
+        return
+
     if sys.platform == "win32":
         # Physical pixels across displays with different scaling.
         try:
@@ -124,6 +134,8 @@ def main():
     with contextlib.redirect_stdout(sys.stderr):
         engine = RapidOCR(params={
             "Global.model_root_dir": str(model_root), "Global.log_level": "error",
+            "Det.model_path": str(model_root / "PP-OCRv6_det_small.onnx"),
+            "Rec.model_path": str(model_root / "PP-OCRv6_rec_small.onnx"),
             "EngineConfig.onnxruntime.intra_op_num_threads": 2,
             "EngineConfig.onnxruntime.inter_op_num_threads": 1,
         })
@@ -132,6 +144,7 @@ def main():
         engine(np.zeros((48, 160, 3), dtype=np.uint8), use_det=False, use_cls=False)
         russian = RapidOCR(params={
             "Global.model_root_dir": str(model_root), "Global.log_level": "error",
+            "Rec.model_path": str(model_root / "eslav_PP-OCRv5_rec_mobile.onnx"),
             "Rec.lang_type": LangRec.ESLAV, "Rec.model_type": ModelType.MOBILE,
             "Rec.ocr_version": OCRVersion.PPOCRV5,
             "EngineConfig.onnxruntime.intra_op_num_threads": 2,
@@ -139,6 +152,15 @@ def main():
         })
         russian(np.zeros((48, 160, 3), dtype=np.uint8), use_det=False, use_cls=False)
     print(json.dumps({"ready": True}), flush=True)
+    if "--self-test" in sys.argv:
+        return
+    if "--image" in sys.argv:
+        image_path = sys.argv[sys.argv.index("--image") + 1]
+        image = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError("image_decode_failed")
+        print(json.dumps({"players": extract(engine, image, russian)}, ensure_ascii=True), flush=True)
+        return
     for line in sys.stdin:
         try:
             json.loads(line)

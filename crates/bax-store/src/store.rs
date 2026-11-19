@@ -122,6 +122,15 @@ const MIGRATIONS: &[&str] = &[
         raw        TEXT NOT NULL,
         fetched_at INTEGER NOT NULL
     ) STRICT, WITHOUT ROWID;",
+    // 第 5 版：动态识别准备阶段取消；旧记录和后续导入适用同一口径。
+    "CREATE VIEW cancelled_matches AS
+     SELECT m.id FROM matches m
+     WHERE m.phase = 'ended' AND m.start_source = 'logEstimate'
+       AND m.end_cause IN ('matchEnded', 'serverExitInstance')
+       AND m.scenario_loaded_at IS NOT NULL
+       AND m.ended_at >= m.scenario_loaded_at
+       AND m.ended_at <= m.start_at + 2000
+       AND NOT EXISTS (SELECT 1 FROM match_reports r WHERE r.match_id = m.id);",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。

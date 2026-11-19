@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "../.local/ocr-dist/bax-ocr/": "ocr-runtime/"
+    }
+  }
+}
