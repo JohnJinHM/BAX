@@ -86,7 +86,7 @@ const emptyText = computed(() => {
 });
 
 function playerTitle(p: RosterRow): string {
-  const parts: string[] = p.provisional ? ["赛前识别，待日志确认"] : [];
+  const parts: string[] = p.provisional ? ["OCR 识别可能不准确，以日志确认结果为准"] : [];
   if (p.note) parts.push(`备注：${p.note}`);
   if (p.logName && p.logName !== p.name) parts.push(`日志名 ${p.logName}`);
   const e = p.encounters;
@@ -287,7 +287,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
         </ul>
       </section>
       <p v-if="current && !current.rosterKnown && appearance.expanded" class="next" role="status">
-        {{ current.pregame.players.length ? current.pregame.status : '等待玩家名单' }}
+        {{ current.pregame.players.length ? `OCR 识别可能不准确 · ${current.pregame.status}` : '等待玩家名单' }}
       </p>
     </template>
     <div v-else class="empty">{{ emptyText }}</div>
