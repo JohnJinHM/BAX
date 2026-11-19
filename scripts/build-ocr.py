@@ -28,6 +28,11 @@ subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '
     '--exclude-module', 'tkinter', '--exclude-module', 'matplotlib',
     str(ROOT / 'ocr/worker.py')], check=True, cwd=ROOT)
 shutil.copytree(CACHE, DIST / 'models', dirs_exist_ok=True)
+# Explicit model paths above the runtime replace RapidOCR's bundled defaults.
+for model in models:
+    duplicate = DIST / '_internal' / 'rapidocr' / 'models' / model['file']
+    if duplicate.is_file():
+        duplicate.unlink()
 licenses = DIST / 'licenses'
 licenses.mkdir(exist_ok=True)
 packages = []
