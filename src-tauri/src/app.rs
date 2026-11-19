@@ -114,7 +114,8 @@ pub fn run() {
             let bundled_ocr = app.path().resource_dir()?.join("ocr-runtime");
             config.ocr_runtime = Some(
                 if cfg!(debug_assertions) && !bundled_ocr.join("bax-ocr.exe").is_file() {
-                    data_dir.join("ocr")
+                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("../.local/ocr-dist/bax-ocr")
                 } else {
                     bundled_ocr
                 },

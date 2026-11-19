@@ -67,14 +67,14 @@ SOFTWARE.
 
 ## 本地 OCR 运行时
 
-赛前 OCR 使用 RapidOCR、PaddleOCR 模型与 ONNX Runtime，通过 `scripts/build-installer.ps1` 打包，随安装程序分发在 `ocr-runtime/`；二进制产物与模型不入库。采集使用 Pillow，图像处理使用 OpenCV/NumPy。源代码与许可证由各项目提供：
+赛前 OCR 使用自主实现的 C++ 工作进程、PaddleOCR 模型与 ONNX Runtime CPU，Windows 采集与图片解码使用系统 GDI/WIC，不分发 Python、OpenCV 或 NumPy。预处理及 CTC 解码口径参考 RapidOCR/PaddleOCR，C++ 实现未复制其源代码。
 
-- [RapidOCR](https://github.com/RapidAI/RapidOCR)
-- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
-- [ONNX Runtime](https://github.com/microsoft/onnxruntime)
-- [Pillow](https://github.com/python-pillow/Pillow)、[OpenCV](https://github.com/opencv/opencv)、[NumPy](https://github.com/numpy/numpy)
+- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)：模型，Apache-2.0，许可全文在 `ocr/licenses/PaddleOCR.txt`。
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime)：原生 CPU 推理，MIT；从 Microsoft.ML.OnnxRuntime 1.22.0 NuGet 包提取并校验 SHA-256。
+- MSVC Runtime：应用本地分发所需 Microsoft VC143 可再发行 DLL，来源为已安装 Visual Studio 的 Redist 目录。
 
-运行时附带 `licenses/` 许可证与第三方声明，以及 `manifest.json` 的构建依赖版本和模型来源/哈希。
+安装包附带模型与推理引擎的 `licenses/`、第三方声明，以及 `manifest.json` 中的版本、模型来源和哈希。模型和二进制不入库。
+
 ## 战报改型目录
 
 `crates/bax-engine/src/unit-variants.json` 由 BA-Units 的游戏 1.2.2.1 导出表（Units、Modifications、Options）和英文名称生成，更新命令为 `node scripts/import-unit-variants.mjs`。名称与图标的处理规则参考 BA-DeckEditor 的 `src/deck/label.ts`，由 BAX 在 Rust 中实现。改型图标沿用上文的游戏素材来源与权利归属。

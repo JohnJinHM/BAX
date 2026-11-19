@@ -23,19 +23,12 @@ struct Process {
 impl Process {
     async fn start(root: &std::path::Path) -> Result<Self, String> {
         let executable = root.join("bax-ocr.exe");
-        let python = root.join("Scripts/python.exe");
-        let mut command = if executable.is_file() {
-            tokio::process::Command::new(executable)
-        } else if cfg!(debug_assertions) && python.is_file() {
-            let mut command = tokio::process::Command::new(python);
-            command.args(["-u", "-c", include_str!("../../../../ocr/worker.py")]);
-            command
-        } else {
-            return Err("OCR 运行组件缺失，请重新安装 BAX".into());
-        };
+        if !executable.is_file() {
+            return Err("OCR 运行组件缺失，请重新安装 OCR 版本 BAX".into());
+        }
+        let mut command = tokio::process::Command::new(executable);
         command
             .arg(root.join("models"))
-            .env("PYTHONUTF8", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
