@@ -8,6 +8,77 @@ fn t(secs: i64) -> Timestamp {
     Timestamp::from_secs(secs)
 }
 
+#[test]
+fn cancelled_matches_block_old_queues_manual_requests_and_catch_up() {
+    let mut store = Store::open_in_memory().expect("库");
+    let id = MatchId(1);
+    record(&mut store, 1, 100, true, true);
+    store.queue_report(id, t(100), t(100)).expect("旧队列");
+    store
+        .conn
+        .execute(
+            "UPDATE matches SET ended_at = start_at + 49 WHERE id = 1",
+            [],
+        )
+        .expect("准备结束即取消");
+    assert!(store.report_cancelled(id).expect("取消"));
+    assert_eq!(
+        store.match_history(10, 0).expect("历史")[0].report,
+        ReportState::Cancelled
+    );
+    assert!(!store.request_report(id, t(200)).expect("手动"));
+    assert!(!store.queue_report(id, t(200), t(200)).expect("自动"));
+    assert!(store.due_reports(t(10000), 10).expect("到期").is_empty());
+    assert_eq!(store.pending_reports().expect("计数"), 0);
+    assert_eq!(store.next_report_due().expect("调度"), None);
+    store
+        .conn
+        .execute("DELETE FROM report_queue", [])
+        .expect("去掉旧队列");
+    assert!(store.unreported_matches(t(0), 10).expect("补录").is_empty());
+    // 已有官方战报是更强的证据，不因本地时钟误差屏蔽它。
+    store
+        .save_report(id, "{}", meta(Team::Alpha), t(200))
+        .expect("官方战报");
+    assert!(!store.report_cancelled(id).expect("有战报"));
+    assert!(matches!(
+        store.match_history(10, 0).expect("历史")[0].report,
+        ReportState::Ready { .. }
+    ));
+}
+
+#[test]
+fn cancellation_requires_a_normal_start_and_an_end_signal() {
+    let mut store = Store::open_in_memory().expect("库");
+    record(&mut store, 1, 100, true, true);
+    for (source, cause, delta, expected) in [
+        ("logEstimate", "matchEnded", -30_000, true),
+        ("logEstimate", "matchEnded", 2_000, true),
+        ("logEstimate", "matchEnded", 2_001, false),
+        ("logEstimate", "connectionLost", 0, false),
+        ("manual", "matchEnded", 0, false),
+        ("report", "matchEnded", 0, false),
+        ("logEstimate", "matchEnded", -61_000, false),
+    ] {
+        store
+            .conn
+            .execute(
+                "UPDATE matches SET start_source = ?1, end_cause = ?2, ended_at = start_at + ?3",
+                params![source, cause, delta],
+            )
+            .expect("情形");
+        assert_eq!(store.report_cancelled(MatchId(1)).expect("分类"), expected);
+    }
+    store
+        .conn
+        .execute(
+            "UPDATE matches SET start_at = NULL, start_source = NULL",
+            [],
+        )
+        .expect("重连无起点");
+    assert!(!store.report_cancelled(MatchId(1)).expect("未知时长"));
+}
+
 /// 记录一场比赛：本机（500，名字 Me）在 Bravo，对面一人。`battle` 为假时没打起来（没有计时基准）。
 fn record(store: &mut Store, match_id: u64, at: i64, battle: bool, ended: bool) {
     let id = MatchId(match_id);

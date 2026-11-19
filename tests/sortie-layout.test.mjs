@@ -73,3 +73,18 @@ test('every native type icon is packaged and shared vehicle types have distinct 
   assert.notEqual(unitTypes.ifv.tag, unitTypes.transport.tag);
   assert.notEqual(unitTypes.ifv.color, unitTypes.transport.color);
 });
+
+test('different options on one base unit stay separate in batches', () => {
+  const a = { ...entry(0, 0), variantKey: '1:[10]' };
+  const b = { ...entry(1, 0), variantKey: '1:[20]' };
+  const c = { ...entry(2, 0), variantKey: '1:[10]' };
+  assert.deepEqual(unitTiles([a, b, c]).map(t => t.count), [2, 1]);
+  assert.deepEqual(clusterEntries([a, b, c], 0).map(t => t.entries.length), [2, 1]);
+});
+
+test('all variant thumbnails are packaged locally', async () => {
+  const data = JSON.parse(await readFile(new URL('../crates/bax-engine/src/unit-variants.json', import.meta.url), 'utf8'));
+  for (const thumbnail of new Set([...data.units, ...data.options].map(x => x.thumbnail).filter(Boolean))) {
+    await access(new URL(`../public/unit-icons/${thumbnail}`, import.meta.url));
+  }
+});

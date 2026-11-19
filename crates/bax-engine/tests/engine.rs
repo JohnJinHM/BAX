@@ -1197,7 +1197,7 @@ async fn a_report_that_never_appears_is_given_up_and_can_be_requested_again() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_match_that_ends_at_deployment_gives_up_quickly_and_says_why() {
+async fn a_match_cancelled_at_deployment_never_requests_a_report() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
     Mock::given(method("GET"))
@@ -1216,26 +1216,26 @@ async fn a_match_that_ends_at_deployment_gives_up_quickly_and_says_why() {
     );
     fx.clock.set(ts("18:54:34.000"));
     let engine = fx.start_with(quick_reports(fx.config()));
-    wait_for(&engine, "排队等战报", |s| s.archive.pending == 1).await;
-
-    // 短时间表只有一个点：试一次就放弃，并说明原因
-    fx.clock.set(ts("18:54:35.000"));
-    let mut tries = 0;
-    let last_error = loop {
-        let history = engine.match_history(10, 0).await.expect("比赛记录");
-        if let Some(ReportState::GaveUp { last_error, .. }) = history.first().map(|r| &r.report) {
-            break last_error.clone();
-        }
-        tries += 1;
-        assert!(tries < 200, "应该已经放弃：{history:?}");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    };
-    assert_eq!(report_requests(&fx).await, 1);
+    wait_for(&engine, "识别结束", |s| {
+        s.current.as_ref().is_some_and(|m| m.phase == Phase::Ended)
+    })
+    .await;
+    let history = engine.match_history(10, 0).await.expect("比赛记录");
+    assert_eq!(history[0].report, ReportState::Cancelled);
+    engine
+        .fetch_report(MatchId(id))
+        .await
+        .expect("拦截手动请求");
     assert!(
-        last_error
-            .as_deref()
-            .is_some_and(|e| e.contains("没打起来")),
-        "{last_error:?}"
+        engine
+            .match_report(MatchId(id))
+            .await
+            .expect("读取")
+            .is_none()
     );
+    fx.clock.set(ts("19:54:35.000"));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(report_requests(&fx).await, 0);
+    assert_eq!(engine.snapshot().archive.pending, 0);
     engine.shutdown().await;
 }

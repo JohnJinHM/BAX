@@ -61,6 +61,8 @@ pub struct QueuedReport {
 )]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum ReportState {
+    /// 有结束信号且在准备阶段附近取消，不请求战报。
+    Cancelled,
     /// 没有战报，也不在等。
     None,
     /// 在等，`next_at` 再试。
@@ -99,6 +101,14 @@ pub struct HistoryRow {
 }
 
 impl Store {
+    pub fn report_cancelled(&self, id: MatchId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM cancelled_matches WHERE id = ?1)",
+            [id_to_db(id.get())],
+            |row| row.get(0),
+        )?)
+    }
+
     /// 保存一份战报原文，并把这场比赛移出待获取队列。
     pub fn save_report(
         &mut self,
@@ -221,7 +231,7 @@ impl Store {
         queued_at: Timestamp,
         next_at: Timestamp,
     ) -> Result<bool> {
-        if self.has_report(id)? {
+        if self.has_report(id)? || self.report_cancelled(id)? {
             return Ok(false);
         }
         let inserted = self.conn.execute(
@@ -238,7 +248,7 @@ impl Store {
 
     /// 手动请求：立刻再试，重试间隔从现在重新算。已经有战报时返回假。
     pub fn request_report(&mut self, id: MatchId, now: Timestamp) -> Result<bool> {
-        if self.has_report(id)? {
+        if self.has_report(id)? || self.report_cancelled(id)? {
             return Ok(false);
         }
         self.conn.execute(
@@ -259,6 +269,7 @@ impl Store {
                     m.ended_at - m.start_at
              FROM report_queue q LEFT JOIN matches m ON m.id = q.match_id
              WHERE q.next_at IS NOT NULL AND q.next_at <= ?1
+               AND q.match_id NOT IN (SELECT id FROM cancelled_matches)
              ORDER BY q.next_at, q.match_id LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![now.as_millis(), limit], queued_from_row)?;
@@ -270,7 +281,8 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT MIN(next_at) FROM report_queue WHERE next_at IS NOT NULL",
+                "SELECT MIN(next_at) FROM report_queue WHERE next_at IS NOT NULL
+                 AND match_id NOT IN (SELECT id FROM cancelled_matches)",
                 [],
                 |row| row.get::<_, Option<i64>>(0),
             )?
@@ -280,7 +292,8 @@ impl Store {
     /// 还在等的比赛数，不含已经放弃的。
     pub fn pending_reports(&self) -> Result<u32> {
         Ok(self.conn.query_row(
-            "SELECT COUNT(*) FROM report_queue WHERE next_at IS NOT NULL",
+            "SELECT COUNT(*) FROM report_queue WHERE next_at IS NOT NULL
+                 AND match_id NOT IN (SELECT id FROM cancelled_matches)",
             [],
             |row| row.get(0),
         )?)
@@ -334,6 +347,7 @@ impl Store {
         let mut stmt = self.conn.prepare_cached(
             "SELECT m.id, m.ended_at, m.ended_at - m.start_at FROM matches m
              WHERE m.ended_at IS NOT NULL AND m.ended_at >= ?1 AND m.start_at IS NOT NULL
+               AND m.id NOT IN (SELECT id FROM cancelled_matches)
                AND NOT EXISTS (SELECT 1 FROM match_reports r WHERE r.match_id = m.id)
                AND NOT EXISTS (SELECT 1 FROM report_queue q WHERE q.match_id = m.id)
              ORDER BY m.ended_at DESC LIMIT ?2",
@@ -380,7 +394,8 @@ impl Store {
             "SELECT m.id, m.discovered_at, m.map, m.phase, m.self_team, m.start_at, m.ended_at,
                     (SELECT COUNT(*) FROM match_players mp WHERE mp.match_id = m.id),
                     r.fetched_at, r.duration_secs, r.winner,
-                    q.attempts, q.next_at, q.last_error
+                    q.attempts, q.next_at, q.last_error,
+                    m.id IN (SELECT id FROM cancelled_matches)
              FROM matches m
              LEFT JOIN match_reports r ON r.match_id = m.id
              LEFT JOIN report_queue q ON q.match_id = m.id
@@ -403,6 +418,7 @@ impl Store {
                 attempts: row.get(11)?,
                 next_at: row.get(12)?,
                 last_error: row.get(13)?,
+                cancelled: row.get(14)?,
             })
         })?;
         let mut out = Vec::new();
@@ -425,6 +441,7 @@ fn queued_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueuedReport> {
 }
 
 struct RawHistory {
+    cancelled: bool,
     id: i64,
     at: i64,
     map: Option<String>,
@@ -449,21 +466,25 @@ impl RawHistory {
             (Some(me), Some(w)) if me.is_playing() => Some(me == w),
             _ => None,
         };
-        let report = match (self.fetched_at, self.attempts) {
-            (Some(at), _) => ReportState::Ready {
-                fetched_at: Timestamp::from_millis(at),
-            },
-            (None, Some(attempts)) => match self.next_at {
-                Some(next) => ReportState::Pending {
-                    attempts,
-                    next_at: Timestamp::from_millis(next),
+        let report = if self.cancelled {
+            ReportState::Cancelled
+        } else {
+            match (self.fetched_at, self.attempts) {
+                (Some(at), _) => ReportState::Ready {
+                    fetched_at: Timestamp::from_millis(at),
                 },
-                None => ReportState::GaveUp {
-                    attempts,
-                    last_error: self.last_error,
+                (None, Some(attempts)) => match self.next_at {
+                    Some(next) => ReportState::Pending {
+                        attempts,
+                        next_at: Timestamp::from_millis(next),
+                    },
+                    None => ReportState::GaveUp {
+                        attempts,
+                        last_error: self.last_error,
+                    },
                 },
-            },
-            (None, None) => ReportState::None,
+                (None, None) => ReportState::None,
+            }
         };
         let duration_ms =
             self.report_secs

@@ -50,3 +50,5 @@ pub use snapshot::{
     AlertView, ApiErrorView, ApiStatus, ArchiveStatus, FetchState, LogStatus, MatchView,
     PlayerView, ReminderView, Snapshot, TeamSummary,
 };
+
+mod variants;

@@ -185,7 +185,9 @@ export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) =>
       ? { state: "none" }
       : i === 1
         ? { state: "pending", attempts: 2, nextAt: now + 240_000 }
-        : i === 5
+        : i === 3
+          ? { state: "cancelled" }
+          : i === 5
           ? { state: "gaveUp", attempts: 13, lastError: "站点没有收录这条数据" }
           : { state: "ready", fetchedAt: now - i * 3_600_000 };
   return {
@@ -196,7 +198,7 @@ export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) =>
     selfTeam: "bravo",
     won: report.state === "ready" ? i % 3 !== 1 : null,
     players: 10,
-    durationMs: i === 0 ? null : (19 + ((i * 7) % 20)) * 60_000 + 13_000,
+    durationMs: i === 0 ? null : report.state === "cancelled" ? 49 : (19 + ((i * 7) % 20)) * 60_000 + 13_000,
     report,
   };
 });
@@ -241,6 +243,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       own.push({
         player: p.id,
         unitId: u.id,
+        variantKey: String(u.id), unitName: u.name, thumbnail: null,
         class: u.cls,
         spawnSecs,
         deathSecs: dies ? Math.min(durationSecs, spawnSecs + Math.floor(rand() * 600)) : null,
@@ -264,6 +267,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       comp.set(s.class, c);
       const r = units.get(s.unitId) ?? {
         unitId: s.unitId,
+        variantKey: s.variantKey, unitName: s.unitName, thumbnail: s.thumbnail,
         class: s.class,
         count: 0,
         refunded: 0,

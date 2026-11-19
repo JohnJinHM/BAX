@@ -4,4 +4,4 @@ import type { Timestamp } from "./Timestamp";
 /**
  * 一场比赛的战报状态。
  */
-export type ReportState = { "state": "none" } | { "state": "pending", attempts: number, nextAt: Timestamp, } | { "state": "gaveUp", attempts: number, lastError: string | null, } | { "state": "ready", fetchedAt: Timestamp, };
+export type ReportState = { "state": "cancelled" } | { "state": "none" } | { "state": "pending", attempts: number, nextAt: Timestamp, } | { "state": "gaveUp", attempts: number, lastError: string | null, } | { "state": "ready", fetchedAt: Timestamp, };

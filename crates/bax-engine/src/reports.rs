@@ -172,6 +172,14 @@ impl ReportWorker {
 
     async fn attempt(&mut self, item: QueuedReport) {
         let id = item.match_id;
+        match self.store.report_cancelled(id) {
+            Ok(false) => {}
+            Ok(true) => return,
+            Err(err) => {
+                tracing::warn!(error = %err, "检查取消比赛失败");
+                return;
+            }
+        }
         let attempts = item.attempts + 1;
         let result = self.client.match_report(id).await;
         let now = self.clock.now();

@@ -11,7 +11,7 @@ export function clusterNearby(entries: Entry[], span: number, plotWidth: number,
 export function unitTiles(entries: Entry[]) {
   const groups = new Map<string, Entry[]>();
   for (const entry of entries) {
-    const key = `${entry.unitId}:${entry.refunded}`;
+    const key = `${entry.variantKey ?? entry.unitId}:${entry.refunded}`;
     const group = groups.get(key) ?? [];
     group.push(entry);
     groups.set(key, group);
@@ -29,12 +29,12 @@ export function clusterEntries(entries: Entry[], seconds: number): Cluster[] {
   for (const entry of [...entries].sort((a, b) => a.spawnSecs - b.spawnSecs || a.key - b.key)) {
     const last = result.at(-1);
     if (last && entry.spawnSecs - last.start <= seconds &&
-      (seconds > 0 || last.entries[0].unitId === entry.unitId)) {
+      (seconds > 0 || (last.entries[0].variantKey ?? last.entries[0].unitId) === (entry.variantKey ?? entry.unitId))) {
       last.entries.push(entry);
       last.end = entry.spawnSecs;
     } else {
       // 同秒同型号可能被其他型号隔开。
-      const same = seconds === 0 ? [...result].reverse().find((x) => x.start === entry.spawnSecs && x.entries[0].unitId === entry.unitId) : null;
+      const same = seconds === 0 ? [...result].reverse().find((x) => x.start === entry.spawnSecs && (x.entries[0].variantKey ?? x.entries[0].unitId) === (entry.variantKey ?? entry.unitId)) : null;
       if (same) same.entries.push(entry);
       else result.push({ entries: [entry], start: entry.spawnSecs, end: entry.spawnSecs });
     }

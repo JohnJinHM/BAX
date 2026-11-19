@@ -2,6 +2,46 @@ use super::*;
 
 const START: i64 = 1_800_000_000;
 
+#[test]
+fn variants_stay_separate_and_transferred_units_keep_their_appearance() {
+    let base = unit("base", 1, 10);
+    let mut modified = unit("modified", 1, 20);
+    modified.option_ids = vec![20, 10];
+    modified.appearance = Some(UnitAppearance {
+        name: "Tank A upgraded".into(),
+        thumbnail: Some("tank.webp".into()),
+    });
+    let mut same = modified.clone();
+    same.key = "same".into();
+    same.option_ids = vec![10, 20, 20];
+    let mut sender = player(1, Team::Alpha, vec![base, same]);
+    sender.transferred_out.push("modified".into());
+    let analysis = analyze(
+        &input(vec![sender, player(2, Team::Alpha, vec![modified])]),
+        &catalog(),
+    );
+    let sender = find(&analysis, 1);
+    assert_eq!(sender.units.len(), 2);
+    assert_eq!(
+        sender
+            .units
+            .iter()
+            .find(|u| u.unit_name == "Tank A upgraded")
+            .expect("改型")
+            .count,
+        2
+    );
+    let transferred = analysis
+        .sorties
+        .iter()
+        .find(|s| s.transferred_to.is_some())
+        .expect("转交");
+    assert_eq!(transferred.player, PlayerId(1));
+    assert_eq!(transferred.unit_id, 1);
+    assert_eq!(transferred.unit_name, "Tank A upgraded");
+    assert_eq!(transferred.thumbnail.as_deref(), Some("tank.webp"));
+}
+
 fn kind(name: &str, category: i64, role: i64, cost: i64) -> UnitKind {
     UnitKind {
         name: Some(name.to_owned()),
