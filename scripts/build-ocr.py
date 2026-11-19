@@ -49,7 +49,6 @@ else:
     urllib.request.urlretrieve(f'https://raw.githubusercontent.com/python/cpython/v{tag}/LICENSE', licenses / 'Python-LICENSE.txt')
 for project, url in {
     'PaddleOCR': 'https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/main/LICENSE',
-    'ONNXRuntime-ThirdPartyNotices': 'https://raw.githubusercontent.com/microsoft/onnxruntime/main/ThirdPartyNotices.txt',
 }.items():
     urllib.request.urlretrieve(url, licenses / (project + '.txt'))
 (DIST / 'manifest.json').write_text(json.dumps({'python':sys.version, 'packages':packages,'models':models},indent=2),encoding='utf8')
