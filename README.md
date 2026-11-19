@@ -34,11 +34,10 @@ Rust 后台，SQLite 本地存储，Tauri 桌面外壳，Vue 3＋TypeScript 前�
 需要 Rust 1.88 以上、MSVC 生成工具和 Node.js 22，详见[开发指南](docs/guides/development.md)。
 
 ```powershell
-npm install
-npx tauri build --no-bundle            # 生成 target\release\bax-app.exe
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Lite
 cargo build --release -p bax-cli
 .\target\release\bax.exe logs import   # 可选：导入历史日志，用于统计以前同场的次数
-.\target\release\bax-app.exe           # 启动桌面应用，常驻托盘
+.\target\editions\lite\debug\bax-app.exe # 启动桌面应用，常驻托盘
 ```
 
 不需要窗口时，`.\target\release\bax.exe run` 在命令行里显示同样的信息。
@@ -71,11 +70,12 @@ Full 的“赛前玩家识别”默认启用；Lite 不提供 OCR，继续从日
 
 Full 安装包包含 C++/ONNX Runtime 工作进程和两个文字识别模型，不需要 Python 或 OpenCV，首次识别不下载模型。按双侧五行卡片的固定区域识别昵称与等级；当前验证覆盖约 16:9 的加载/部署截图，其他布局等待日志。支持现有 v5 数据库，v4 会在备份后自动升级。
 
-构建一键安装包：
+统一构建，以下命令中的 Edition 都可换成 Lite：
 
 ```powershell
-pwsh -File scripts/build-installer.ps1 -Edition Full
-pwsh -File scripts/build-installer.ps1 -Edition Lite
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Full       # 独立 Debug EXE
+pwsh -File scripts/build.ps1 -Mode Portable -Edition Full  # 便携 ZIP
+pwsh -File scripts/build.ps1 -Mode Installer -Edition Full # 安装包
 ```
 
 构建依赖、产物位置和增量构建方法见 [打包指南](docs/guides/packaging.md)。CLI 不自动采集画面；游戏内验收范围见 [赛前验证](docs/validation/pregame-roster.md)。

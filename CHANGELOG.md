@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 统一构建入口支持 Dev、Portable、Installer，均可选择 Full/Lite；便携 ZIP 附带本地数据目录启动器。
+
 ### Full / Lite 与赛前 OCR
 
 - 同一主线提供 Full 与 Lite 安装包：Lite 不含 OCR 运行时、模型与识别任务；两版共用日志、档案和战报。

@@ -20,7 +20,7 @@ cargo fmt --all
 cargo build --release -p bax-cli         # target\release\bax.exe
 npm run typecheck                        # 前端类型检查
 npm run bindings                         # 改了给界面用的 Rust 类型后重新生成 src/shared/bindings
-npx tauri build --no-bundle              # target\release\bax-app.exe
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Lite # 独立 Debug EXE；另有 Portable / Installer
 ```
 
 界面可以不开桌面应用预览：`npx vite` 后打开 `/dev/overlay.html` 或 `/dev/main.html?tab=…`（虚构数据）。

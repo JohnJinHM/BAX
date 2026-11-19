@@ -6,42 +6,73 @@
 
 `main` 是唯一长期分支，同一提交构建 Full（完整版，含 OCR）与 Lite（无 OCR），见 [ADR-0011](../adr/0011-full-lite-builds.md)。两版共用日志解析、战报、档案和数据结构。
 
-## 一键构建
+## 统一构建入口
 
-需要 Windows x64、Node.js 22、Rust 1.88、Visual Studio 2022 C++ 构建工具与 Windows SDK、CMake 3.20+、PowerShell 7。构建和用户运行均不需要 Python；只有可选图片回归脚本需要 Python/Pillow。首次构建需联网获取依赖和模型。
+需要 Windows x64、PowerShell 7、Node.js 22、Rust 1.88、Visual Studio 2022 C++ 构建工具与 Windows SDK。Full 另外需要 CMake 3.20+；构建与运行均不需要 Python。首次构建需联网获取依赖，Full 还会下载并校验 ONNX Runtime SDK 与两个识别模型。
 
 ```powershell
-pwsh -File scripts/build-installer.ps1 -Edition Full
-pwsh -File scripts/build-installer.ps1 -Edition Lite
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Lite
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Full
+pwsh -File scripts/build.ps1 -Mode Portable -Edition Lite
+pwsh -File scripts/build.ps1 -Mode Portable -Edition Full
+pwsh -File scripts/build.ps1 -Mode Installer -Edition Lite
+pwsh -File scripts/build.ps1 -Mode Installer -Edition Full
 ```
 
-Full 脚本下载并校验 Microsoft.ML.OnnxRuntime 1.22.0 NuGet SDK 与两个 ONNX 识别模型，编译 C++ 工作进程，执行原生单元测试与模型自检，打包应用本地 MSVC DLL，然后构建前端、Rust release 和 NSIS 安装器。无文字检测模型、Python、OpenCV、NumPy。
+不传参数默认 `Dev / Full`。脚本只构建，不自动启动或安装应用。版本号读取 Tauri 配置，产物路径在成功后打印。
 
-Lite 不运行 OCR 构建脚本、不读取 OCR 构建产物，也不需要 CMake、ONNX SDK 或模型。两版都需要 MSVC 与 Windows SDK 来编译 Rust/Tauri。
+| 模式 | 用途 | 产物（以 Lite 为例） |
+|---|---|---|
+| Dev | 内置前端的 Debug 版，不依赖 Vite，便于本机调试 | `target/editions/lite/debug/bax-app.exe` |
+| Portable | 优化的 Release 便携 ZIP | `target/editions/lite/release/bundle/portable/BAX-Lite_0.2.0_x64-portable.zip` |
+| Installer | 优化的 Release NSIS 安装器 | `target/editions/lite/release/bundle/nsis/BAX-Lite_0.2.0_x64-setup.exe` |
 
-仅构建原生 OCR：
+Full 对应 `editions/full` 与 `BAX-Full`。Dev 与 Release 分开，Full 与 Lite 分开；Portable 和 Installer 共用各自版本的 Release 编译缓存。`CARGO_TARGET_DIR` 可指定输出根目录，脚本在其下追加 `editions/full` 或 `editions/lite`，结束或失败时恢复环境变量及工作目录。
+
+Full 的 `bax-app.exe` 必须与旁边的 `ocr-runtime/` 一起复制，包含原生工作进程、运行库、两个模型和许可证。Lite 不读取或构建 OCR 产物。
+
+## 增量构建与旧入口
+
+默认执行 `npm ci`，Full 默认重建原生 OCR。已有依赖、只改 Rust/Vue 时可以复用：
+
+```powershell
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Full -SkipOcrBuild -SkipNpmInstall
+pwsh -File scripts/build.ps1 -Mode Dev -Edition Lite -SkipNpmInstall
+```
+
+`-SkipOcrBuild` 仅适用于 Full，仍检查原生 manifest、必需运行库和许可证、模型 SHA-256，不允许复用旧 Python 产物。`-SkipNpmInstall` 适用于全部模式；调用方负责确保依赖与锁文件一致，也可避免开发服务器占用文件时 `npm ci` 无法清理依赖目录。
+
+旧命令 `scripts/build-installer.ps1 -Edition Full|Lite` 保留，转交统一入口的 Installer 模式。两个 Skip 参数均支持。
+
+只构建原生 OCR：
 
 ```powershell
 pwsh -File scripts/build-ocr-native.ps1
-# 已有缓存，禁止脚本下载：
-pwsh -File scripts/build-ocr-native.ps1 -SkipDownload
+pwsh -File scripts/build-ocr-native.ps1 -SkipDownload # 已有缓存，禁止下载
 ```
 
-应用代码修改后复用已有原生 OCR 产物：
+## Portable 使用方法
+
+ZIP 内有一层版本目录，包含 `bax-app.exe`、`start.cmd`、使用说明和许可证；Full 另外含 `ocr-runtime/`。解压到可写目录后，通过 **start.cmd** 启动，BAX 的数据库、设置和诊断日志写入启动器旁边的 `data/`。支持从其他工作目录启动，也支持包含空格、中文的解压路径。
+
+直接双击 EXE 仍使用 `BAX_DATA_DIR` 或默认 `%LOCALAPPDATA%\BAX`。ZIP 不包含已有用户数据；更新时退出 BAX，保留旧 `data/` 并复制到新版本目录。构建仅打包程序与资源，不扫描或覆盖用户解压后的目录。
+
+目标电脑需要已安装 WebView2 Runtime，便携包不会自动补装；WebView2 自身缓存不保证随 `data/` 搬迁。两版、便携版与安装版共用应用身份，切换前退出已运行的 BAX。
+
+## 热更新开发
+
+Dev 构建是独立 Debug EXE；需要前端热更新时仍使用 Tauri 开发服务器：
 
 ```powershell
-pwsh -File scripts/build-installer.ps1 -Edition Full -SkipOcrBuild
+$env:CARGO_TARGET_DIR = "$PWD/target/editions/lite"
+npx tauri dev
+
+# Full 先准备原生 OCR，再启动：
+$env:CARGO_TARGET_DIR = "$PWD/target/editions/full"
+npx tauri dev --features ocr --config src-tauri/tauri.ocr.conf.json
 ```
 
-产物：
-
-- `.local/ocr-dist/bax-ocr/`：原生 EXE、ONNX Runtime、MSVC DLL、两个模型、许可证及 manifest。
-- `target/editions/full/release/bundle/nsis/BAX-Full_0.2.0_x64-setup.exe`：完整版安装器。
-- `target/editions/lite/release/bundle/nsis/BAX-Lite_0.2.0_x64-setup.exe`：轻量版安装器。
-- `CARGO_TARGET_DIR` 可修改输出根目录，脚本仍在其下分开 `editions/full` 与 `editions/lite`，退出时恢复环境变量。
-- Full 的 `release/bax-app.exe` 必须与旁边 `ocr-runtime/` 配套使用；Lite 不需要 OCR 资源。
-
-安装资源配置为 `src-tauri/tauri.ocr.conf.json`。普通 Tauri build 默认是 Lite。手动构建 Full 必须同时传 `--features ocr --config src-tauri/tauri.ocr.conf.json`。开发模式优先读取构建产物 `.local/ocr-dist/bax-ocr`，发布模式读取安装目录资源。
+普通 Tauri build 默认是 Lite。手动构建 Full 必须同时传 `--features ocr --config src-tauri/tauri.ocr.conf.json`。开发模式优先读取输出目录的资源，缺少时回退到源码目录 `.local/ocr-dist/bax-ocr`；Release 只读取 EXE 旁边的安装资源。
 
 ## 数据与支持范围
 
