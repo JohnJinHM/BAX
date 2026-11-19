@@ -188,4 +188,10 @@ li.active {
 .empty {
   min-height: 80px;
 }
+
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .list ul { display: flex; overflow-x: auto; gap: 8px; max-height: 95px; }
+  .list li { flex: 0 0 245px; }
+}
 </style>

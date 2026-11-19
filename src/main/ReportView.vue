@@ -13,11 +13,11 @@ import {
   count,
   mmss,
   rating,
-  sortieGroups,
   teamNames,
   unitClassNames,
 } from "../shared/format";
 import EChart from "./EChart.vue";
+import SortieExplorer from "./SortieExplorer.vue";
 import { openPlayer } from "./navigation";
 
 const props = defineProps<{ id: number; row?: HistoryRow | null }>();
@@ -29,6 +29,7 @@ const loading = ref(false);
 const failure = ref<string | null>(null);
 const expanded = ref<number | null>(null);
 const requesting = ref(false);
+const selectedRange = ref<[number, number] | null>(null);
 
 async function load() {
   loading.value = true;
@@ -203,6 +204,11 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
       color: teamColor(team),
       endLabel: { show: true, color: colors.value.muted, fontSize: 11, formatter: (p: { seriesName: string }) => p.seriesName },
       emphasis: { focus: "series" },
+      markArea: selectedRange.value ? {
+        silent: true,
+        itemStyle: { color: colors.value.fg, opacity: 0.05 },
+        data: [[{ xAxis: selectedRange.value[0] / 60 }, { xAxis: selectedRange.value[1] / 60 }]],
+      } : undefined,
     };
   });
   return {
@@ -222,76 +228,6 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
     },
     xAxis: { type: "value", min: 0, max: v.analysis.minutes, minInterval: 1, ...axisCommon.value, splitLine: { show: false }, axisLabel: { ...axisCommon.value.axisLabel, formatter: "{value} 分" } },
     yAxis: { type: "value", ...axisCommon.value },
-    series,
-  };
-});
-
-const sortieHeight = computed(() => players.value.length * 30 + 64);
-
-/** 每次出兵：横轴时间，纵轴玩家，颜色与形状是大类，大小是估算成本。 */
-const sortieOption = computed<EChartsCoreOption | null>(() => {
-  const v = view.value;
-  if (!v) return null;
-  const rows = players.value;
-  const index = new Map(rows.map((p, i) => [p.id, i]));
-  const byId = new Map(rows.map((p) => [p.id, p]));
-  const series = sortieGroups.map((group) => ({
-    name: group.name,
-    type: "scatter",
-    symbol: group.symbol,
-    color: group.color,
-    itemStyle: { borderColor: colors.value.surface, borderWidth: 1 },
-    emphasis: { scale: 1.4 },
-    data: v.analysis.sorties
-      .filter((s) => group.classes.includes(s.class) && index.has(s.player))
-      .map((s) => ({
-        value: [s.spawnSecs / 60, index.get(s.player)],
-        symbolSize: Math.max(8, Math.min(20, 5 + Math.sqrt(Math.max(0, s.cost)) / 2)),
-        itemStyle: { opacity: s.refunded ? 0.35 : 0.9 },
-        sortie: s,
-      })),
-  }));
-  return {
-    animation: false,
-    grid: { left: 130, right: 24, top: 32, bottom: 28 },
-    legend: { top: 0, left: 0, textStyle: { color: colors.value.muted } },
-    tooltip: {
-      ...tooltipCommon.value,
-      trigger: "item",
-      formatter: (item: { data: { sortie: import("../shared/bindings/Sortie").Sortie } }) => {
-        const s = item.data.sortie;
-        const owner = byId.get(s.player);
-        const lines = [
-          `<b>${escape(unitName(s.unitId))}</b>（${unitClassNames[s.class]}）`,
-          `${escape(owner ? name(owner) : `ID ${s.player}`)}　${mmss(s.spawnSecs * 1000)} 出兵`,
-          s.deathSecs != null ? `${mmss(s.deathSecs * 1000)} 阵亡` : "存活到结束",
-          `估算成本 ${count(s.cost)}　击毁 ${s.kills}`,
-        ];
-        if (s.refunded) lines.push("已回收（全额退款）");
-        if (s.airdropped) lines.push("空投");
-        if (s.transferredTo != null) {
-          const to = byId.get(s.transferredTo);
-          lines.push(`转交给 ${escape(to ? name(to) : `ID ${s.transferredTo}`)}`);
-        }
-        return lines.join("<br>");
-      },
-    },
-    xAxis: {
-      type: "value",
-      min: 0,
-      max: v.analysis.minutes,
-      minInterval: 1,
-      ...axisCommon.value,
-      axisLabel: { ...axisCommon.value.axisLabel, formatter: "{value} 分" },
-    },
-    yAxis: {
-      type: "category",
-      inverse: true,
-      data: rows.map((p) => name(p)),
-      ...axisCommon.value,
-      splitLine: { show: true, lineStyle: { color: colors.value.grid } },
-      axisLabel: playerAxisLabel(rows),
-    },
     series,
   };
 });
@@ -394,15 +330,13 @@ function pendingText(row: HistoryRow | null | undefined): string {
       <h3>累计出兵价值</h3>
       <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计出兵价值随时间的变化" />
 
-      <h3>每次出兵</h3>
-      <p class="hint">每个点是一次出兵，大小表示估算成本；半透明的是被回收的。转交的单位算在原来出兵的人名下。</p>
-      <EChart v-if="sortieOption" :option="sortieOption" :height="sortieHeight" label="每名玩家每次出兵的时间" />
+      <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
       <h3>兵种构成（估算价值）</h3>
       <EChart v-if="compositionOption" :option="compositionOption" :height="compositionHeight" label="每名玩家各兵种的估算出兵价值" />
 
       <h3>玩家</h3>
-      <table>
+      <div class="table-scroll"><table>
         <thead>
           <tr>
             <th class="left">玩家</th>
@@ -474,7 +408,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
             </tr>
           </template>
         </tbody>
-      </table>
+      </table></div>
 
       <p class="hint foot">
         数据来自 BATrace 战报。队伍与玩家的合计是官方数据；单位与兵种的价值按单位目录的基础价格估算，
@@ -496,6 +430,11 @@ function pendingText(row: HistoryRow | null | undefined): string {
 <style scoped>
 .report {
   min-width: 0;
+}
+.table-scroll { overflow-x: auto; }
+@media (max-width: 650px) {
+  .report { padding: 12px; }
+  .teams { grid-template-columns: 1fr !important; }
 }
 
 .head h2 {

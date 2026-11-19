@@ -1,0 +1,3453 @@
+{
+  "1": {
+    "file": "RU_BTR82-Label.webp",
+    "names": [
+      "BTR-82"
+    ]
+  },
+  "2": {
+    "file": "US_M1A2_TUA-Label.webp",
+    "names": [
+      "M1A2 SEP v2 TUA"
+    ]
+  },
+  "3": {
+    "file": "RU_BMP3-Label.webp",
+    "names": [
+      "BMP-3"
+    ]
+  },
+  "4": {
+    "file": "RU_MSTA-Label.webp",
+    "names": [
+      "2S19M1 Msta-S"
+    ]
+  },
+  "5": {
+    "file": "US_STRYKER_MC-Label.webp",
+    "names": [
+      "Stryker MC"
+    ]
+  },
+  "6": {
+    "file": "US_HUMVEE_TOW-Label.webp",
+    "names": [
+      "Humvee TOW-2"
+    ]
+  },
+  "7": {
+    "file": "RU_MI8_MTV5-Label.webp",
+    "names": [
+      "Mi-8MTV-5 Zeleniy"
+    ]
+  },
+  "8": {
+    "file": "US_AH64_LONGBOW-Label.webp",
+    "names": [
+      "AH-64D Longbow"
+    ]
+  },
+  "9": {
+    "file": "RU_T72B-Label.webp",
+    "names": [
+      "T-72B"
+    ]
+  },
+  "10": {
+    "file": "US_HUMVEE_AVENGER-Label.webp",
+    "names": [
+      "AN/TWQ-1 Avenger"
+    ]
+  },
+  "11": {
+    "file": "US_HIMARS-Label.webp",
+    "names": [
+      "M142 HIMARS"
+    ]
+  },
+  "12": {
+    "file": "DLC3_KAMAZ_PANTSIR-Label.webp",
+    "names": [
+      "DLC3 Pantsir S1",
+      "Pantsir S1"
+    ]
+  },
+  "13": {
+    "file": "RU_T14-Label.webp",
+    "names": [
+      "T-14 Armata"
+    ]
+  },
+  "14": {
+    "file": "US_M60-Label.webp",
+    "names": [
+      "M60A1"
+    ]
+  },
+  "15": {
+    "file": "US_BRADLEY_A2-Label.webp",
+    "names": [
+      "M2A2 Bradley"
+    ]
+  },
+  "16": {
+    "file": "US_BRADLEY_A3-Label.webp",
+    "names": [
+      "M2A3 Bradley"
+    ]
+  },
+  "17": {
+    "file": "US_CH47-Label.webp",
+    "names": [
+      "CH-47 Chinook"
+    ]
+  },
+  "19": {
+    "file": "US_AH64_APACHE-Label.webp",
+    "names": [
+      "AH-64D Apache"
+    ]
+  },
+  "20": {
+    "file": "US_STRYKER_SHORAD-Label.webp",
+    "names": [
+      "Stryker M-SHORAD"
+    ]
+  },
+  "21": {
+    "file": "US_STRYKER_RV-Label.webp",
+    "names": [
+      "Stryker RV"
+    ]
+  },
+  "22": {
+    "file": "US_STRYKER_ICV-Label.webp",
+    "names": [
+      "Stryker ICV"
+    ]
+  },
+  "23": {
+    "file": "RU_NAPARNIK-Label.webp",
+    "names": [
+      "Typhoon VDV"
+    ]
+  },
+  "24": {
+    "file": "US_STRYKER_MGS-Label.webp",
+    "names": [
+      "Stryker MGS"
+    ]
+  },
+  "25": {
+    "file": "US_STRYKER_ATGM-Label.webp",
+    "names": [
+      "Stryker ATGM"
+    ]
+  },
+  "26": {
+    "file": "US_M3A3_ESV-Label.webp",
+    "names": [
+      "M2A3 Bradley ESV"
+    ]
+  },
+  "27": {
+    "file": "US_BRADLEY_LINEBACKER-Label.webp",
+    "names": [
+      "M6 Linebacker "
+    ]
+  },
+  "28": {
+    "file": "US_BRADLEY_FIST-Label.webp",
+    "names": [
+      "M7 BFIST"
+    ]
+  },
+  "29": {
+    "file": "US_LAV25-Label.webp",
+    "names": [
+      "LAV-25"
+    ]
+  },
+  "30": {
+    "file": "US_LAV_AT-Label.webp",
+    "names": [
+      "LAV-AT"
+    ]
+  },
+  "31": {
+    "file": "RU_TOR-Label.webp",
+    "names": [
+      "Tor"
+    ]
+  },
+  "33": {
+    "file": "US_STRYKER_ESV-Label.webp",
+    "names": [
+      "Stryker ESV"
+    ]
+  },
+  "34": {
+    "file": "US_LAV_AD-Label.webp",
+    "names": [
+      "LAV-AD"
+    ]
+  },
+  "35": {
+    "file": "US_M1117-Label.webp",
+    "names": [
+      "M1117 Guardian"
+    ]
+  },
+  "37": {
+    "file": "US_M3A3_CFV-Label.webp",
+    "names": [
+      "M3A3 CFV"
+    ]
+  },
+  "40": {
+    "file": "US_AMPV_MC-Label.webp",
+    "names": [
+      "M1287 MCV"
+    ]
+  },
+  "41": {
+    "file": "US_AMPV-Label.webp",
+    "names": [
+      "M1283 AMPV"
+    ]
+  },
+  "44": {
+    "file": "RU_SU57-Label.webp",
+    "names": [
+      "Su-57"
+    ]
+  },
+  "46": {
+    "file": "RU_KA52-Label.webp",
+    "names": [
+      "Ka-52 Alligator"
+    ]
+  },
+  "47": {
+    "file": "US_HUMVEE_PATROL-Label.webp",
+    "names": [
+      "Humvee"
+    ]
+  },
+  "48": {
+    "file": "US_HUMVEE_GMV-Label.webp",
+    "names": [
+      "Humvee GMV"
+    ]
+  },
+  "49": {
+    "file": "US_M1288GMV-Label.webp",
+    "names": [
+      "Flyer GMV"
+    ]
+  },
+  "50": {
+    "file": "US_HUMVEE_HAWKEYE-Label.webp",
+    "names": [
+      "Hawkeye MWS"
+    ]
+  },
+  "51": {
+    "file": "US_HUMVEE_LRAS3-Label.webp",
+    "names": [
+      "Humvee LRAS3"
+    ]
+  },
+  "52": {
+    "file": "US_LMTV-Label.webp",
+    "names": [
+      "LMTV"
+    ]
+  },
+  "53": {
+    "file": "US_M1A1_HC-Label.webp",
+    "names": [
+      "M1A1 HC"
+    ]
+  },
+  "54": {
+    "file": "US_M1A1_FEP-Label.webp",
+    "names": [
+      "M1A1 FEP"
+    ]
+  },
+  "57": {
+    "file": "US_MECH_RIFLEMEN-Label.webp",
+    "names": [
+      "Mech. Riflemen"
+    ]
+  },
+  "59": {
+    "file": "US_MARINES-Label.webp",
+    "names": [
+      "Marines"
+    ]
+  },
+  "60": {
+    "file": "RU_MOTOSTRELKI-Label.webp",
+    "names": [
+      "Motopekhota"
+    ]
+  },
+  "61": {
+    "file": "US_FORCE_RECON-Label.webp",
+    "names": [
+      "Force Recon"
+    ]
+  },
+  "62": {
+    "file": "US_CAV_RIFLEMEN-Label.webp",
+    "names": [
+      "Troopers AT",
+      "Troopers"
+    ]
+  },
+  "63": {
+    "file": "US_SMAW_TEAM-Label.webp",
+    "names": [
+      "Assaultmen SMAW"
+    ]
+  },
+  "64": {
+    "file": "US_PARATROOPERS_BASIC-Label.webp",
+    "names": [
+      "Airborne 2",
+      "Airborne"
+    ]
+  },
+  "65": {
+    "file": "US_CAVALRY_SCOUTS-Label.webp",
+    "names": [
+      "Cavalry Scouts"
+    ]
+  },
+  "66": {
+    "file": "US_M240_JAVELIN-Label.webp",
+    "names": [
+      "Weapons Squad"
+    ]
+  },
+  "68": {
+    "file": "US_SCOUT_SNIPERS-Label.webp",
+    "names": [
+      "Scout Snipers"
+    ]
+  },
+  "69": {
+    "file": "US_STINGER_F-Label.webp",
+    "names": [
+      "Stinger team"
+    ]
+  },
+  "70": {
+    "file": "US_MARINE_RAIDERS-Label.webp",
+    "names": [
+      "Marine Raiders CQC",
+      "Marine Raiders"
+    ]
+  },
+  "72": {
+    "file": "US_RANGERS-Label.webp",
+    "names": [
+      "Rangers"
+    ]
+  },
+  "73": {
+    "file": "US_RANGERS_STINGER-Label.webp",
+    "names": [
+      "Rangers Stinger"
+    ]
+  },
+  "74": {
+    "file": "US_RANGERS_CGM3-Label.webp",
+    "names": [
+      "Rangers RAWS"
+    ]
+  },
+  "75": {
+    "file": "US_RANGERS_MGL-Label.webp",
+    "names": [
+      "Rangers Mk47 AGL"
+    ]
+  },
+  "76": {
+    "file": "US_RANGERS_SNIPER_M2010-Label.webp",
+    "names": [
+      "Rangers Snipers"
+    ]
+  },
+  "77": {
+    "file": "US_RANGER_RRC-Label.webp",
+    "names": [
+      "Rangers RRC"
+    ]
+  },
+  "78": {
+    "file": "US_AAVP-Label.webp",
+    "names": [
+      "AAVP-7A1"
+    ]
+  },
+  "79": {
+    "file": "US_MH6-Label.webp",
+    "names": [
+      "MH-6 Little Bird"
+    ]
+  },
+  "80": {
+    "file": "US_MV22-Label.webp",
+    "names": [
+      "MV-22B Osprey"
+    ]
+  },
+  "81": {
+    "file": "US_UH60M-Label.webp",
+    "names": [
+      "UH-60M Blackhawk"
+    ]
+  },
+  "82": {
+    "file": "US_M1297-Label.webp",
+    "names": [
+      "M1301 ISV"
+    ]
+  },
+  "84": {
+    "file": "US_MTVR-Label.webp",
+    "names": [
+      "MTVR"
+    ]
+  },
+  "86": {
+    "file": "US_AH_1Z-Label.webp",
+    "names": [
+      "AH-1Z Viper"
+    ]
+  },
+  "87": {
+    "file": "US_AH_1W-Label.webp",
+    "names": [
+      "AH-1W Supercobra"
+    ]
+  },
+  "89": {
+    "file": "RU_BMD_4-Label.webp",
+    "names": [
+      "BMD-4M"
+    ]
+  },
+  "90": {
+    "file": "RU_BMD_2-Label.webp",
+    "names": [
+      "BMD-2"
+    ]
+  },
+  "91": {
+    "file": "RU_A222-Label.webp",
+    "names": [
+      "A222 Bereg"
+    ]
+  },
+  "92": {
+    "file": "RU_BM_21-Label.webp",
+    "names": [
+      "9K51 Grad"
+    ]
+  },
+  "93": {
+    "file": "RU_BM_30-Label.webp",
+    "names": [
+      "9K58 Smerch"
+    ]
+  },
+  "94": {
+    "file": "RU_OSA_AKM-Label.webp",
+    "names": [
+      "Osa-AKM"
+    ]
+  },
+  "95": {
+    "file": "DLC3_KAMAZ_6560-Label.webp",
+    "names": [
+      "DLC3 KamAZ-6560",
+      "KamAZ-6560"
+    ]
+  },
+  "96": {
+    "file": "DLC3_TYPHOON_K-Label.webp",
+    "names": [
+      "DLC3 Typhoon-K",
+      "Typhoon-K"
+    ]
+  },
+  "97": {
+    "file": "DLC3_KAMA-Label.webp",
+    "names": [
+      "DLC3 9K58 Kama",
+      "9K58 Kama"
+    ]
+  },
+  "98": {
+    "file": "RU_Tyulpan-Label.webp",
+    "names": [
+      "2S4 Tulpan"
+    ]
+  },
+  "99": {
+    "file": "US_IFAV_M2-Label.webp",
+    "names": [
+      "IFAV"
+    ]
+  },
+  "100": {
+    "file": "RU_MI24_P-Label.webp",
+    "names": [
+      "Mi-24P Fantom"
+    ]
+  },
+  "102": {
+    "file": "RU_MI24_VP-Label.webp",
+    "names": [
+      "Mi-24VP Krokodil"
+    ]
+  },
+  "103": {
+    "file": "US_MQ_9-Label.webp",
+    "names": [
+      "MQ-9 Reaper"
+    ]
+  },
+  "105": {
+    "file": "DLC3_KA50-Label.webp",
+    "names": [
+      "DLC3 Ka-50 Akula",
+      "Ka-50 Akula"
+    ]
+  },
+  "106": {
+    "file": "US_AH6-Label.webp",
+    "names": [
+      "AH-6 Killer Egg"
+    ]
+  },
+  "107": {
+    "file": "RU_MI24_K-Label.webp",
+    "names": [
+      "Mi-24K"
+    ]
+  },
+  "108": {
+    "file": "RU_VDV_PKPM-Label.webp",
+    "names": [
+      "VDV DSh 1",
+      "VDV PKP"
+    ]
+  },
+  "109": {
+    "file": "RU_VERBA-Label.webp",
+    "names": [
+      "VDV Igla"
+    ]
+  },
+  "110": {
+    "file": "RU_KORNET-Label.webp",
+    "names": [
+      "VDV Kornet"
+    ]
+  },
+  "111": {
+    "file": "RU_VDV_PARA-Label.webp",
+    "names": [
+      "Desantniki"
+    ]
+  },
+  "112": {
+    "file": "RU_AGS_30-Label.webp",
+    "names": [
+      "VDV AGS-30"
+    ]
+  },
+  "113": {
+    "file": "RU_BLACK_BERET-Label.webp",
+    "names": [
+      "Chernye Berety RShG",
+      "Chernye Berety"
+    ]
+  },
+  "114": {
+    "file": "RU_VDV_RAZVEDKA-Label.webp",
+    "names": [
+      "VDV Razvedka"
+    ]
+  },
+  "115": {
+    "file": "RU_VDV_SNIPER_T5000-Label.webp",
+    "names": [
+      "VDV Snaipery"
+    ]
+  },
+  "116": {
+    "file": "RU_SPECNAZ_VDV_CQC-Label.webp",
+    "names": [
+      "VDV Spetsnaz"
+    ]
+  },
+  "117": {
+    "file": "RU_SAPERI-Label.webp",
+    "names": [
+      "Ingenery-Shturmoviki"
+    ]
+  },
+  "118": {
+    "file": "RU_RESERVIST-Label.webp",
+    "names": [
+      "Reservisty"
+    ]
+  },
+  "119": {
+    "file": "RU_SPG9-Label.webp",
+    "names": [
+      "SPG-9 Sapog"
+    ]
+  },
+  "120": {
+    "file": "RU_IGLA-Label.webp",
+    "names": [
+      "PZRK Igla"
+    ]
+  },
+  "121": {
+    "file": "RU_KONKURS-Label.webp",
+    "names": [
+      "PTRK Konkurs"
+    ]
+  },
+  "122": {
+    "file": "RU_FLAMETHROWER-Label.webp",
+    "names": [
+      "Ognemetchiki"
+    ]
+  },
+  "123": {
+    "file": "RU_Razvedka-Label.webp",
+    "names": [
+      "Razvedka"
+    ]
+  },
+  "124": {
+    "file": "RU_SNAIPERY_SV98-Label.webp",
+    "names": [
+      "Snaipery"
+    ]
+  },
+  "125": {
+    "file": "RU_SPECNAZ_GRU-Label.webp",
+    "names": [
+      "Spetsnaz GRU Mix"
+    ]
+  },
+  "126": {
+    "file": "RU_MORSKAYA_PEHOTA-Label.webp",
+    "names": [
+      "Morskaya pekhota "
+    ]
+  },
+  "127": {
+    "file": "RU_RPG29-Label.webp",
+    "names": [
+      "RPG-29 Vampyr"
+    ]
+  },
+  "128": {
+    "file": "RU_FAGOT-Label.webp",
+    "names": [
+      "PTRK Fagot"
+    ]
+  },
+  "129": {
+    "file": "DLC3_ROSGVARDIA-Label.webp",
+    "names": [
+      "DLC3 Rosgvardia",
+      "Rosgvardia"
+    ]
+  },
+  "130": {
+    "file": "RU_SSO_CQC-Label.webp",
+    "names": [
+      "SSO"
+    ]
+  },
+  "131": {
+    "file": "DLC3_SPECNAZ_ALPHA-Label.webp",
+    "names": [
+      "DLC3 Spetsnaz Alpha",
+      "Spetsnaz Alpha"
+    ]
+  },
+  "132": {
+    "file": "RU_VDV_METIS_PKP-Label.webp",
+    "names": [
+      "VDV Metis-M"
+    ]
+  },
+  "133": {
+    "file": "RU_GV_MOTOSTRELKI-Label.webp",
+    "names": [
+      "Gvardii Motostrelki"
+    ]
+  },
+  "134": {
+    "file": "RU_VERBA-Label.webp",
+    "names": [
+      "PZRK Verba"
+    ]
+  },
+  "135": {
+    "file": "DLC3_POGRANICHNIKI-Label.webp",
+    "names": [
+      "DLC3 Pogranichniki",
+      "Pogranichniki"
+    ]
+  },
+  "136": {
+    "file": "DLC3_SPECNAZ_VYMPEL-Label.webp",
+    "names": [
+      "DLC3 Spetsnaz Vympel CQC",
+      "Spetsnaz Vympel"
+    ]
+  },
+  "137": {
+    "file": "DLC3_FSB_SNIPER-Label.webp",
+    "names": [
+      "DLC3 FSB Snaipery",
+      "FSB Snaipery"
+    ]
+  },
+  "138": {
+    "file": "RU_PDSS-Label.webp",
+    "names": [
+      "PDSS"
+    ]
+  },
+  "139": {
+    "file": "RU_ZUBR-Label.webp",
+    "names": [
+      "Zubr"
+    ]
+  },
+  "140": {
+    "file": "US_LCAC-Label.webp",
+    "names": [
+      "LCAC"
+    ]
+  },
+  "141": {
+    "file": "RU_BTRD-Label.webp",
+    "names": [
+      "BTR-D"
+    ]
+  },
+  "142": {
+    "file": "RU_BTR_MDM-Label.webp",
+    "names": [
+      "BTR-MDM "
+    ]
+  },
+  "143": {
+    "file": "DLC3_MI8_AMTSH_VN-Label.webp",
+    "names": [
+      "DLC3 Mi-8AMTSh-VN",
+      "Mi-8AMTSh-VN Sapsan"
+    ]
+  },
+  "144": {
+    "file": "RU_SPRUT_SD-Label.webp",
+    "names": [
+      "Sprut-SD"
+    ]
+  },
+  "145": {
+    "file": "RU_MI8_AMTSH-Label.webp",
+    "names": [
+      "Mi-8AMTSh"
+    ]
+  },
+  "146": {
+    "file": "US_ENGINEERS-Label.webp",
+    "names": [
+      "Mech. Engineers"
+    ]
+  },
+  "147": {
+    "file": "US_CAAT_TOW-Label.webp",
+    "names": [
+      "CAAT TOW-2A"
+    ]
+  },
+  "148": {
+    "file": "US_M2-Label.webp",
+    "names": [
+      "M2 HMG team"
+    ]
+  },
+  "149": {
+    "file": "US_MK19-Label.webp",
+    "names": [
+      "Mk19 AGL team "
+    ]
+  },
+  "150": {
+    "file": "US_DELTA_FORCE-Label.webp",
+    "names": [
+      "Delta Force"
+    ]
+  },
+  "151": {
+    "file": "RU_KORNET_D1-Label.webp",
+    "names": [
+      "Kornet-D1"
+    ]
+  },
+  "152": {
+    "file": "RU_SARMAT_2-Label.webp",
+    "names": [
+      "Sarmat-2"
+    ]
+  },
+  "153": {
+    "file": "US_CH53-Label.webp",
+    "names": [
+      "CH-53E Super Stallion"
+    ]
+  },
+  "154": {
+    "file": "US_LAV_M-Label.webp",
+    "names": [
+      "LAV-M"
+    ]
+  },
+  "155": {
+    "file": "RU_2S41_DROK-Label.webp",
+    "names": [
+      "2S41 Drok"
+    ]
+  },
+  "156": {
+    "file": "RU_S300-Label.webp",
+    "names": [
+      "S-300V4 Antey"
+    ]
+  },
+  "157": {
+    "file": "RU_T72B3-Label.webp",
+    "names": [
+      "T-72B3"
+    ]
+  },
+  "158": {
+    "file": "RU_T80_BVM-Label.webp",
+    "names": [
+      "T-80BV"
+    ]
+  },
+  "159": {
+    "file": "US_UH1Y_VENOM-Label.webp",
+    "names": [
+      "UH-1Y Venom"
+    ]
+  },
+  "160": {
+    "file": "US_AV8B_NA-Label.webp",
+    "names": [
+      "AV-8B Night attack"
+    ]
+  },
+  "162": {
+    "file": "US_M109_PALADIN-Label.webp",
+    "names": [
+      "M109A7 Paladin"
+    ]
+  },
+  "163": {
+    "file": "US_PATRIOT_PAC2-Label.webp",
+    "names": [
+      "Patriot PAC-2"
+    ]
+  },
+  "164": {
+    "file": "US_LVSR-Label.webp",
+    "names": [
+      "LVSR"
+    ]
+  },
+  "166": {
+    "file": "RU_KAMAZ_43501-Label.webp",
+    "names": [
+      "KamAZ VDV"
+    ]
+  },
+  "167": {
+    "file": "DLC3_CHABORZ_KORD-Label.webp",
+    "names": [
+      "DLC3 Chaborz M-6",
+      "Chaborz M-6"
+    ]
+  },
+  "168": {
+    "file": "RU_SU34-Label.webp",
+    "names": [
+      "Su-34"
+    ]
+  },
+  "169": {
+    "file": "RU_SU35S-Label.webp",
+    "names": [
+      "Su-35S"
+    ]
+  },
+  "170": {
+    "file": "RU_ORION-Label.webp",
+    "names": [
+      "Orion"
+    ]
+  },
+  "171": {
+    "file": "PLACEHOLDER-Label.webp",
+    "names": [
+      "TESTING DUMMY"
+    ]
+  },
+  "172": {
+    "file": "RU_BTRD_ROBOT-Label.webp",
+    "names": [
+      "BTR-RD Robot"
+    ]
+  },
+  "173": {
+    "file": "RU_BRDM2-Label.webp",
+    "names": [
+      "BRDM-2M"
+    ]
+  },
+  "176": {
+    "file": "US_FIRE_TEAM-Label.webp",
+    "names": [
+      "Fire team"
+    ]
+  },
+  "177": {
+    "file": "US_GREEN_BERETS-Label.webp",
+    "names": [
+      "Green Berets"
+    ]
+  },
+  "180": {
+    "file": "US_ACV-Label.webp",
+    "names": [
+      "ACV"
+    ]
+  },
+  "182": {
+    "file": "US_SHERIDAN-Label.webp",
+    "names": [
+      "M551A1 Sheridan"
+    ]
+  },
+  "183": {
+    "file": "US_M8AGS-Label.webp",
+    "names": [
+      "M8 AGS"
+    ]
+  },
+  "184": {
+    "file": "US_RSOV-Label.webp",
+    "names": [
+      "RSOV"
+    ]
+  },
+  "185": {
+    "file": "US_M113A3-Label.webp",
+    "names": [
+      "M113A3"
+    ]
+  },
+  "186": {
+    "file": "US_M981_FIST-Label.webp",
+    "names": [
+      "M981 FISTV"
+    ]
+  },
+  "187": {
+    "file": "US_M901A3-Label.webp",
+    "names": [
+      "M901A3"
+    ]
+  },
+  "188": {
+    "file": "US_PIVADS-Label.webp",
+    "names": [
+      "M163 PIVADS"
+    ]
+  },
+  "189": {
+    "file": "US_M106A3-Label.webp",
+    "names": [
+      "M1064A3"
+    ]
+  },
+  "190": {
+    "file": "US_M270A2-Label.webp",
+    "names": [
+      "M270A2 GMLRS"
+    ]
+  },
+  "191": {
+    "file": "US_M1A2_SEPV3-Label.webp",
+    "names": [
+      "M1A2 SEP v3"
+    ]
+  },
+  "192": {
+    "file": "RU_BUK_M2-Label.webp",
+    "names": [
+      "Buk M3"
+    ]
+  },
+  "194": {
+    "file": "DLC3_TIGR_AGS-Label.webp",
+    "names": [
+      "DLC3 Tigr",
+      "Tigr"
+    ]
+  },
+  "195": {
+    "file": "DLC3_TIGR_SBRM-Label.webp",
+    "names": [
+      "DLC3 Tigr BRShM ",
+      "Tigr BRShM "
+    ]
+  },
+  "196": {
+    "file": "DLC3_TIGR_IGLA-Label.webp",
+    "names": [
+      "DLC3 Tigr Gibka",
+      "Tigr Gibka"
+    ]
+  },
+  "197": {
+    "file": "DLC3_TIGR_KORNET-Label.webp",
+    "names": [
+      "DLC3 Tigr Kornet",
+      "Tigr Kornet"
+    ]
+  },
+  "198": {
+    "file": "RU_TOS-Label.webp",
+    "names": [
+      "TOS-1"
+    ]
+  },
+  "199": {
+    "file": "RU_MTLB-Label.webp",
+    "names": [
+      "MT-LB"
+    ]
+  },
+  "200": {
+    "file": "RU_MTLB_ZU-Label.webp",
+    "names": [
+      "MT-LB SPAAG",
+      "MT-LB"
+    ]
+  },
+  "201": {
+    "file": "RU_STURM_S-Label.webp",
+    "names": [
+      "Shturm-S"
+    ]
+  },
+  "202": {
+    "file": "RU_STRELA10M-Label.webp",
+    "names": [
+      "MT-LB Strela",
+      "MT-LB"
+    ]
+  },
+  "203": {
+    "file": "RU_MTLB_MORTAR-Label.webp",
+    "names": [
+      "MT-LB Mortar",
+      "MT-LB"
+    ]
+  },
+  "204": {
+    "file": "RU_BTO-Label.webp",
+    "names": [
+      "BTO"
+    ]
+  },
+  "205": {
+    "file": "RU_2S1_GVOZDIKA-Label.webp",
+    "names": [
+      "2S1 Gvozdika "
+    ]
+  },
+  "206": {
+    "file": "RU_BTRD_SKREZHET-Label.webp",
+    "names": [
+      "BTR-ZD Skrezhet"
+    ]
+  },
+  "207": {
+    "file": "RU_NONA_S-Label.webp",
+    "names": [
+      "2S9 Nona-S"
+    ]
+  },
+  "208": {
+    "file": "RU_BMP3F-Label.webp",
+    "names": [
+      "BMP-3F"
+    ]
+  },
+  "209": {
+    "file": "RU_BRM_3K-Label.webp",
+    "names": [
+      "BRM-3K"
+    ]
+  },
+  "210": {
+    "file": "RU_VENA-Label.webp",
+    "names": [
+      "2S31 Vena"
+    ]
+  },
+  "211": {
+    "file": "RU_DERIVACIYA_AA-Label.webp",
+    "names": [
+      "Derivatsiya"
+    ]
+  },
+  "212": {
+    "file": "RU_BT3F-Label.webp",
+    "names": [
+      "BT-3F"
+    ]
+  },
+  "213": {
+    "file": "RU_BMP_KORNET-Label.webp",
+    "names": [
+      "Kornet-T"
+    ]
+  },
+  "214": {
+    "file": "RU_BMP2-Label.webp",
+    "names": [
+      "BMP-2"
+    ]
+  },
+  "215": {
+    "file": "RU_PRP4-Label.webp",
+    "names": [
+      "BRM-1K"
+    ]
+  },
+  "216": {
+    "file": "RU_BMO1-Label.webp",
+    "names": [
+      "BMO-1"
+    ]
+  },
+  "217": {
+    "file": "RU_BRDM3-Label.webp",
+    "names": [
+      "BRDM-3"
+    ]
+  },
+  "218": {
+    "file": "RU_NONA_SVK-Label.webp",
+    "names": [
+      "2S23 Nona-SVK"
+    ]
+  },
+  "219": {
+    "file": "DLC3_BPM97_KORD-Label.webp",
+    "names": [
+      "DLC3 BPM-97",
+      "BPM-97"
+    ]
+  },
+  "220": {
+    "file": "DLC3_BPM97_GSCH30_IGLA-Label.webp",
+    "names": [
+      "DLC3 BPM-97 Strela",
+      "BPM Strela"
+    ]
+  },
+  "221": {
+    "file": "RU_SHILKA-Label.webp",
+    "names": [
+      "ZSU-23-4 Shilka"
+    ]
+  },
+  "222": {
+    "file": "RU_URAL_ZU-Label.webp",
+    "names": [
+      "Ural-4320 ZU-23"
+    ]
+  },
+  "223": {
+    "file": "DLC3_URAGAN_M1_220MM-Label.webp",
+    "names": [
+      "DLC3 9K512 Uragan-1M",
+      "9K512 Uragan-1M"
+    ]
+  },
+  "224": {
+    "file": "DLC3_TOS2-Label.webp",
+    "names": [
+      "DLC3 TOS-2 Tosochka",
+      "TOS-2 Tosochka"
+    ]
+  },
+  "225": {
+    "file": "RU_S350-Label.webp",
+    "names": [
+      "S-350 Vityaz"
+    ]
+  },
+  "226": {
+    "file": "RU_ISKANDER_K-Label.webp",
+    "names": [
+      "9K720 Iskander"
+    ]
+  },
+  "227": {
+    "file": "DLC3_S400_X4-Label.webp",
+    "names": [
+      "DLC3 S-400 Triumph",
+      "S-400 Triumph"
+    ]
+  },
+  "228": {
+    "file": "RU_URAL_5323-Label.webp",
+    "names": [
+      "Ural-5323"
+    ]
+  },
+  "229": {
+    "file": "RU_PTS4-Label.webp",
+    "names": [
+      "PTS-4 Duplo"
+    ]
+  },
+  "230": {
+    "file": "RU_PT76-Label.webp",
+    "names": [
+      "PT-76"
+    ]
+  },
+  "231": {
+    "file": "RU_BUK_M2-Label.webp",
+    "names": [
+      "Buk M2"
+    ]
+  },
+  "232": {
+    "file": "RU_Koalitsiya-Label.webp",
+    "names": [
+      "2S35 Koalitsiya-SV"
+    ]
+  },
+  "233": {
+    "file": "RU_TUNGUSKA-Label.webp",
+    "names": [
+      "2K22M Tunguska-M"
+    ]
+  },
+  "234": {
+    "file": "RU_2S3_AKACIYA-Label.webp",
+    "names": [
+      "2S3M1 Akatsia"
+    ]
+  },
+  "235": {
+    "file": "RU_BMO_T-Label.webp",
+    "names": [
+      "BMO-T"
+    ]
+  },
+  "236": {
+    "file": "RU_T90A-Label.webp",
+    "names": [
+      "T-90"
+    ]
+  },
+  "237": {
+    "file": "RU_T90M_Recon-Label.webp",
+    "names": [
+      "T-90M Razvedchik"
+    ]
+  },
+  "238": {
+    "file": "RU_T90M-Label.webp",
+    "names": [
+      "T-90M"
+    ]
+  },
+  "239": {
+    "file": "RU_T80_BVM-Label.webp",
+    "names": [
+      "T-80U"
+    ]
+  },
+  "240": {
+    "file": "RU_BMPT-Label.webp",
+    "names": [
+      "BMPT Terminator"
+    ]
+  },
+  "241": {
+    "file": "US_PLS-Label.webp",
+    "names": [
+      "M1075A1 PLS"
+    ]
+  },
+  "242": {
+    "file": "US_HEMTT-Label.webp",
+    "names": [
+      "HEMTT"
+    ]
+  },
+  "243": {
+    "file": "US_M1A2_SEPV2-Label.webp",
+    "names": [
+      "M1A2 SEP v2"
+    ]
+  },
+  "244": {
+    "file": "US_M1A2_SEP-Label.webp",
+    "names": [
+      "M1A2 SEP"
+    ]
+  },
+  "245": {
+    "file": "US_M1A2-Label.webp",
+    "names": [
+      "M1A2 Abrams"
+    ]
+  },
+  "246": {
+    "file": "US_M548A3-Label.webp",
+    "names": [
+      "M548A3 "
+    ]
+  },
+  "247": {
+    "file": "US_M109_PALADIN-Label.webp",
+    "names": [
+      "M109A6 Paladin"
+    ]
+  },
+  "249": {
+    "file": "US_HUMVEE_PATROL-Label.webp",
+    "names": [
+      "Humvee RWS"
+    ]
+  },
+  "250": {
+    "file": "US_CRAM-Label.webp",
+    "names": [
+      "Centurion C-RAM"
+    ]
+  },
+  "251": {
+    "file": "US_PATRIOT_PAC3-Label.webp",
+    "names": [
+      "Patriot PAC-3"
+    ]
+  },
+  "252": {
+    "file": "RU_BRDM_KONKURS-Label.webp",
+    "names": [
+      "BRDM ATGM"
+    ]
+  },
+  "253": {
+    "file": "RU_K16_BUMERANG-Label.webp",
+    "names": [
+      "K16 Bumerang"
+    ]
+  },
+  "254": {
+    "file": "RU_KURGANETS-Label.webp",
+    "names": [
+      "B10 Kurganets"
+    ]
+  },
+  "255": {
+    "file": "RU_T15-Label.webp",
+    "names": [
+      "T-15 Barbaris"
+    ]
+  },
+  "256": {
+    "file": "RU_MI28N-Label.webp",
+    "names": [
+      "Mi-28N Ohotnik"
+    ]
+  },
+  "257": {
+    "file": "DLC3_KA60-Label.webp",
+    "names": [
+      "DLC3 KA-60",
+      "KA-60"
+    ]
+  },
+  "258": {
+    "file": "DLC3_KA226T-Label.webp",
+    "names": [
+      "DLC3 KA-226",
+      "KA-226"
+    ]
+  },
+  "259": {
+    "file": "US_MV22-Label.webp",
+    "names": [
+      "CV-22B Osprey"
+    ]
+  },
+  "260": {
+    "file": "US_MH60X-Label.webp",
+    "names": [
+      "MH-60X Silent Hawk"
+    ]
+  },
+  "261": {
+    "file": "RU_MI26-Label.webp",
+    "names": [
+      "Mi-26 Korova"
+    ]
+  },
+  "262": {
+    "file": "US_MH60M_SOAR-Label.webp",
+    "names": [
+      "MH-60M SOAR"
+    ]
+  },
+  "263": {
+    "file": "RU_MI35M-Label.webp",
+    "names": [
+      "Mi-35M"
+    ]
+  },
+  "264": {
+    "file": "US_MQ4_GLOBAL_HAWK-Label.webp",
+    "names": [
+      "RQ-4 Global Hawk"
+    ]
+  },
+  "266": {
+    "file": "RU_MI8_MTV2-Label.webp",
+    "names": [
+      "Mi-8MTV-2 Pchela"
+    ]
+  },
+  "267": {
+    "file": "US_OH58_KIOWA-Label.webp",
+    "names": [
+      "OH-58D Kiowa Warrior"
+    ]
+  },
+  "268": {
+    "file": "RU_MI38T-Label.webp",
+    "names": [
+      "Mi-38T"
+    ]
+  },
+  "269": {
+    "file": "RU_MI24_PN-Label.webp",
+    "names": [
+      "Mi-24PN"
+    ]
+  },
+  "270": {
+    "file": "US_AH64_LONGBOW-Label.webp",
+    "names": [
+      "AH-64E Guardian"
+    ]
+  },
+  "271": {
+    "file": "RU_KA52K-Label.webp",
+    "names": [
+      "Ka-52K Katran"
+    ]
+  },
+  "272": {
+    "file": "US_MH60M_DAP-Label.webp",
+    "names": [
+      "MH-60M DAP"
+    ]
+  },
+  "273": {
+    "file": "RU_KA29-Label.webp",
+    "names": [
+      "Ka-29"
+    ]
+  },
+  "274": {
+    "file": "US_MH47_SOAR-Label.webp",
+    "names": [
+      "MH-47G SOAR"
+    ]
+  },
+  "275": {
+    "file": "US_CH53K-Label.webp",
+    "names": [
+      "CH-53K King Stallion"
+    ]
+  },
+  "276": {
+    "file": "US_PARARESCUEMEN-Label.webp",
+    "names": [
+      "Pararescue"
+    ]
+  },
+  "277": {
+    "file": "US_SCOUTS-Label.webp",
+    "names": [
+      "Scouts"
+    ]
+  },
+  "278": {
+    "file": "US_ARMY_SNIPERS-Label.webp",
+    "names": [
+      "Army Snipers"
+    ]
+  },
+  "280": {
+    "file": "RU_TU22M3-Label.webp",
+    "names": [
+      "Tu-22M3"
+    ]
+  },
+  "281": {
+    "file": "RU_IL76-Label.webp",
+    "names": [
+      "IL-76MD"
+    ]
+  },
+  "282": {
+    "file": "US_A10-Label.webp",
+    "names": [
+      "A-10C Thunderbolt II"
+    ]
+  },
+  "283": {
+    "file": "US_F15C-Label.webp",
+    "names": [
+      "F-15C Eagle"
+    ]
+  },
+  "284": {
+    "file": "US_F16_BLOCK70-Label.webp",
+    "names": [
+      "F-16V Viper"
+    ]
+  },
+  "285": {
+    "file": "US_F16_BLOCK52-Label.webp",
+    "names": [
+      "F-16C Fighting Falcon"
+    ]
+  },
+  "286": {
+    "file": "US_F16CJ-Label.webp",
+    "names": [
+      "F-16CJ"
+    ]
+  },
+  "287": {
+    "file": "US_F15E-Label.webp",
+    "names": [
+      "F-15E Strike Eagle"
+    ]
+  },
+  "288": {
+    "file": "US_AV8B_PLUS-Label.webp",
+    "names": [
+      "AV-8B Harrier II Plus"
+    ]
+  },
+  "289": {
+    "file": "US_F15E-Label.webp",
+    "names": [
+      "F-15EX Eagle II"
+    ]
+  },
+  "291": {
+    "file": "US_FA18C-Label.webp",
+    "names": [
+      "F/A-18C Hornet"
+    ]
+  },
+  "292": {
+    "file": "US_FA18D-Label.webp",
+    "names": [
+      "F/A-18D Hornet "
+    ]
+  },
+  "293": {
+    "file": "US_B1B-Label.webp",
+    "names": [
+      "B-1B Lancer"
+    ]
+  },
+  "294": {
+    "file": "US_F35-Label.webp",
+    "names": [
+      "F-35A"
+    ]
+  },
+  "295": {
+    "file": "US_F35-Label.webp",
+    "names": [
+      "F-35B"
+    ]
+  },
+  "297": {
+    "file": "US_F22-Label.webp",
+    "names": [
+      "F-22 Raptor"
+    ]
+  },
+  "298": {
+    "file": "US_F117-Label.webp",
+    "names": [
+      "F-117 Nighthawk"
+    ]
+  },
+  "299": {
+    "file": "US_B2-Label.webp",
+    "names": [
+      "B-2 Spirit"
+    ]
+  },
+  "300": {
+    "file": "US_B52-Label.webp",
+    "names": [
+      "B-52H Stratofortress"
+    ]
+  },
+  "301": {
+    "file": "US_AC130_GUNSHIP-Label.webp",
+    "names": [
+      "AC-130"
+    ]
+  },
+  "302": {
+    "file": "US_C130-Label.webp",
+    "names": [
+      "C-130J-30 Hercules"
+    ]
+  },
+  "303": {
+    "file": "US_C130-Label.webp",
+    "names": [
+      "KC-130J Harvest Hawk"
+    ]
+  },
+  "304": {
+    "file": "US_C130-Label.webp",
+    "names": [
+      "MC-130H "
+    ]
+  },
+  "305": {
+    "file": "US_C17-Label.webp",
+    "names": [
+      "C-17 Globemaster"
+    ]
+  },
+  "306": {
+    "file": "RU_SU24M2-Label.webp",
+    "names": [
+      "Su-24M2"
+    ]
+  },
+  "307": {
+    "file": "RU_SU25SM-Label.webp",
+    "names": [
+      "Su-25SM"
+    ]
+  },
+  "308": {
+    "file": "RU_SU24-Label.webp",
+    "names": [
+      "Su-24MP"
+    ]
+  },
+  "309": {
+    "file": "RU_MIG29-Label.webp",
+    "names": [
+      "MiG-35"
+    ]
+  },
+  "310": {
+    "file": "RU_MIG29-Label.webp",
+    "names": [
+      "MiG-29SMT"
+    ]
+  },
+  "311": {
+    "file": "RU_MIG29-Label.webp",
+    "names": [
+      "MiG-29K"
+    ]
+  },
+  "312": {
+    "file": "RU_SU33-Label.webp",
+    "names": [
+      "Su-33"
+    ]
+  },
+  "313": {
+    "file": "RU_YAK38-Label.webp",
+    "names": [
+      "YaK-38M"
+    ]
+  },
+  "314": {
+    "file": "DLC3_YAK130-Label.webp",
+    "names": [
+      "DLC3 Yak-130",
+      "Yak-130"
+    ]
+  },
+  "315": {
+    "file": "DLC3_MIG31_BM-Label.webp",
+    "names": [
+      "DLC3 MiG-31BM",
+      "MiG-31BM"
+    ]
+  },
+  "316": {
+    "file": "DLC3_AN26-Label.webp",
+    "names": [
+      "DLC3 An-26",
+      "An-26"
+    ]
+  },
+  "317": {
+    "file": "RU_TU160-Label.webp",
+    "names": [
+      "Tu-160"
+    ]
+  },
+  "318": {
+    "file": "DLC3_MIG31_K-Label.webp",
+    "names": [
+      "DLC3 MiG-31K",
+      "MiG-31K"
+    ]
+  },
+  "319": {
+    "file": "RU_SU30SM-Label.webp",
+    "names": [
+      "Su-30SM"
+    ]
+  },
+  "320": {
+    "file": "US_DRAGON-Label.webp",
+    "names": [
+      "CAAT Dragon"
+    ]
+  },
+  "321": {
+    "file": "US_ALREIGHT_BURK-Label.webp",
+    "names": [
+      "Arleigh Burke"
+    ]
+  },
+  "322": {
+    "file": "US_PILOT-Label.webp",
+    "names": [
+      "US Pilot ",
+      "Pilot"
+    ]
+  },
+  "323": {
+    "file": "US_PILOT-Label.webp",
+    "names": [
+      "US Crew",
+      "Pilots"
+    ]
+  },
+  "324": {
+    "file": "US_PILOT-Label.webp",
+    "names": [
+      "US Bomber Crew ",
+      "Pilots"
+    ]
+  },
+  "325": {
+    "file": "RU_PILOT-Label.webp",
+    "names": [
+      "RU Pilot",
+      "Pilot"
+    ]
+  },
+  "326": {
+    "file": "RU_PILOT-Label.webp",
+    "names": [
+      "RU Crew",
+      "Pilots"
+    ]
+  },
+  "327": {
+    "file": "RU_PILOT-Label.webp",
+    "names": [
+      "RU Bomber Crew",
+      "Pilots"
+    ]
+  },
+  "328": {
+    "file": "RU_FORPOST-Label.webp",
+    "names": [
+      "Forpost"
+    ]
+  },
+  "329": {
+    "file": "RU_KORSAR-Label.webp",
+    "names": [
+      "Korsar"
+    ]
+  },
+  "330": {
+    "file": "US_LHA_SHIP-Label.webp",
+    "names": [
+      "LHA-6"
+    ]
+  },
+  "331": {
+    "file": "DLC3_TU95-Label.webp",
+    "names": [
+      "DLC3 Tu-95",
+      "Tu-95"
+    ]
+  },
+  "332": {
+    "file": "US_MARINE_SRAW-Label.webp",
+    "names": [
+      "Assaultmen SRAW"
+    ]
+  },
+  "333": {
+    "file": "US_SCOUT_SNIPERS_M107-Label.webp",
+    "names": [
+      "Scout Snipers M107"
+    ]
+  },
+  "336": {
+    "file": "US_FORCE_RECON-Label.webp",
+    "names": [
+      "Force Recon CQC"
+    ]
+  },
+  "338": {
+    "file": "US_RANGER_RRC-Label.webp",
+    "names": [
+      "Rangers RRC 2",
+      "Rangers RRC "
+    ]
+  },
+  "339": {
+    "file": "US_RANGERS_SNIPER_M107-Label.webp",
+    "names": [
+      "Rangers Snipers AT"
+    ]
+  },
+  "340": {
+    "file": "US_ARMY_SNIPERS_M107-Label.webp",
+    "names": [
+      "Army Snipers 2",
+      "Army Snipers "
+    ]
+  },
+  "341": {
+    "file": "US_GREEN_BERETS-Label.webp",
+    "names": [
+      "Green Berets Snipers",
+      "Green Berets "
+    ]
+  },
+  "342": {
+    "file": "US_STT-Label.webp",
+    "names": [
+      "STT"
+    ]
+  },
+  "343": {
+    "file": "US_CAAT_TOW-Label.webp",
+    "names": [
+      "CAAT TOW-2B Saber"
+    ]
+  },
+  "344": {
+    "file": "DLC3_SPECNAZ_VYMPEL-Label.webp",
+    "names": [
+      "DLC3 Spetsnaz Vympel StandOff",
+      "Spetsnaz Vympel AT"
+    ]
+  },
+  "345": {
+    "file": "DLC3_FSB_SNIPER-Label.webp",
+    "names": [
+      "DLC3 FSB Snaipery 2",
+      "FSB Snaipery "
+    ]
+  },
+  "346": {
+    "file": "RU_SPECNAZ_GRU-Label.webp",
+    "names": [
+      "Spetsnaz GRU AT"
+    ]
+  },
+  "347": {
+    "file": "RU_SNAIPERY_ASVK-Label.webp",
+    "names": [
+      "Snaipery 2",
+      "Snaipery "
+    ]
+  },
+  "348": {
+    "file": "RU_VDV_SNIPER_DVL10-Label.webp",
+    "names": [
+      "VDV Snaipery 2",
+      "VDV Snaipery "
+    ]
+  },
+  "349": {
+    "file": "RU_SPECNAZ_VDV-Label.webp",
+    "names": [
+      "VDV Spetsnaz 2",
+      "VDV Spetsnaz "
+    ]
+  },
+  "350": {
+    "file": "US_AIRBORNE_RECCE-Label.webp",
+    "names": [
+      "Airborne Recce"
+    ]
+  },
+  "351": {
+    "file": "US_PARATROOPERS-Label.webp",
+    "names": [
+      "Airborne",
+      "Airborne NGWS"
+    ]
+  },
+  "352": {
+    "file": "RU_KORNET-Label.webp",
+    "names": [
+      "VDV Kornet-M"
+    ]
+  },
+  "353": {
+    "file": "RU_AGS_40-Label.webp",
+    "names": [
+      "AGS-40 Balkan"
+    ]
+  },
+  "354": {
+    "file": "DLC3_SPECNAZ_ALPHA-Label.webp",
+    "names": [
+      "DLC3 Spetsnaz Alpha 2",
+      "Spetsnaz Alpha "
+    ]
+  },
+  "355": {
+    "file": "RU_FAGOT-Label.webp",
+    "names": [
+      "PTRK Faktoriya"
+    ]
+  },
+  "356": {
+    "file": "RU_IGLA-Label.webp",
+    "names": [
+      "PZRK Igla-S"
+    ]
+  },
+  "357": {
+    "file": "RU_KONKURS_M-Label.webp",
+    "names": [
+      "PTRK Konkurs-M"
+    ]
+  },
+  "358": {
+    "file": "RU_FLAMETHROWER-Label.webp",
+    "names": [
+      "Ognemetchiki 2",
+      "Ognemetchiki "
+    ]
+  },
+  "359": {
+    "file": "US_MARINE_RAIDERS-Label.webp",
+    "names": [
+      "Marine Raiders AT",
+      "Marine Raiders"
+    ]
+  },
+  "360": {
+    "file": "RU_SU24-Label.webp",
+    "names": [
+      "Su-24M2 (landed)"
+    ]
+  },
+  "361": {
+    "file": "RU_IL76-Label.webp",
+    "names": [
+      "IL-76MD (landed)",
+      "IL-76MD"
+    ]
+  },
+  "362": {
+    "file": "US_MQ_9-Label.webp",
+    "names": [
+      "MQ-1 Predator"
+    ]
+  },
+  "363": {
+    "file": "US_MQ_9-Label.webp",
+    "names": [
+      "MQ-1C Gray Eagle"
+    ]
+  },
+  "364": {
+    "file": "US_RAH66-Label.webp",
+    "names": [
+      "RAH-66 Comanche"
+    ]
+  },
+  "365": {
+    "file": "RU_BMP1-Label.webp",
+    "names": [
+      "BMP-1"
+    ]
+  },
+  "366": {
+    "file": "RU_MORSKAYA_RAZVEDKA-Label.webp",
+    "names": [
+      "Morskaya razvedka"
+    ]
+  },
+  "367": {
+    "file": "RU_SPECNAZ_VMF-Label.webp",
+    "names": [
+      "Spetsnaz VMF"
+    ]
+  },
+  "368": {
+    "file": "RU_SPECNAZ_VMF-Label.webp",
+    "names": [
+      "Spetsnaz VMF 2",
+      "Spetsnaz VMF "
+    ]
+  },
+  "369": {
+    "file": "RU_AGS_17-Label.webp",
+    "names": [
+      "AGS-17 Plamya"
+    ]
+  },
+  "370": {
+    "file": "US_MECH_MMG-Label.webp",
+    "names": [
+      "Mech. Riflemen MMG"
+    ]
+  },
+  "371": {
+    "file": "US_MECH_AA-Label.webp",
+    "names": [
+      "Mech. Riflemen AA"
+    ]
+  },
+  "372": {
+    "file": "RU_BLACK_BERET-Label.webp",
+    "names": [
+      "Chernye Berety"
+    ]
+  },
+  "373": {
+    "file": "RU_TOCHKA-Label.webp",
+    "names": [
+      "Tochka-U"
+    ]
+  },
+  "374": {
+    "file": "RU_SU25-Label.webp",
+    "names": [
+      "Su-25T"
+    ]
+  },
+  "375": {
+    "file": "US_LAV_L-Label.webp",
+    "names": [
+      "LAV-L"
+    ]
+  },
+  "376": {
+    "file": "US_M270A1-Label.webp",
+    "names": [
+      "M270 MLRS",
+      "M270A1 MLRS"
+    ]
+  },
+  "377": {
+    "file": "US_EA6B-Label.webp",
+    "names": [
+      "EA-6B Prowler"
+    ]
+  },
+  "379": {
+    "file": "RU_TU95MS-Label.webp",
+    "names": [
+      "Tu-142"
+    ]
+  },
+  "380": {
+    "file": "RU_MI28NM-Label.webp",
+    "names": [
+      "Mi-28NM Mikhalych"
+    ]
+  },
+  "381": {
+    "file": "RU_DT30-Label.webp",
+    "names": [
+      "DT-30PM Vityaz"
+    ]
+  },
+  "382": {
+    "file": "RU_MAGNOLIA-Label.webp",
+    "names": [
+      "2S39 Magnolia"
+    ]
+  },
+  "383": {
+    "file": "RU_BTR90-Label.webp",
+    "names": [
+      "BTR-90"
+    ]
+  },
+  "384": {
+    "file": "RU_REOSTAT-Label.webp",
+    "names": [
+      "1V119 Reostat"
+    ]
+  },
+  "385": {
+    "file": "RU_PDSS-Label.webp",
+    "names": [
+      "PDSS 2",
+      "PDSS "
+    ]
+  },
+  "386": {
+    "file": "US_M2A2_ESV-Label.webp",
+    "names": [
+      "M2A2 Bradley ESV"
+    ]
+  },
+  "387": {
+    "file": "US_M3A2_CFV-Label.webp",
+    "names": [
+      "M3A2 CFV"
+    ]
+  },
+  "388": {
+    "file": "US_BRUTUS-Label.webp",
+    "names": [
+      "Brutus"
+    ]
+  },
+  "389": {
+    "file": "US_SLAMRAAM-Label.webp",
+    "names": [
+      "SLAMRAAM"
+    ]
+  },
+  "390": {
+    "file": "US_MTV-Label.webp",
+    "names": [
+      "MTV"
+    ]
+  },
+  "391": {
+    "file": "US_MICLIC-Label.webp",
+    "names": [
+      "AAVP MICLIC"
+    ]
+  },
+  "392": {
+    "file": "US_LMTV_PIG-Label.webp",
+    "names": [
+      "LMTV War Pig"
+    ]
+  },
+  "393": {
+    "file": "US_MML-Label.webp",
+    "names": [
+      "MML"
+    ]
+  },
+  "394": {
+    "file": "RU_TOR_M2DT-Label.webp",
+    "names": [
+      "DT-30AA"
+    ]
+  },
+  "395": {
+    "file": "US_RQ170-Label.webp",
+    "names": [
+      "RQ-170 Sentinel"
+    ]
+  },
+  "396": {
+    "file": "BLT_XA180-Label.webp",
+    "names": [
+      "BALT XA-180",
+      "XA-180"
+    ]
+  },
+  "397": {
+    "file": "RU_AN_72P-Label.webp",
+    "names": [
+      "AN-72P"
+    ]
+  },
+  "398": {
+    "file": "RU_MOTOSTRELKI_BMP-Label.webp",
+    "names": [
+      "Motostrelki"
+    ]
+  },
+  "399": {
+    "file": "RU_PKP-Label.webp",
+    "names": [
+      "Pulemetchiki PKP"
+    ]
+  },
+  "400": {
+    "file": "RU_HMG_KORD-Label.webp",
+    "names": [
+      "Pulemetchiki Kord"
+    ]
+  },
+  "401": {
+    "file": "RU_STURMOVIKI-Label.webp",
+    "names": [
+      "Shturmoviki"
+    ]
+  },
+  "402": {
+    "file": "RU_METIS_AK-Label.webp",
+    "names": [
+      "PTO Metis"
+    ]
+  },
+  "403": {
+    "file": "RU_INFORMERS-Label.webp",
+    "names": [
+      "Diversanty ",
+      "Diversanty"
+    ]
+  },
+  "404": {
+    "file": "RU_IGLA_AK-Label.webp",
+    "names": [
+      "Motostrelki Igla"
+    ]
+  },
+  "405": {
+    "file": "RU_INGENERISTURM-Label.webp",
+    "names": [
+      "Ingenery Shturmoviki 2",
+      "Ingenery-Shturmoviki"
+    ]
+  },
+  "406": {
+    "file": "RU_SSO-Label.webp",
+    "names": [
+      "SSO 2",
+      "SSO"
+    ]
+  },
+  "407": {
+    "file": "US_USMC_RESERVE-Label.webp",
+    "names": [
+      "Reserve Marines"
+    ]
+  },
+  "408": {
+    "file": "US_JAVELIN-Label.webp",
+    "names": [
+      "CAAT Javelin"
+    ]
+  },
+  "409": {
+    "file": "US_RANGERS_CQC-Label.webp",
+    "names": [
+      "Rangers CQC"
+    ]
+  },
+  "410": {
+    "file": "US_RANGERS_CGM3-Label.webp",
+    "names": [
+      "Rangers RAWS+",
+      "Rangers MAAWS"
+    ]
+  },
+  "411": {
+    "file": "US_DELTA_FORCE-Label.webp",
+    "names": [
+      "Delta Force 2",
+      "Delta Force "
+    ]
+  },
+  "413": {
+    "file": "US_CAV_AA-Label.webp",
+    "names": [
+      "Troopers AA"
+    ]
+  },
+  "414": {
+    "file": "US_TOW2-Label.webp",
+    "names": [
+      "TOW-2A"
+    ]
+  },
+  "415": {
+    "file": "US_TOW2-Label.webp",
+    "names": [
+      "TOW-2B"
+    ]
+  },
+  "416": {
+    "file": "US_RANGER_JAVELIN-Label.webp",
+    "names": [
+      "Rangers Javelin"
+    ]
+  },
+  "417": {
+    "file": "RU_SPECNAZ_GRU-Label.webp",
+    "names": [
+      "Spetsnaz GRU AA"
+    ]
+  },
+  "418": {
+    "file": "RU_DIVERSANTI_V1-Label.webp",
+    "names": [
+      "Diversanty RPG"
+    ]
+  },
+  "419": {
+    "file": "RU_GORNOSTRELKI-Label.webp",
+    "names": [
+      "Gornostrelki ",
+      "Gornostrelki"
+    ]
+  },
+  "420": {
+    "file": "US_C17-Label.webp",
+    "names": [
+      "C-17 Globemaster ",
+      "C-17 Globemaster (takeoff)"
+    ]
+  },
+  "421": {
+    "file": "US_M985-Label.webp",
+    "names": [
+      "M985 Battleship"
+    ]
+  },
+  "422": {
+    "file": "RU_MALKA-Label.webp",
+    "names": [
+      "2S7M Malka"
+    ]
+  },
+  "423": {
+    "file": "RU_URAL_4320-Label.webp",
+    "names": [
+      "Ural-4320"
+    ]
+  },
+  "425": {
+    "file": "RU_BTR80-Label.webp",
+    "names": [
+      "BTR-80"
+    ]
+  },
+  "426": {
+    "file": "BLT_PZH2000-Label.webp",
+    "names": [
+      "BALT PzH-2000",
+      "PzH-2000"
+    ]
+  },
+  "427": {
+    "file": "BLT_UNIMOG-Label.webp",
+    "names": [
+      "BALT Unimog U5000",
+      "Unimog U5000"
+    ]
+  },
+  "428": {
+    "file": "US_UH60-Label.webp",
+    "names": [
+      "BALT UH-60M",
+      "UH-60M"
+    ]
+  },
+  "429": {
+    "file": "US_M109_PALADIN-Label.webp",
+    "names": [
+      "BALT M109A5Ö ",
+      "M109A5Ö "
+    ]
+  },
+  "430": {
+    "file": "US_M113A3-Label.webp",
+    "names": [
+      "BALT M113",
+      "M113"
+    ]
+  },
+  "431": {
+    "file": "US_M106A3-Label.webp",
+    "names": [
+      "BALT M1064 Mortar",
+      "M1064 Mortar"
+    ]
+  },
+  "432": {
+    "file": "US_HUMVEE_PATROL-Label.webp",
+    "names": [
+      "BALT Humvee ",
+      "Humvee"
+    ]
+  },
+  "433": {
+    "file": "US_IFAV_M2-Label.webp",
+    "names": [
+      "BALT G-Wagen",
+      "G-Wagen"
+    ]
+  },
+  "434": {
+    "file": "BLT_GELEZINIS-Label.webp",
+    "names": [
+      "BALT Geležinis Vilkas (Mech)",
+      "Geležinis Vilkas"
+    ]
+  },
+  "435": {
+    "file": "BLT_MEHANIZETIE-Label.webp",
+    "names": [
+      "BALT Mehanizētie Kājinieki",
+      "Mehanizetie Kajinieki"
+    ]
+  },
+  "436": {
+    "file": "BLT_RESERVISTS-Label.webp",
+    "names": [
+      "BALT Eesti Kaitseliit (reservists)",
+      "Eesti Kaitseliit"
+    ]
+  },
+  "437": {
+    "file": "BLT_JAGER-Label.webp",
+    "names": [
+      "BALT Jegeris",
+      "Jegeris"
+    ]
+  },
+  "438": {
+    "file": "BLT_SPIKE-Label.webp",
+    "names": [
+      "BALT Spike LR team",
+      "Spike LR"
+    ]
+  },
+  "439": {
+    "file": "BLT_SNIPER-Label.webp",
+    "names": [
+      "BALT Snipers",
+      "Snipers"
+    ]
+  },
+  "440": {
+    "file": "US_STINGER_F-Label.webp",
+    "names": [
+      "BALT Stinger team",
+      "Stinger team"
+    ]
+  },
+  "441": {
+    "file": "US_M2-Label.webp",
+    "names": [
+      "BALT M2 HMG team",
+      "HMG team"
+    ]
+  },
+  "442": {
+    "file": "US_JAVELIN-Label.webp",
+    "names": [
+      "BALT Javelin team",
+      "Javelin team"
+    ]
+  },
+  "443": {
+    "file": "BLT_CV9035-Label.webp",
+    "names": [
+      "BALT CV-9035",
+      "CV-9035"
+    ]
+  },
+  "444": {
+    "file": "BLT_VILKAS-Label.webp",
+    "names": [
+      "BALT Vilkas",
+      "Vilkas"
+    ]
+  },
+  "445": {
+    "file": "BLT_RARDEN-Label.webp",
+    "names": [
+      "BALT Scimitar",
+      "Scimitar"
+    ]
+  },
+  "446": {
+    "file": "RU_GIAZINT-Label.webp",
+    "names": [
+      "2S5 Giatsint"
+    ]
+  },
+  "447": {
+    "file": "US_RQ7-Label.webp",
+    "names": [
+      "RQ-7 Shadow"
+    ]
+  },
+  "448": {
+    "file": "US_PATRIOT_MSE-Label.webp",
+    "names": [
+      "Patriot PAC-3 MSE"
+    ]
+  },
+  "449": {
+    "file": "US_COMBAT_ENGINEERS-Label.webp",
+    "names": [
+      "Combat Engineers"
+    ]
+  },
+  "450": {
+    "file": "RU_TOROS-Label.webp",
+    "names": [
+      "BMOP Toros"
+    ]
+  },
+  "451": {
+    "file": "RU_SU57-Label.webp",
+    "names": [
+      "Su-57 (landed)"
+    ]
+  },
+  "452": {
+    "file": "US_STYKER_SPH-Label.webp",
+    "names": [
+      "Stryker SPH"
+    ]
+  },
+  "453": {
+    "file": "US_BOOKER-Label.webp",
+    "names": [
+      "M10 Booker"
+    ]
+  },
+  "454": {
+    "file": "RU_KORD_METIS-Label.webp",
+    "names": [
+      "VDV Metis-M1"
+    ]
+  },
+  "455": {
+    "file": "RU_UAZ-Label.webp",
+    "names": [
+      "UAZ Kozlik"
+    ]
+  },
+  "456": {
+    "file": "US_F15E-Label.webp",
+    "names": [
+      "F-15EX Eagle II (landed)",
+      "F-15EX Eagle II"
+    ]
+  },
+  "457": {
+    "file": "US_M1150-Label.webp",
+    "names": [
+      "M1150 Assault Breacher"
+    ]
+  },
+  "458": {
+    "file": "RU_MACHINA_S-Label.webp",
+    "names": [
+      "1V14 Mashina-S"
+    ]
+  },
+  "459": {
+    "file": "RU_KORNET-Label.webp",
+    "names": [
+      "PTRK Kornet"
+    ]
+  },
+  "460": {
+    "file": "RU_KORNET-Label.webp",
+    "names": [
+      "PTRK Kornet-M"
+    ]
+  },
+  "461": {
+    "file": "RU_T14-Label.webp",
+    "names": [
+      "Armata training Target",
+      "Armatank training Target"
+    ]
+  },
+  "462": {
+    "file": "VIP-Label.webp",
+    "names": [
+      "Miller"
+    ]
+  },
+  "463": {
+    "file": "RU_SU24-Label.webp",
+    "names": [
+      "Su-24M2 (takeoff)"
+    ]
+  },
+  "465": {
+    "file": "RU_SU27SM-Label.webp",
+    "names": [
+      "Su-27SM"
+    ]
+  },
+  "466": {
+    "file": "RU_S300F-Label.webp",
+    "names": [
+      "S-300PM Favorit"
+    ]
+  },
+  "467": {
+    "file": "US_MATV-Label.webp",
+    "names": [
+      "M-ATV"
+    ]
+  },
+  "468": {
+    "file": "BLT_EST_SCOUTS-Label.webp",
+    "names": [
+      "BALT Eesti Scouts",
+      "Eesti Scouts"
+    ]
+  },
+  "469": {
+    "file": "BLT_JALAVAE-Label.webp",
+    "names": [
+      "BALT Jagu",
+      "Jalaväe Jagu"
+    ]
+  },
+  "470": {
+    "file": "US_GREEN_BERETS-Label.webp",
+    "names": [
+      "Green Berets Flash",
+      "Green Berets "
+    ]
+  },
+  "471": {
+    "file": "RU_UR77-Label.webp",
+    "names": [
+      "UR-77 Meteorit"
+    ]
+  },
+  "472": {
+    "file": "VIP-Label.webp",
+    "names": [
+      "Partisan"
+    ]
+  },
+  "473": {
+    "file": "US_NAVY_SEALS-Label.webp",
+    "names": [
+      "Green Light Team"
+    ]
+  },
+  "474": {
+    "file": "RU_BTR80-Label.webp",
+    "names": [
+      "BTR training target"
+    ]
+  },
+  "475": {
+    "file": "RU_MI24_VP-Label.webp",
+    "names": [
+      "Helicopter training target",
+      "Mi-24 training target"
+    ]
+  },
+  "476": {
+    "file": "RU_MTSM-Label.webp",
+    "names": [
+      "MT-SM"
+    ]
+  },
+  "477": {
+    "file": "RU_BMD4_CMD-Label.webp",
+    "names": [
+      "BMD-4MK Demidov"
+    ]
+  },
+  "478": {
+    "file": "RU_BMD2_CMD-Label.webp",
+    "names": [
+      "BMD-2K Batalin"
+    ]
+  },
+  "479": {
+    "file": "RU_T90A_CMD-Label.webp",
+    "names": [
+      "T-90AK Batalin"
+    ]
+  },
+  "480": {
+    "file": "RU_BMP3-Label.webp",
+    "names": [
+      "BMP-3K Demidov"
+    ]
+  },
+  "481": {
+    "file": "BALT_LEO2A7-Label.webp",
+    "names": [
+      "BALT Leopard 2A7",
+      "Leopard 2A7"
+    ]
+  },
+  "482": {
+    "file": "BLT_RESERVISTS-Label.webp",
+    "names": [
+      "BALT LATVIAN RESERVE",
+      "Zemessardze"
+    ]
+  },
+  "483": {
+    "file": "BLT_RESERVISTS-Label.webp",
+    "names": [
+      "BALT LITHUANIAN RESERVE",
+      "Savanoriai"
+    ]
+  },
+  "484": {
+    "file": "BALLOON-Label.webp",
+    "names": [
+      "Balloon training target",
+      "Meteorological balloon"
+    ]
+  },
+  "485": {
+    "file": "ZMB_SUV-Label.webp",
+    "names": [
+      "NPC SUV",
+      "SUV"
+    ]
+  },
+  "486": {
+    "file": "OFFICER-Label.webp",
+    "names": [
+      "RU Officer",
+      "Officer"
+    ]
+  },
+  "487": {
+    "file": "RU_TANK_CREW-Label.webp",
+    "names": [
+      "Vehicle crew"
+    ]
+  },
+  "488": {
+    "file": "BALT_LEO2A7_TRAIN-Label.webp",
+    "names": [
+      "BALT Leopard 2A7 Train",
+      "Train cart"
+    ]
+  },
+  "489": {
+    "file": "US_LHA_SHIP-Label.webp",
+    "names": [
+      "LHA-6 Damaged",
+      "LHA-6"
+    ]
+  },
+  "490": {
+    "file": "ZMB_WALKER-Label.webp",
+    "names": [
+      "ZOM Walkers",
+      "Walkers"
+    ]
+  },
+  "491": {
+    "file": "ZMB_RUNNER-Label.webp",
+    "names": [
+      "ZOM Runners",
+      "Runners"
+    ]
+  },
+  "492": {
+    "file": "ZMB_SPITTER-Label.webp",
+    "names": [
+      "ZOM Spitters",
+      "Spitters"
+    ]
+  },
+  "493": {
+    "file": "ZMB_SMOKER-Label.webp",
+    "names": [
+      "ZOM Smokers",
+      "Smokers"
+    ]
+  },
+  "494": {
+    "file": "ZMB_BOOMER-Label.webp",
+    "names": [
+      "ZOM Boomer",
+      "Boomer"
+    ]
+  },
+  "495": {
+    "file": "ZMB_THROWER-Label.webp",
+    "names": [
+      "ZOM Thrower",
+      "Thrower"
+    ]
+  },
+  "496": {
+    "file": "ZMB_POLICE-Label.webp",
+    "names": [
+      "ZOM Police",
+      "Police"
+    ]
+  },
+  "497": {
+    "file": "ZMB_CIVILIANS-Label.webp",
+    "names": [
+      "ZOM Civilians",
+      "Civilians"
+    ]
+  },
+  "498": {
+    "file": "DLC2_CV9035-label.webp",
+    "names": [
+      "DLC2 CV-9035",
+      "CV-9035"
+    ]
+  },
+  "499": {
+    "file": "DLC2_SPARTAN.webp",
+    "names": [
+      "DLC2 Spartan",
+      "Spartan"
+    ]
+  },
+  "500": {
+    "file": "DLC2_VILKAS-label.webp",
+    "names": [
+      "DLC2 Vilkas",
+      "Vilkas"
+    ]
+  },
+  "501": {
+    "file": "DLC2_XA180-label.webp",
+    "names": [
+      "DLC2 XA-180",
+      "XA-180"
+    ]
+  },
+  "502": {
+    "file": "US_M113A3-Label.webp",
+    "names": [
+      "DLC2 M113",
+      "M113"
+    ]
+  },
+  "503": {
+    "file": "DLC2_LEO2A8-label.webp",
+    "names": [
+      "DLC2 Leopard 2A8",
+      "Leopard 2A8"
+    ]
+  },
+  "504": {
+    "file": "DLC2_SISU_E13TP-label.webp",
+    "names": [
+      "DLC2 E13TP",
+      "E13TP"
+    ]
+  },
+  "505": {
+    "file": "DLC2_LAND_ROVER-label.webp",
+    "names": [
+      "DLC2 Rover Defender",
+      "Wolf WMIK"
+    ]
+  },
+  "506": {
+    "file": "BLT_GELEZINIS-Label.webp",
+    "names": [
+      "DLC2 Gelezinis Vilkas",
+      "Gelezinis Vilkas"
+    ]
+  },
+  "507": {
+    "file": "DLC2_KASP-label.webp",
+    "names": [
+      "DLC2 KASP",
+      "KASP"
+    ]
+  },
+  "508": {
+    "file": "DLC2_NASAMS-label.webp",
+    "names": [
+      "DLC2 NASAMS",
+      "NASAMS"
+    ]
+  },
+  "509": {
+    "file": "DLC2_TGB_1111-label.webp",
+    "names": [
+      "DLC2 TGB-1111",
+      "TGB-1111"
+    ]
+  },
+  "510": {
+    "file": "DLC2_M113_PANZERMORSER-label.webp",
+    "names": [
+      "DLC2 M113 Panzermorser",
+      "M113 Panzermörser"
+    ]
+  },
+  "511": {
+    "file": "DLC2_M109O-label.webp",
+    "names": [
+      "DLC2 M109A5O",
+      "M109A5Ö "
+    ]
+  },
+  "512": {
+    "file": "DLC2_L39_ALBATROS-label.webp",
+    "names": [
+      "DLC2 L-39 Albatros",
+      "L-39 Albatros"
+    ]
+  },
+  "513": {
+    "file": "DLC2_JALAVAE-label.webp",
+    "names": [
+      "DLC2 Jalavae Jagu",
+      "Jalaväe Jagu"
+    ]
+  },
+  "514": {
+    "file": "BLT_MEHANIZETIE-Label.webp",
+    "names": [
+      "DLC2 Mehanizetie Kajinieki",
+      "Mehanizetie Kajinieki"
+    ]
+  },
+  "515": {
+    "file": "DLC2_KAITSELIIT-label.webp",
+    "names": [
+      "DLC2 Eesti Kaitseliit",
+      "Kaitseliit"
+    ]
+  },
+  "516": {
+    "file": "DLC2_ZEMESSARDZE-label.webp",
+    "names": [
+      "DLC2 Zemessardze",
+      "Zemessardze"
+    ]
+  },
+  "517": {
+    "file": "DLC2_ESTSOF-label.webp",
+    "names": [
+      "DLC2 ESTSOF",
+      "ESTSOF"
+    ]
+  },
+  "518": {
+    "file": "DLC2_ZALIUKAI-label.webp",
+    "names": [
+      "DLC2 Zaliukai",
+      "Zaliukai"
+    ]
+  },
+  "519": {
+    "file": "DLC2_MILAN_ER-label.webp",
+    "names": [
+      "DLC2 Milan",
+      "Milan"
+    ]
+  },
+  "520": {
+    "file": "DLC2_MILAN_ER-label.webp",
+    "names": [
+      "DLC2 Javelin",
+      "Javelin"
+    ]
+  },
+  "521": {
+    "file": "DLC2_SPIKE_LR-label.webp",
+    "names": [
+      "DLC2 Spike-LR",
+      "Spike"
+    ]
+  },
+  "522": {
+    "file": "DLC2_PIORUN-label.webp",
+    "names": [
+      "DLC2 Piorun",
+      "Piorun"
+    ]
+  },
+  "523": {
+    "file": "DLC2_GROM-label.webp",
+    "names": [
+      "DLC2 Grom",
+      "Grom"
+    ]
+  },
+  "524": {
+    "file": "DLC2_RBS70-label.webp",
+    "names": [
+      "DLC2 RBS 70",
+      "RBS 70"
+    ]
+  },
+  "525": {
+    "file": "DLC2_EST_SCOUTS-label.webp",
+    "names": [
+      "DLC2 Eesti Scouts",
+      "Eesti Scouts"
+    ]
+  },
+  "526": {
+    "file": "DLC2_JAGER-label.webp",
+    "names": [
+      "DLC2 Jegeris",
+      "Jegeris"
+    ]
+  },
+  "527": {
+    "file": "DLC2_SUV-label.webp",
+    "names": [
+      "DLC2 SUV",
+      "SUV"
+    ]
+  },
+  "528": {
+    "file": "DLC2_KNT-label.webp",
+    "names": [
+      "DLC2 KNT",
+      "KNT"
+    ]
+  },
+  "529": {
+    "file": "DLC2_SNAIPERU_KOMANDA-label.webp",
+    "names": [
+      "DLC2 Snaiperu komanda",
+      "Snaiperu komanda"
+    ]
+  },
+  "530": {
+    "file": "DLC2_SNAIPRID-label.webp",
+    "names": [
+      "DLC2 Snaiprid",
+      "Snaiprid"
+    ]
+  },
+  "531": {
+    "file": "DLC2_UH60M-label.webp",
+    "names": [
+      "DLC2 UH-60M",
+      "UH-60M"
+    ]
+  },
+  "532": {
+    "file": "DLC2_AS360-label.webp",
+    "names": [
+      "DLC2 AS-365 Dauphin",
+      "AS-365 Dauphin"
+    ]
+  },
+  "533": {
+    "file": "DLC2_M2-label.webp",
+    "names": [
+      "DLC2 M2 HMG",
+      "M2 HMG"
+    ]
+  },
+  "535": {
+    "file": "DLC2_HUMVEE-label.webp",
+    "names": [
+      "DLC2 HMMWV",
+      "HMMWV"
+    ]
+  },
+  "536": {
+    "file": "DLC2_C27J_SPARTAN-label.webp",
+    "names": [
+      "DLC2 C-27J Spartan",
+      "C-27J Spartan"
+    ]
+  },
+  "537": {
+    "file": "BLT_UNIMOG-Label.webp",
+    "names": [
+      "DLC2 Unimog",
+      "Unimog"
+    ]
+  },
+  "538": {
+    "file": "DLC2_UNIMOG_ZU_23_2-label.webp",
+    "names": [
+      "DLC2 Unimog AA",
+      "Unimog"
+    ]
+  },
+  "539": {
+    "file": "DLC2_K9EST-label.webp",
+    "names": [
+      "DLC2 K9EST ",
+      "K9 Kõu"
+    ]
+  },
+  "540": {
+    "file": "DLC2_PZH2000-label.webp",
+    "names": [
+      "DLC2 PzH-2000",
+      "PzH-2000"
+    ]
+  },
+  "541": {
+    "file": "DLC2_GWAGEN_AT-label.webp",
+    "names": [
+      "DLC2 G-Wagen",
+      "G-Wagen"
+    ]
+  },
+  "542": {
+    "file": "DLC2_MRCV_JAVELIN-Label.webp",
+    "names": [
+      "DLC2 TypeX RCV",
+      "Type-X RCV"
+    ]
+  },
+  "543": {
+    "file": "DLC2_RARDEN-label.webp",
+    "names": [
+      "DLC2 Scimitar",
+      "Scimitar"
+    ]
+  },
+  "544": {
+    "file": "DLC2_M2_GMG-label.webp",
+    "names": [
+      "DLC2 HMG GMG",
+      "HMG & GMG"
+    ]
+  },
+  "545": {
+    "file": "DLC2_IRIST-label.webp",
+    "names": [
+      "DLC2 IRIS-T SLM",
+      "IRIS-T SLM"
+    ]
+  },
+  "602": {
+    "file": "DLC3_T62M-Label.webp",
+    "names": [
+      "DLC3 T-62M",
+      "T-62M"
+    ]
+  },
+  "604": {
+    "file": "DLC3_RESERVISTI_MOTO-Label.webp",
+    "names": [
+      "DLC3 Reservisty",
+      "Reservisty"
+    ]
+  },
+  "610": {
+    "file": "RU_ROSGVARDIA-Label.webp",
+    "names": [
+      "DLC3 Rosgvardia 2",
+      "SOBR"
+    ]
+  },
+  "611": {
+    "file": "DLC3_KA226T_CARGO-Label.webp",
+    "names": [
+      "DLC3 KA-226 Cargo",
+      "KA-226"
+    ]
+  },
+  "612": {
+    "file": "DLC3_BARS_KORNET-Label.webp",
+    "names": [
+      "DLC3 BARS FireSupport",
+      "BARS"
+    ]
+  },
+  "613": {
+    "file": "DLC3_BARS_IGLA-Label.webp",
+    "names": [
+      "DLC3 BARS AA mix",
+      "BARS"
+    ]
+  },
+  "615": {
+    "file": "DLC3_T72A-Label.webp",
+    "names": [
+      "DLC3 T-72A",
+      "T-72A"
+    ]
+  },
+  "616": {
+    "file": "DLC3_BARS-Label.webp",
+    "names": [
+      "DLC3 BARS RPG",
+      "BARS"
+    ]
+  },
+  "622": {
+    "file": "RU_SPECNAZ_VYMPEL-Label.webp",
+    "names": [
+      "DLC3 Spetsnaz Vympel RMG",
+      "Spetsnaz Vympel RMG"
+    ]
+  },
+  "623": {
+    "file": "DLC3_FSB_SNIPER_OSV96-Label.webp",
+    "names": [
+      "DLC3 FSB Snaipery 3",
+      "FSB Snaipery "
+    ]
+  },
+  "624": {
+    "file": "DLC3_KORD-Label.webp",
+    "names": [
+      "DLC3 Kord ",
+      "Kord "
+    ]
+  },
+  "625": {
+    "file": "DLC3_KPVT-Label.webp",
+    "names": [
+      "DLC3 KPVT",
+      "KPV"
+    ]
+  },
+  "626": {
+    "file": "RU_POGRANICHNIKI-Label.webp",
+    "names": [
+      "DLC3 Pogranichniki 2",
+      "Pogranichniki"
+    ]
+  },
+  "627": {
+    "file": "DLC3_SHCHUKA-Label.webp",
+    "names": [
+      "DLC3 Shchuka",
+      "Shchuka"
+    ]
+  },
+  "628": {
+    "file": "DLC3_URAN9-Label.webp",
+    "names": [
+      "DLC3 Uran-9",
+      "Uran-9"
+    ]
+  },
+  "629": {
+    "file": "RU_RESERVIST-Label.webp",
+    "names": [
+      "DLC3 Reservisty2",
+      "Reservisty"
+    ]
+  },
+  "632": {
+    "file": "DLC3_MDP_01-Label.webp",
+    "names": [
+      "DLC3 MDP-01 Termit",
+      "MDP-01 Termit"
+    ]
+  },
+  "633": {
+    "file": "DLC3_S70-Label.webp",
+    "names": [
+      "DLC3 S-70 Okhotnik",
+      "S-70 Okhotnik"
+    ]
+  },
+  "634": {
+    "file": "DLC3_KAMAZ_TOR-Label.webp",
+    "names": [
+      "DLC3 KamAZ Tor-M2KM",
+      "Tor-M2KM"
+    ]
+  },
+  "635": {
+    "file": "DLC3_FLOKS-Label.webp",
+    "names": [
+      "DLC3 2S40 Floks",
+      "2S40 Floks"
+    ]
+  },
+  "636": {
+    "file": "DLC3_MALVA-Label.webp",
+    "names": [
+      "DLC3 2S43 Malva",
+      "2S43 Malva"
+    ]
+  },
+  "637": {
+    "file": "DLC3_MALVA-Label.webp",
+    "names": [
+      "DLC3 2S44 Giatsint-K",
+      "2S44 Giatsint-K"
+    ]
+  },
+  "638": {
+    "file": "US_MEH_DRAGON-Label.webp",
+    "names": [
+      "Mech. Riflemen Dragon",
+      "Mech. Dragon"
+    ]
+  },
+  "639": {
+    "file": "RU_AGS_AK-Label.webp",
+    "names": [
+      "Motopekhota AGS"
+    ]
+  },
+  "640": {
+    "file": "RU_VDV_ASAULT-Label.webp",
+    "names": [
+      "VDV DSh 3",
+      "VDV DSh"
+    ]
+  },
+  "644": {
+    "file": "US_AIRBORNE_RECCE_M107-Label.webp",
+    "names": [
+      "AB Recce NGSW"
+    ]
+  },
+  "645": {
+    "file": "RU_VDV_TBG-Label.webp",
+    "names": [
+      "VDV Dsh 2",
+      "VDV Shturm"
+    ]
+  },
+  "701": {
+    "file": "US_CAV_RIFLEMEN-Label.webp",
+    "names": [
+      "Troopers"
+    ]
+  },
+  "702": {
+    "file": "DLC3_MIG31_NUKE-Label.webp",
+    "names": [
+      "DLC3 MiG-31K (S)",
+      "MiG-31K (S)"
+    ]
+  },
+  "703": {
+    "file": "RU_T72B3-Label.webp",
+    "names": [
+      "T-72B3A"
+    ]
+  },
+  "704": {
+    "file": "RU_IGLA_AK-Label.webp",
+    "names": [
+      "Motostrelki Igla2",
+      "Motostrelki Igla"
+    ]
+  },
+  "705": {
+    "file": "US_MECH_AA-Label.webp",
+    "names": [
+      "Mech. Riflemen AA2",
+      "Mech. Riflemen AA"
+    ]
+  },
+  "706": {
+    "file": "US_CAV_AA-Label.webp",
+    "names": [
+      "Troopers AA2",
+      "Troopers AA"
+    ]
+  },
+  "707": {
+    "file": "US_MECH_RIFLEMEN-Label.webp",
+    "names": [
+      "Mech. Riflemen MAAWS"
+    ]
+  },
+  "708": {
+    "file": "US_ENGINEERS-Label.webp",
+    "names": [
+      "Mech. Engineers CQC"
+    ]
+  },
+  "710": {
+    "file": "ZMB_SWARM.webp",
+    "names": [
+      "ZOM Swarm",
+      "Swarm"
+    ]
+  },
+  "711": {
+    "file": "ZMB_ARMORED-Label.webp",
+    "names": [
+      "ZOM Brute",
+      "Brute"
+    ]
+  },
+  "713": {
+    "file": "VIP-Label.webp",
+    "names": [
+      "ZOM VIP",
+      "VIP"
+    ]
+  }
+}

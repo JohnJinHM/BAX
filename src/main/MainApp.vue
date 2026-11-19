@@ -58,7 +58,7 @@ const apiLine = computed(() => {
 <style scoped>
 .shell {
   display: grid;
-  grid-template-columns: 168px 1fr;
+  grid-template-columns: 168px minmax(0, 1fr);
   height: 100vh;
 }
 
@@ -101,5 +101,14 @@ nav button.active {
 main {
   overflow: auto;
   padding: 20px 24px;
+}
+
+@media (max-width: 650px) {
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  nav { flex-direction: row; align-items: center; flex-wrap: wrap; padding: 8px; border-right: 0; border-bottom: 1px solid var(--bax-border); }
+  .brand { padding: 0 8px; font-size: 16px; }
+  nav button { padding: 5px 7px; font-size: 12px; }
+  .status { display: none; }
+  main { padding: 12px; }
 }
 </style>

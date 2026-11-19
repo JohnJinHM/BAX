@@ -1,5 +1,15 @@
 # 来源与许可声明
 
+## Broken Arrow 单位图标
+
+`public/unit-icons/` 的单位缩略图来自用户本地 BA-DeckEditor 项目已提取的游戏资源；`src/main/unit-icons.json` 的名称与 ID 映射由 BA-Units 的 Units 表生成。导入脚本为 `scripts/import-unit-icons.mjs`，未复制这两个项目的实现代码。
+
+这些游戏美术资源的权利归原权利人所有，不属于 BAX 的 MIT 许可范围。图标按目录 ID 和名称核对，缺失或无法确认的名称使用兵种类别标记。
+
+`public/ui-icons/back-to-base.png` 原样复制自本地 BATV 的游戏解包资源 `Assets/Prefabs/GUI/HUD/Images/ActionPanel/Order_BackToBase.png`，按透明度遮罩显示，用于已回收状态的右下角标记，同样不属于 MIT 许可范围。
+
+`public/ui-icons/types/` 同样来自 BATV 游戏解包资源。原始路径逐项记录于 `scripts/import-unit-types.mjs`；图片原样复制，以透明度遮罩显示，不属于 BAX 的 MIT 许可范围。步战、运输和其他类别的文字与色条是 BAX 的展示补充。
+
 ## BA-ELO-Overlay
 
 BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型采用 MIT 许可，版权声明为 `Copyright (c) 2026 BA-ELO-Overlay contributors`。

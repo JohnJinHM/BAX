@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // ECharts 的薄封装。只注册用到的图表与组件，图表库只在主窗口按需加载（ADR-0006）。
 import { BarChart, LineChart, ScatterChart } from "echarts/charts";
-import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
+import { GridComponent, LegendComponent, TooltipComponent, MarkAreaComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import type { EChartsCoreOption } from "echarts/core";
 import { SVGRenderer } from "echarts/renderers";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-echarts.use([BarChart, LineChart, ScatterChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer]);
+echarts.use([BarChart, LineChart, ScatterChart, GridComponent, LegendComponent, TooltipComponent, MarkAreaComponent, SVGRenderer]);
 
 const props = defineProps<{ option: EChartsCoreOption; height: number; label: string }>();
 

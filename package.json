@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
+    "test:ui": "node --test tests/*.test.mjs",
     "bindings": "cargo test -q -p bax-core -p bax-batrace -p bax-store -p bax-engine --features bax-core/ts,bax-batrace/ts,bax-store/ts,bax-engine/ts export_bindings",
     "tauri": "tauri"
   },

@@ -210,16 +210,16 @@ function seeded(seed: number) {
 }
 
 const fixtureUnits: { id: number; name: string; cls: UnitClass; cost: number }[] = [
-  { id: 1, name: "主战坦克 A", cls: "tank", cost: 260 },
-  { id: 2, name: "步战车 B", cls: "ifv", cost: 140 },
-  { id: 3, name: "步兵班 C", cls: "infantry", cost: 45 },
+  { id: 191, name: "M1A2 SEP v3", cls: "tank", cost: 260 },
+  { id: 15, name: "M2A2 Bradley", cls: "ifv", cost: 140 },
+  { id: 59, name: "Marines", cls: "infantry", cost: 45 },
   { id: 4, name: "侦察车 D", cls: "recon", cost: 70 },
-  { id: 5, name: "自行火炮 E", cls: "artillery", cost: 210 },
-  { id: 6, name: "近程防空 F", cls: "airDefense", cost: 150 },
-  { id: 7, name: "武装直升机 G", cls: "helicopter", cost: 230 },
-  { id: 8, name: "攻击机 H", cls: "jet", cost: 290 },
-  { id: 9, name: "补给车 I", cls: "supply", cost: 40 },
-  { id: 10, name: "运输车 J", cls: "transport", cost: 30 },
+  { id: 11, name: "M142 HIMARS", cls: "artillery", cost: 210 },
+  { id: 10, name: "AN/TWQ-1 Avenger", cls: "airDefense", cost: 150 },
+  { id: 8, name: "AH-64D Longbow", cls: "helicopter", cost: 230 },
+  { id: 169, name: "Su-35S", cls: "jet", cost: 290 },
+  { id: 242, name: "HEMTT", cls: "supply", cost: 40 },
+  { id: 900010, name: "运输车 J", cls: "transport", cost: 30 },
 ];
 
 export function fixtureReport(id: number): MatchReportView | null {
@@ -227,6 +227,7 @@ export function fixtureReport(id: number): MatchReportView | null {
   if (!row || row.report.state !== "ready") return null;
   const rand = seeded(id);
   const minutes = Math.ceil((row.durationMs ?? 1_500_000) / 60_000);
+  const durationSecs = Math.floor((row.durationMs ?? 1_500_000) / 1000);
   const won = row.won ?? false;
   const sorties: Sortie[] = [];
   const reports: PlayerReport[] = players.map((p, index) => {
@@ -234,17 +235,17 @@ export function fixtureReport(id: number): MatchReportView | null {
     const total = 18 + Math.floor(rand() * 30);
     for (let k = 0; k < total; k++) {
       const u = fixtureUnits[Math.floor(rand() * fixtureUnits.length)];
-      const spawnSecs = k < 6 ? 3 : Math.floor(rand() * minutes * 60);
+      const spawnSecs = k < 6 ? 0 : Math.floor(rand() * durationSecs);
       const dies = rand() < 0.55;
       own.push({
         player: p.id,
         unitId: u.id,
         class: u.cls,
         spawnSecs,
-        deathSecs: dies ? Math.min(minutes * 60, spawnSecs + Math.floor(rand() * 600)) : null,
+        deathSecs: dies ? Math.min(durationSecs, spawnSecs + Math.floor(rand() * 600)) : null,
         cost: Math.round(u.cost * (1.1 + rand() * 0.4)),
         refunded: u.cls === "jet" && rand() < 0.4,
-        airdropped: false,
+        airdropped: k % 9 === 0,
         transferredTo: index === 3 && k === 7 ? players[2].id : null,
         kills: dies ? Math.floor(rand() * 3) : Math.floor(rand() * 6),
       });
