@@ -509,3 +509,48 @@ async fn name_search_encodes_unicode_and_query_delimiters() {
     assert_eq!(result.data.players[0].level, Some(57));
     assert_eq!(result.data.count, 1);
 }
+
+#[tokio::test]
+async fn authoritative_lookup_reuses_an_ocr_prefetch_across_client_clones() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/players/info"))
+        .respond_with(json(PLAYER_INFO))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let first = client
+        .prefetch_player_info(PlayerId(100202))
+        .await
+        .expect("test result");
+    let actual = client
+        .clone()
+        .player_info(PlayerId(100202))
+        .await
+        .expect("test result");
+    assert_eq!(first, actual);
+}
+#[tokio::test]
+async fn rate_limit_cooldown_is_shared_with_authoritative_lookups() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/players/search"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "60"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    assert!(matches!(
+        client.search_players("Raven").await,
+        Err(ApiError::RateLimited { .. })
+    ));
+    assert!(matches!(
+        client.clone().player_info(PlayerId(123)).await,
+        Err(ApiError::RateLimited { .. })
+    ));
+    assert_eq!(
+        server.received_requests().await.expect("test result").len(),
+        1
+    );
+}

@@ -11,7 +11,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
     fixtureSnapshot.alert = null;
     m.phase = "waitingRoom"; m.rosterKnown = false; m.clock = null;
     m.pregame = { status: "候选待日志确认", players: m.players.map((p, i) => ({
-      observed: { side: i < 5 ? "left" : "right", row: i % 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
+      observed: { side: i < 5 ? "left" : "right", row: i % 5, friendly: i < 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
       candidates: i === 4 ? [] : [{ id: p.id, name: p.name ?? "Raven", level: p.profile?.level ?? 50, local: i % 2 === 0, profile: p.profile }],
       ambiguous: i === 3,
     })) }; m.players = []; m.teams = [];

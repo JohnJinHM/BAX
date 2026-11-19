@@ -34,23 +34,32 @@ def run(image, label, repeats=1):
 names = ['AlphaTest', 'ТестИгрок', 'テスト太郎', '星河玩家', 'Player_07',
          'Борис', 'サクラ', '银河舰队', 'Mixed123', 'T-T']
 levels = [93, 57, 59, 57, 100, 73, 71, 93, 70, 18]
+def resized_viewport(source, width, height):
+    scaled = source.resize((width, round(source.height * width / source.width)), Image.Resampling.LANCZOS)
+    result = Image.new('RGB', (width, height))
+    result.paste(scaled, (0, (height-scaled.height)//2))
+    return result
+
 canvas = Image.new('RGB', (1920, 1080), (25, 30, 23))
 draw = ImageDraw.Draw(canvas)
+draw.rectangle((115, 225, 185, 265), fill=(60, 190, 245))
+draw.rectangle((1400, 225, 1470, 265), fill=(245, 65, 60))
 font = ImageFont.truetype('C:/Windows/Fonts/msyhbd.ttc', 18)
 small = ImageFont.truetype('C:/Windows/Fonts/arialbd.ttf', 15)
 for i, (name, level) in enumerate(zip(names, levels)):
     side, row = divmod(i, 5)
     x = round((.787 if side else .1201) * 1920)
-    y = round((.2917 + row * .14255) * 1080)
+    y = round(1080/2 + (.2917 + row * .14255 - .5) * (1987/3576) * 1920)
     draw.text((x+1, y+1), name, font=font, fill=(230, 240, 225), anchor='lt')
     x = round((.8039 if side else .1375) * 1920)
-    y = round((.3121 + row * .14255) * 1080)
+    y = round(1080/2 + (.3121 + row * .14255 - .5) * (1987/3576) * 1920)
     draw.text((x, y), 'lvl', font=small, fill=(240, 205, 30), anchor='lt')
     draw.text((x+20, y), str(level), font=small, fill=(235, 235, 220), anchor='lt')
 _, results = run(canvas, 'synthetic-four-languages')
 players = results[0]['players']
 assert len(players) == 10, 'synthetic roster incomplete'
 for i, player in enumerate(players):
+    assert player['friendly'] is (i < 5)
     assert player['level'] == levels[i], 'incorrect synthetic level'
     assert names[i] in [player['name'], *player['alternatives']], 'expected name not in OCR hypotheses'
     assert (player['side'], player['row']) == ('right' if i >= 5 else 'left', i % 5)
@@ -63,7 +72,7 @@ draw = ImageDraw.Draw(no_label)
 for i in range(10):
     side, row = divmod(i, 5)
     x = round((.8039 if side else .1375) * 1920)
-    y = round((.3121 + row * .14255) * 1080)
+    y = round(1080/2 + (.3121 + row * .14255 - .5) * (1987/3576) * 1920)
     draw.rectangle((x, y, x+18, y+16), fill=(30, 30, 30))
 for label, image in [('blank', blank), ('one-side', one_side), ('missing-label', no_label),
                      ('unsupported-ultrawide', canvas.resize((2560, 1080)))]:
@@ -78,7 +87,7 @@ summary = {'synthetic': '10/10 names in hypotheses and levels correct', 'negativ
 if args.screenshot:
     source = Image.open(args.screenshot).convert('RGB')
     for w, h in [source.size, (2560, 1440), (1920, 1080), (1280, 720)]:
-        ready, runs = run(source.resize((w, h), Image.Resampling.LANCZOS), f'real-{w}', 11)
+        ready, runs = run(resized_viewport(source, w, h), f'real-{w}', 11)
         assert all(r['players'] == runs[0]['players'] for r in runs), 'unstable repeated result'
         summary['realScreenshots'].append({'width': w, 'height': h, 'players': len(runs[0]['players']),
             'initializationMs': ready['initializationMs'], 'warmSamples': len(runs)-1,

@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import PregamePlayers from "../shared/PregamePlayers.vue";
+import { rosterGroups, type RosterRow } from "../shared/roster";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import type { PlayerView } from "../shared/bindings/PlayerView";
-import type { Team } from "../shared/bindings/Team";
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
-import { fetchText, mmss, percent, phaseNames, rating, teamNames } from "../shared/format";
+import { fetchText, mmss, percent, phaseNames, rating } from "../shared/format";
 import { saveSetting, useSetting } from "../shared/settings";
 import { useNow } from "../shared/useNow";
 
@@ -54,40 +52,8 @@ const activeAlert = computed(() => {
 
 // ---------------------------------------------------------------- 队伍
 
-/** 知道本机在哪一队时按敌我区分，否则按 Alpha/Bravo。决定颜色。 */
-type Tone = "mine" | "enemy" | "alpha" | "bravo";
-
-interface TeamBlock {
-  team: Team;
-  tone: Tone;
-  title: string;
-  /** 有 ELO 的玩家的平均分。 */
-  averageValue: number | null;
-  average: string;
-  rated: number;
-  count: number;
-  players: PlayerView[];
-}
-
-const teams = computed<TeamBlock[]>(() => {
-  const m = current.value;
-  if (!m || !m.rosterKnown) return [];
-  const mine = m.selfTeam === "alpha" || m.selfTeam === "bravo" ? m.selfTeam : null;
-  const order: Team[] = mine === "bravo" ? ["bravo", "alpha"] : ["alpha", "bravo"];
-  return order.map((team) => {
-    const summary = m.teams.find((t) => t.team === team);
-    return {
-      team,
-      tone: mine ? (team === mine ? "mine" : "enemy") : (team as Tone),
-      title: mine ? (team === mine ? "我方" : "敌方") : teamNames[team],
-      averageValue: summary?.averageRating ?? null,
-      average: rating(summary?.averageRating),
-      rated: summary?.rated ?? 0,
-      count: summary?.players ?? 0,
-      players: m.players.filter((p) => p.team === team),
-    };
-  });
-});
+const teams = computed(() => rosterGroups(current.value).filter(g => g.key !== "spectators")
+  .map(g => ({ ...g, average: rating(g.averageValue) })));
 
 /**
  * 收起时的双色计量条：按 ELO 的期望得分公式，由两队均分差算出左边一队的胜率，
@@ -109,11 +75,6 @@ const meter = computed(() => {
   return { left, right, share, known: true, title };
 });
 
-const waiting = computed(() => {
-  const m = current.value;
-  return m && !m.rosterKnown ? m.players : [];
-});
-
 const emptyText = computed(() => {
   const s = snapshot.value;
   if (!s) return "正在连接…";
@@ -124,8 +85,8 @@ const emptyText = computed(() => {
   return "等待对局…";
 });
 
-function playerTitle(p: PlayerView): string {
-  const parts = [`ID ${p.id}`];
+function playerTitle(p: RosterRow): string {
+  const parts: string[] = p.provisional ? ["赛前识别，待日志确认"] : [];
   if (p.note) parts.push(`备注：${p.note}`);
   if (p.logName && p.logName !== p.name) parts.push(`日志名 ${p.logName}`);
   const e = p.encounters;
@@ -291,7 +252,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
       </section>
       <section
         v-for="block in appearance.expanded ? teams : []"
-        :key="block.team"
+        :key="block.key"
         class="team"
         :class="block.tone"
       >
@@ -303,16 +264,16 @@ watch(appearance, () => requestAnimationFrame(relayout));
         <ul>
           <li
             v-for="p in block.players"
-            :key="p.id"
+            :key="p.key"
             :class="{ self: p.isSelf, stale: p.profile && !p.profileCurrent }"
             :title="playerTitle(p)"
           >
             <span class="elo num">{{ rating(p.profile?.rating) }}</span>
-            <span class="lv num">{{ p.profile?.level != null ? `Lv${p.profile.level}` : "" }}</span>
+            <span class="lv num">{{ p.displayLevel != null ? `Lv${p.displayLevel}` : "" }}</span>
             <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
             <span class="name">
-              {{ p.name ?? `ID ${p.id}` }}<span v-if="p.note" class="note"> · {{ p.note }}</span>
+              {{ p.name }}<span v-if="p.note" class="note"> · {{ p.note }}</span>
             </span>
             <span
               v-if="p.fetch.state !== 'idle'"
@@ -325,22 +286,9 @@ watch(appearance, () => requestAnimationFrame(relayout));
           </li>
         </ul>
       </section>
-      <PregamePlayers v-if="current && !current.rosterKnown && appearance.expanded" :view="current.pregame" compact />
-      <section v-if="waiting.length && appearance.expanded" class="team waiting">
-        <div class="team-head">
-          <span class="team-title">等待室</span>
-          <span class="team-count num">{{ waiting.length }} 人</span>
-        </div>
-        <ul>
-          <li v-for="p in waiting" :key="p.id" :title="playerTitle(p)">
-            <span class="elo num">{{ rating(p.profile?.rating) }}</span>
-            <span class="lv num">{{ p.profile?.level != null ? `Lv${p.profile.level}` : "" }}</span>
-            <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
-            <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
-            <span class="name">{{ p.name ?? `ID ${p.id}` }}</span>
-          </li>
-        </ul>
-      </section>
+      <p v-if="current && !current.rosterKnown && appearance.expanded" class="next" role="status">
+        {{ current.pregame.players.length ? current.pregame.status : '等待玩家名单' }}
+      </p>
     </template>
     <div v-else class="empty">{{ emptyText }}</div>
 

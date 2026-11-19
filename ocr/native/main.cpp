@@ -107,26 +107,46 @@ public:
         return decoded;
     }
 };
-struct Player { int side, row; Text name; int level; std::string alternative; };
+struct Player { int side, row; Text name; int level; std::string alternative; int friendly; };
 bool supported(const Image& image) {
     double aspect = double(image.width) / std::max(1, image.height);
     return image.width >= 1280 && image.height >= 720 && aspect >= 1.74 && aspect <= 1.84;
 }
 Region name_region(int side, int row) { return {side ? 0.7870 : 0.1201, 0.2917 + row * 0.14255, 0.0920, 0.0188}; }
 Region level_region(int side, int row) { return {side ? 0.8039 : 0.1375, 0.3121 + row * 0.14255, 0.0225, 0.0140}; }
+// Game card layout scales with viewport width and is vertically centred.
+// The reference capture is 3576x1987, not a stretched 16:9 canvas.
+Region card_region(const Image& image, Region r) {
+    double scale = (1987.0 / 3576.0) * image.width / image.height;
+    r.y = 0.5 + (r.y - 0.5) * scale; r.height *= scale;
+    return r;
+}
+int friendly_side(const Image& image, int side) {
+    auto header = crop(image, card_region(image, {side ? 0.72 : 0.055, 0.205, 0.20, 0.055}));
+    size_t red = 0, blue = 0;
+    for (size_t i = 0; i + 2 < header.pixels.size(); i += 3) {
+        int b=header.pixels[i], g=header.pixels[i+1], r=header.pixels[i+2];
+        red += r > 120 && r > g * 1.5 && r > b * 1.5;
+        blue += b > 140 && g > 100 && b > r * 1.4 && g > r * 1.3;
+    }
+    size_t minimum = std::max(size_t(30), header.pixels.size()/3/100);
+    if (blue > minimum && blue > red * 3) return 1;
+    if (red > minimum && red > blue * 3) return 0;
+    return -1;
+}
 std::vector<Player> extract(Recognizer& general, Recognizer& russian, const Image& image, bool diagnostic = false) {
     if (!supported(image)) return {};
     std::vector<Image> names, levels;
     for (int side = 0; side < 2; ++side) for (int row = 0; row < 5; ++row) {
-        names.push_back(text_crop(crop(image, name_region(side, row)), false));
-        levels.push_back(digits_crop(crop(image, level_region(side, row))));
+        names.push_back(text_crop(crop(image, card_region(image, name_region(side, row))), false));
+        levels.push_back(digits_crop(crop(image, card_region(image, level_region(side, row)))));
     }
     auto name_text = general.run(names);
     auto level_text = general.run(levels);
     std::vector<Image> retry_names, retry_levels; std::vector<size_t> name_ids, level_ids;
     for (size_t i = 0; i < names.size(); ++i) {
-        if (name_text[i].confidence < 0.95f) { retry_names.push_back(text_crop(crop(image, name_region(int(i/5), int(i%5))), false, true)); name_ids.push_back(i); }
-        if (!level(level_text[i])) { retry_levels.push_back(digits_crop(crop(image, level_region(int(i/5), int(i%5))), true)); level_ids.push_back(i); }
+        if (name_text[i].confidence < 0.95f) { retry_names.push_back(text_crop(crop(image, card_region(image, name_region(int(i/5), int(i%5)))), false, true)); name_ids.push_back(i); }
+        if (!level(level_text[i])) { retry_levels.push_back(digits_crop(crop(image, card_region(image, level_region(int(i/5), int(i%5)))), true)); level_ids.push_back(i); }
     }
     auto retried_names = general.run(retry_names);
     for (size_t n = 0; n < name_ids.size(); ++n) if (retried_names[n].confidence > name_text[name_ids[n]].confidence) name_text[name_ids[n]] = retried_names[n];
@@ -140,12 +160,14 @@ std::vector<Player> extract(Recognizer& general, Recognizer& russian, const Imag
         if (name_text[indices[n]].confidence < 0.85f || (alt_text[n].confidence > 0.95f && wide(alt_text[n].value).size() > 2 * wide(name_text[indices[n]].value).size())) name_text[indices[n]] = alt_text[n];
         else alt[indices[n]] = alt_text[n].value;
     }
+    std::array<int,2> friendly{friendly_side(image,0), friendly_side(image,1)};
+    if (friendly[0] == friendly[1]) friendly = {-1,-1};
     std::vector<Player> players;
     for (size_t i = 0; i < names.size(); ++i) {
         auto rank = level(level_text[i]);
         if (diagnostic) std::cerr << i << " " << quote(name_text[i].value) << " " << name_text[i].confidence << " " << quote(level_text[i].value) << " " << level_text[i].confidence << '\n';
         if (rank && name_text[i].confidence >= 0.85f && !name_text[i].value.empty() && wide(name_text[i].value).size() <= 80)
-            players.push_back({int(i / 5), int(i % 5), name_text[i], *rank, alt[i]});
+            players.push_back({int(i / 5), int(i % 5), name_text[i], *rank, alt[i], friendly[i/5]});
     }
     bool left = false, right = false;
     for (const auto& p : players) { left |= p.side == 0; right |= p.side == 1; }
@@ -159,7 +181,7 @@ void emit(const std::vector<Player>& players, const std::string& status, double 
         if (!first) std::cout << ','; first = false;
         std::cout << "{\"side\":" << quote(p.side ? "right" : "left") << ",\"row\":" << p.row << ",\"name\":" << quote(p.name.value) << ",\"level\":" << p.level << ",\"alternatives\":[";
         if (!p.alternative.empty()) std::cout << quote(p.alternative);
-        std::cout << "]}";
+        std::cout << "],\"friendly\":" << (p.friendly < 0 ? "null" : (p.friendly ? "true" : "false")) << "}";
     }
     std::cout << "],\"status\":" << quote(status) << ",\"elapsedMs\":" << ms << "}" << std::endl;
 }

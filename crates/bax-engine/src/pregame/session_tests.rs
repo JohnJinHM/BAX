@@ -45,6 +45,7 @@ fn message(s: &Session) -> Message {
                 observed: Observation {
                     side: "left".into(),
                     row: 0,
+                    friendly: Some(false),
                     name: "Raven".into(),
                     level: 57,
                     alternatives: vec![],
