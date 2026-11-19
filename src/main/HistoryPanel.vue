@@ -46,6 +46,8 @@ function date(at: number): string {
 
 function reportText(row: HistoryRow): string {
   switch (row.report.state) {
+    case "cancelled":
+      return "准备阶段取消";
     case "ready":
       return "有战报";
     case "pending":

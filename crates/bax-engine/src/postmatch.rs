@@ -65,6 +65,8 @@ pub(crate) fn report_input(id: MatchId, info: &MatchInfo) -> ReportInput {
                 .filter_map(|(key, u)| {
                     Some(UnitInput {
                         key: key.clone(),
+                        option_ids: u.option_ids.clone(),
+                        appearance: crate::variants::resolve(u.id?, &u.option_ids),
                         unit_id: u.id?,
                         spawn_time: u.spawn_time,
                         death_time: u.death_time,
@@ -117,6 +119,9 @@ pub(crate) fn catalog(units: &UnitsResponse) -> HashMap<i64, UnitKind> {
 
 /// 从长期库读出一场比赛的战报并统计。没有战报时为 `None`。
 pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReportView>, String> {
+    if store.report_cancelled(id).map_err(|e| e.to_string())? {
+        return Ok(None);
+    }
     let Some(stored) = store.report(id).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
@@ -164,6 +169,38 @@ mod tests {
 
     const REPORT: &str = include_str!("../../../fixtures/batrace/match_report.json");
     const UNITS: &str = include_str!("../../../fixtures/batrace/units.json");
+
+    #[test]
+    fn cached_option_ids_reach_the_report_without_refetching() {
+        let raw = serde_json::json!({"matchInfo": {
+            "StartTime": 1000, "TotalPlayTimeInSec": 600,
+            "Data": {"101": {"Id": 101, "UnitData": {
+                "base": {"Id": 3, "SpawnTime": 1003, "OptionIds": []},
+                "upgrade": {"Id": 3, "SpawnTime": 1003, "OptionIds": [471]}
+            }}}
+        }})
+        .to_string();
+        let mut store = Store::open_in_memory().expect("库");
+        store
+            .save_report(
+                MatchId(1),
+                &raw,
+                ReportMeta::default(),
+                Timestamp::from_secs(2000),
+            )
+            .expect("缓存");
+        let view = load_view(&store, MatchId(1)).expect("解析").expect("战报");
+        let units = &view.analysis.players[0].units;
+        assert_eq!(units.len(), 2);
+        assert!(units.iter().any(|u| u.unit_name == "BMP-3"));
+        assert!(units.iter().any(|u| u.unit_name == "BMP-3M Epokha"));
+        assert!(
+            view.analysis
+                .sorties
+                .iter()
+                .any(|u| u.thumbnail.as_deref() == Some("RU_BMP3_EPOKHA-Label.webp"))
+        );
+    }
 
     #[test]
     fn the_fixture_report_converts_and_analyzes() {

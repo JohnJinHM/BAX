@@ -181,9 +181,18 @@ impl PlayerInput {
     }
 }
 
+/// 已按战报选项解析的名称与图标。
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitAppearance {
+    pub name: String,
+    pub thumbnail: Option<String>,
+}
+
 /// 一个单位实例。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UnitInput {
+    pub option_ids: Vec<i64>,
+    pub appearance: Option<UnitAppearance>,
     /// 实例在 `UnitData` 里的键，一场比赛内唯一。
     pub key: String,
     /// 单位类型，对应单位目录。
@@ -303,6 +312,9 @@ pub struct ClassShare {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UnitRow {
+    pub variant_key: String,
+    pub unit_name: String,
+    pub thumbnail: Option<String>,
     pub unit_id: i64,
     pub class: UnitClass,
     pub count: u32,
@@ -320,6 +332,9 @@ pub struct UnitRow {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Sortie {
+    pub variant_key: String,
+    pub unit_name: String,
+    pub thumbnail: Option<String>,
     /// 出兵者。
     pub player: PlayerId,
     pub unit_id: i64,
@@ -435,7 +450,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
 
         let mut value_by_minute = vec![0i64; minutes as usize];
         let mut classes: BTreeMap<UnitClass, (u32, i64)> = BTreeMap::new();
-        let mut units: BTreeMap<i64, UnitRow> = BTreeMap::new();
+        let mut units: BTreeMap<String, UnitRow> = BTreeMap::new();
         let (mut refunded, mut dead, mut transferred) = (0u32, 0u32, 0u32);
         let mut last_spawn = None;
 
@@ -449,6 +464,16 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
                 kind.and_then(|k| k.name.clone())
                     .unwrap_or_else(|| format!("单位 #{}", u.unit_id))
             });
+            let mut options = u.option_ids.clone();
+            options.sort_unstable();
+            options.dedup();
+            let variant_key = format!("{}:{options:?}", u.unit_id);
+            let unit_name = u
+                .appearance
+                .as_ref()
+                .map(|a| a.name.clone())
+                .unwrap_or_else(|| unit_names[&u.unit_id].clone());
+            let thumbnail = u.appearance.as_ref().and_then(|a| a.thumbnail.clone());
             let cost = (base(u) as f64 * scale).round() as i64;
             let spawn_secs = offset(u.spawn_time);
             let death_secs = offset(u.death_time);
@@ -473,7 +498,10 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
             entry.0 += 1;
             entry.1 += value;
 
-            let row = units.entry(u.unit_id).or_insert(UnitRow {
+            let row = units.entry(variant_key.clone()).or_insert(UnitRow {
+                variant_key: variant_key.clone(),
+                unit_name: unit_name.clone(),
+                thumbnail: thumbnail.clone(),
                 unit_id: u.unit_id,
                 class,
                 count: 0,
@@ -497,6 +525,9 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
 
             if let Some(spawn_secs) = spawn_secs {
                 sorties.push(Sortie {
+                    variant_key,
+                    unit_name,
+                    thumbnail,
                     player: p.id,
                     unit_id: u.unit_id,
                     class,

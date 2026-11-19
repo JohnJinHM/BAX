@@ -5,7 +5,7 @@ import type { UnitClass } from "./UnitClass";
 /**
  * 一次出兵。
  */
-export type Sortie = { 
+export type Sortie = { variantKey: string, unitName: string, thumbnail: string | null, 
 /**
  * 出兵者。
  */

@@ -240,6 +240,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       own.push({
         player: p.id,
         unitId: u.id,
+        variantKey: String(u.id), unitName: u.name, thumbnail: null,
         class: u.cls,
         spawnSecs,
         deathSecs: dies ? Math.min(durationSecs, spawnSecs + Math.floor(rand() * 600)) : null,
@@ -263,6 +264,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       comp.set(s.class, c);
       const r = units.get(s.unitId) ?? {
         unitId: s.unitId,
+        variantKey: s.variantKey, unitName: s.unitName, thumbnail: s.thumbnail,
         class: s.class,
         count: 0,
         refunded: 0,

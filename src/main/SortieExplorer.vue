@@ -33,7 +33,6 @@ const fullEnd = computed(() => Math.max(1, props.analysis.minutes * 60, props.an
 const recordEnd = computed(() => Math.max(1, props.analysis.durationSecs ?? 0, ...props.analysis.sorties.flatMap((s) => [s.spawnSecs, s.deathSecs ?? 0])));
 const entries = computed<Entry[]>(() => props.analysis.sorties.map((s, key) => ({ ...s, key })));
 const owners = computed(() => new Map(props.players.map((p) => [p.id, p])));
-const unitName = (id: number) => props.analysis.unitNames[id] ?? `单位 #${id}`;
 const playerName = (id: number) => owners.value.get(id)?.name ?? `ID ${id}`;
 const time = (seconds: number) => mmss(seconds * 1000);
 const scopeStart = start;
@@ -42,7 +41,7 @@ const span = computed(() => Math.max(1, end.value - start.value));
 const filtered = computed(() => entries.value.filter((s) =>
   (!team.value || owners.value.get(s.player)?.team === team.value) &&
   (player.value === "" || s.player === player.value) && (!kind.value || s.class === kind.value) &&
-  (!query.value.trim() || unitName(s.unitId).toLowerCase().includes(query.value.trim().toLowerCase())) &&
+  (!query.value.trim() || s.unitName.toLowerCase().includes(query.value.trim().toLowerCase())) &&
   (includeRefunded.value || !s.refunded)));
 const scoped = computed(() => filtered.value.filter((s) => inRange(s, scopeStart.value, scopeEnd.value)));
 const visiblePlayers = computed(() => props.players.filter((p) => (!team.value || p.team === team.value) && (player.value === "" || p.id === player.value)));
@@ -72,7 +71,7 @@ const rows = computed(() => visiblePlayers.value.filter((p) => filtered.value.le
   const marks = packLanes(clusters.map((c) => {
     const first = c.entries[0];
     const tiles = unitTiles(c.entries);
-    const useType = mode.value === "life" && !unitIconFile(first.unitId, unitName(first.unitId));
+    const useType = mode.value === "life" && !(first.thumbnail ?? unitIconFile(first.unitId, first.unitName));
     const iconWidth = useType ? unitTypeWidth(first.class) : 44;
     const tileWidth = Math.max(76, ...tiles.map((tile) => 44 + 3 + (tile.count > 1 ? (String(tile.count).length + 1) * 7 : 0) + (tile.unit.refunded ? 12 : 0)));
     const columns = Math.max(1, Math.min(3, tiles.length, Math.floor((plotWidth.value - 10) / tileWidth)));
@@ -112,7 +111,7 @@ function select(units: Entry[]) { selected.value = units.map((s) => s.key); }
 function title(units: Entry[]) {
   const first = units[0];
   const last = Math.max(...units.map((s) => s.spawnSecs));
-  return `${playerName(first.player)} · ${time(first.spawnSecs)}${last !== first.spawnSecs ? `–${time(last)}` : ''} · ${[...new Set(units.map((s) => unitName(s.unitId)))].join("、")} ×${units.length}${units.some((s) => s.refunded) ? ` · 含回收 ${units.filter((s) => s.refunded).length} 次` : ''} · 净估算价值 ${count(netValue(units))}`;
+  return `${playerName(first.player)} · ${time(first.spawnSecs)}${last !== first.spawnSecs ? `–${time(last)}` : ''} · ${[...new Set(units.map((s) => s.unitName))].join("、")} ×${units.length}${units.some((s) => s.refunded) ? ` · 含回收 ${units.filter((s) => s.refunded).length} 次` : ''} · 净估算价值 ${count(netValue(units))}`;
 }
 let dragAnchor: number | null = null;
 function pointerTime(event: PointerEvent) {
@@ -195,14 +194,14 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
               <template v-if="mode === 'life'">
                 <span class="mark-visual" :style="{ width: `${mark.iconWidth}px` }">
                   <UnitGlyph v-if="mark.useType" :kind="mark.entries[0].class" />
-                  <UnitIcon v-else :id="mark.entries[0].unitId" :name="unitName(mark.entries[0].unitId)" :kind="mark.entries[0].class" />
+                  <UnitIcon v-else :id="mark.entries[0].unitId" :thumbnail="mark.entries[0].thumbnail" :name="mark.entries[0].unitName" :kind="mark.entries[0].class" />
                 </span>
-                <span v-if="mark.width >= 110" class="mark-name">{{ unitName(mark.entries[0].unitId) }}</span>
+                <span v-if="mark.width >= 110" class="mark-name">{{ mark.entries[0].unitName }}</span>
                 <ReturnBadge v-if="mark.entries[0].refunded" class="refund-corner" />
               </template>
               <span v-else class="batch-units" :style="{ gridTemplateColumns: `repeat(${mark.columns}, minmax(0, 1fr))` }">
                 <span v-for="tile in mark.tiles" :key="tile.key" class="batch-unit" :class="{ 'has-rtb': tile.unit.refunded }">
-                  <UnitIcon :id="tile.unit.unitId" :name="unitName(tile.unit.unitId)" :kind="tile.unit.class" unit-only />
+                  <UnitIcon :id="tile.unit.unitId" :thumbnail="tile.unit.thumbnail" :name="tile.unit.unitName" :kind="tile.unit.class" unit-only />
                   <b v-if="tile.count > 1">×{{ tile.count }}</b>
                   <ReturnBadge v-if="tile.unit.refunded" class="refund-corner" />
                 </span>
@@ -232,7 +231,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       <section class="detail" aria-label="选中单位详情" aria-live="polite">
         <div class="heading"><h4>单位详情 <span v-if="detail.length" class="muted">{{ detail.length }} 次出兵</span></h4><button v-if="detail.length" @click="selected = []">取消选择</button></div>
         <p v-if="!detail.length" class="muted">点击时间线或队伍柱条，详情固定在这里。</p>
-        <div v-else class="detail-list"><article v-for="s in detail" :key="s.key"><div class="unit-title"><UnitIcon :unit-only="mode !== 'life'" :id="s.unitId" :name="unitName(s.unitId)" :kind="s.class" /><button class="text-button" @click="query = unitName(s.unitId)">{{ unitName(s.unitId) }}</button><span class="muted">{{ unitClassNames[s.class] }}</span><ReturnBadge v-if="s.refunded" /></div><p>{{ playerName(s.player) }} · {{ time(s.spawnSecs) }} 出兵<br />{{ s.refunded ? '已回收，时间未知' : s.deathSecs != null ? `${time(s.deathSecs)} 阵亡 · 存续 ${time(Math.max(0, s.deathSecs - s.spawnSecs))}` : '未记录阵亡' }}<br />估算成本 {{ count(s.cost) }} · 击毁 {{ s.kills }}<span v-if="s.airdropped"> · 空投</span><span v-if="s.transferredTo != null"><br />转交给 {{ playerName(s.transferredTo) }}</span></p></article></div>
+        <div v-else class="detail-list"><article v-for="s in detail" :key="s.key"><div class="unit-title"><UnitIcon :unit-only="mode !== 'life'" :id="s.unitId" :thumbnail="s.thumbnail" :name="s.unitName" :kind="s.class" /><button class="text-button" @click="query = s.unitName">{{ s.unitName }}</button><span class="muted">{{ unitClassNames[s.class] }}</span><ReturnBadge v-if="s.refunded" /></div><p>{{ playerName(s.player) }} · {{ time(s.spawnSecs) }} 出兵<br />{{ s.refunded ? '已回收，时间未知' : s.deathSecs != null ? `${time(s.deathSecs)} 阵亡 · 存续 ${time(Math.max(0, s.deathSecs - s.spawnSecs))}` : '未记录阵亡' }}<br />估算成本 {{ count(s.cost) }} · 击毁 {{ s.kills }}<span v-if="s.airdropped"> · 空投</span><span v-if="s.transferredTo != null"><br />转交给 {{ playerName(s.transferredTo) }}</span></p></article></div>
       </section>
     </div>
   </section>

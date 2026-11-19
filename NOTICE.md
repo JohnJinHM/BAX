@@ -64,3 +64,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## 战报改型目录
+
+`crates/bax-engine/src/unit-variants.json` 由 BA-Units 的游戏 1.2.2.1 导出表（Units、Modifications、Options）和英文名称生成，更新命令为 `node scripts/import-unit-variants.mjs`。名称与图标的处理规则参考 BA-DeckEditor 的 `src/deck/label.ts`，由 BAX 在 Rust 中实现。改型图标沿用上文的游戏素材来源与权利归属。

@@ -4,7 +4,7 @@ import type { UnitClass } from "./UnitClass";
 /**
  * 某名玩家出过的一种单位。
  */
-export type UnitRow = { unitId: number, class: UnitClass, count: number, refunded: number, dead: number, kills: number, damage: number, 
+export type UnitRow = { variantKey: string, unitName: string, thumbnail: string | null, unitId: number, class: UnitClass, count: number, refunded: number, dead: number, kills: number, damage: number, 
 /**
  * 估算价值，不含回收的。
  */

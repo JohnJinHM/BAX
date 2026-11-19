@@ -4,9 +4,9 @@ import type { UnitClass } from "../shared/bindings/UnitClass";
 import { unitIconFile } from "./unit-icon";
 import UnitGlyph from "./UnitGlyph.vue";
 
-const props = defineProps<{ id: number; name: string; kind: UnitClass; unitOnly?: boolean }>();
+const props = defineProps<{ id: number; name: string; kind: UnitClass; unitOnly?: boolean; thumbnail?: string | null }>();
 const baseUrl = import.meta.env.BASE_URL;
-const file = computed(() => unitIconFile(props.id, props.name));
+const file = computed(() => props.thumbnail ?? unitIconFile(props.id, props.name));
 const failed = ref(false);
 watch(file, () => { failed.value = false; });
 </script>

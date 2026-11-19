@@ -31,11 +31,16 @@ const expanded = ref<number | null>(null);
 const requesting = ref(false);
 const selectedRange = ref<[number, number] | null>(null);
 
+const isCancelled = () => props.row?.report.state === "cancelled";
+
 async function load() {
+  if (props.row?.report.state === "cancelled") { view.value = null; return; }
+  const id = props.id;
   loading.value = true;
   failure.value = null;
   try {
-    view.value = await commands.matchReport(props.id);
+    const result = await commands.matchReport(id);
+    if (props.id === id && !isCancelled()) view.value = result;
   } catch (error) {
     failure.value = errorText(error);
   } finally {
@@ -44,7 +49,7 @@ async function load() {
 }
 
 watch(
-  () => props.id,
+  () => [props.id, props.row?.report.state],
   () => {
     view.value = null;
     expanded.value = null;
@@ -59,6 +64,7 @@ watch(
 );
 
 async function requestNow() {
+  if (props.row?.report.state === "cancelled") return;
   requesting.value = true;
   try {
     await commands.fetchReport(props.id);
@@ -124,9 +130,7 @@ function name(p: PlayerReport): string {
   return p.name ?? `ID ${p.id}`;
 }
 
-function unitName(id: number): string {
-  return view.value?.analysis.unitNames[id] ?? `单位 #${id}`;
-}
+
 
 const result = computed(() => {
   const v = view.value;
@@ -282,6 +286,8 @@ function pendingText(row: HistoryRow | null | undefined): string {
   const r = row?.report;
   if (!r) return "还没有这场比赛的战报。";
   switch (r.state) {
+    case "cancelled":
+      return "这场比赛在准备阶段取消，不获取战报。";
     case "pending":
       return `正在等 BATrace 收录战报：已经试了 ${r.attempts} 次，${date(r.nextAt)} 再试。`;
     case "gaveUp":
@@ -390,8 +396,8 @@ function pendingText(row: HistoryRow | null | undefined): string {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="u in p.units" :key="u.unitId">
-                      <td class="left">{{ unitName(u.unitId) }}</td>
+                    <tr v-for="u in p.units" :key="u.variantKey">
+                      <td class="left">{{ u.unitName }}</td>
                       <td class="left hint">{{ unitClassNames[u.class] }}</td>
                       <td class="num">{{ u.count }}</td>
                       <td class="num">{{ u.refunded || "" }}</td>
@@ -421,7 +427,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
     <template v-else-if="!loading">
       <h2>比赛 {{ id }}</h2>
       <p class="hint">{{ pendingText(row) }}</p>
-      <button class="primary" :disabled="requesting" @click="requestNow">{{ requesting ? "正在请求…" : "立即获取战报" }}</button>
+      <button v-if="row?.report.state !== 'cancelled'" class="primary" :disabled="requesting" @click="requestNow">{{ requesting ? "正在请求…" : "立即获取战报" }}</button>
     </template>
     <p v-else class="hint">正在读取…</p>
   </section>
