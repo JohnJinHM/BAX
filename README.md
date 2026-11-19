@@ -62,3 +62,15 @@ cargo build --release -p bax-cli
 BAX 采用 MIT 许可，见 [LICENSE](LICENSE)。
 
 BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型同样采用 MIT 许可，来源与许可声明见 [NOTICE.md](NOTICE.md)。
+
+## 赛前 OCR（开发分支）
+
+设置中的“赛前玩家识别”默认启用。先按画面昵称与等级匹配本地账号，必要时查询在线候选；正式日志 ID 到达后更新。候选不会写成比赛参与记录。首版支持双侧卡片布局，只采集前台游戏客户区，不保存或上传截图。
+
+开发机或安装后的机器需要额外准备 OCR 环境（Python 3.10+）：
+
+```powershell
+./scripts/setup-ocr.ps1
+```
+
+环境与模型放在 `%LOCALAPPDATA%\BAX\ocr`（尊重 `BAX_DATA_DIR`），应用内置工作脚本。安装包当前不捆绑 Python 和模型，发布分发前须补充安装流程。CLI 不自动采集画面。测试结果及尚未完成的实机项目见 [赛前验证](docs/validation/pregame-roster.md)。

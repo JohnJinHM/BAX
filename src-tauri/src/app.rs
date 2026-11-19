@@ -110,7 +110,8 @@ pub fn run() {
         ])
         .setup(move |app| {
             let data_dir = data_dir.ok_or("无法确定数据目录")?;
-            let config = EngineConfig::new(&data_dir);
+            let mut config = EngineConfig::new(&data_dir);
+            config.ocr_runtime = Some(data_dir.join("ocr"));
             // 引擎需要在异步运行时里启动；Tauri 自带的就是 tokio
             let engine = tauri::async_runtime::block_on(async {
                 Engine::start(config, Arc::new(SystemClock))

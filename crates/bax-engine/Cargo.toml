@@ -16,7 +16,8 @@ chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process", "io-util"] }
+unicode-normalization = "0.1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ts-rs = { workspace = true, optional = true }

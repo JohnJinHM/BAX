@@ -6,6 +6,7 @@ import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
+const ocr = useSetting(snapshot, "ui.ocr");
 const appearance = useSetting(snapshot, "ui.overlay");
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
@@ -91,6 +92,14 @@ async function exportDiag() {
 </script>
 
 <template>
+  <section class="card">
+    <h2>赛前玩家识别</h2>
+    <label class="row">
+      <input type="checkbox" :checked="ocr.enabled" @change="run(() => saveSetting(ocr, 'ui.ocr', { enabled: !ocr.enabled }))" />
+      在日志名单出现前识别游戏画面的昵称与等级
+    </label>
+    <p class="hint">优先查找本地玩家，再查询在线候选；日志 ID 到达后更新。仅在游戏位于前台时读取画面，截图不保存。</p>
+  </section>
   <section class="card">
     <h2>游戏日志</h2>
     <p class="hint">通常能自动找到，位于 Steam 库的 steamapps\common\broken_arrow\GameLogs。</p>

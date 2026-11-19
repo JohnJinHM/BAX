@@ -24,6 +24,7 @@
 
 | 路径 | 内容 | 空结果的含义 |
 |---|---|---|
+| `/api/players/search?q=昵称&limit=50` | 昵称候选，含 `players[].id/name/level` 与 `count`；可能是子串匹配，结果不保证身份唯一 | 没有候选；保留画面名字 |
 | `/api/players/info?stbid=玩家ID` | 玩家资料、累计统计、近期比赛 ID | `info` 为空：站点没有这名玩家 |
 | `/api/players/matches?stbid=玩家ID&offset=N&limit=N` | 比赛摘要，新的在前，分页 | — |
 | `/api/match?matchid=比赛ID` | 完整战报，含单位实例 | `matchInfo` 为空或 `Data` 为空：尚未收录 |

@@ -12,6 +12,8 @@ use bax_store::{CACHE_FILE_NAME, STORE_FILE_NAME};
 /// 引擎配置。
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
+    /// 桌面应用的可选 OCR 环境目录；CLI 默认不捕获屏幕。
+    pub ocr_runtime: Option<PathBuf>,
     /// 游戏日志目录。`None` 时先看用户保存的设置，再自动定位，找不到就每隔一段时间重试。
     pub log_dir: Option<PathBuf>,
     /// 长期库文件。
@@ -54,6 +56,7 @@ impl EngineConfig {
         EngineConfig {
             log_dir: None,
             store_path: store_path(data_dir),
+            ocr_runtime: None,
             api: ClientConfig::default(),
             tracker: TrackerConfig::default(),
             log_zone: LogZone::System,

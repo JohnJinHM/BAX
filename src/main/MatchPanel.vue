@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PregamePlayers from "../shared/PregamePlayers.vue";
 import { computed, ref } from "vue";
 
 import type { PlayerView } from "../shared/bindings/PlayerView";
@@ -27,7 +28,7 @@ const refreshing = ref(false);
 const groups = computed(() => {
   const m = current.value;
   if (!m) return [];
-  if (!m.rosterKnown) return [{ key: "waiting", title: "等待室（队伍未定）", players: m.players }];
+  if (!m.rosterKnown) return m.players.length ? [{ key: "waiting", title: "等待室（队伍未定）", players: m.players }] : [];
   const order: Team[] = m.selfTeam === "bravo" ? ["bravo", "alpha", "spectators"] : ["alpha", "bravo", "spectators"];
   return order
     .map((team) => {
@@ -87,6 +88,7 @@ async function refresh() {
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>
 
+    <PregamePlayers v-if="!current.rosterKnown" :view="current.pregame" />
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>
       <table>

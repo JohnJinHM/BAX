@@ -4,6 +4,7 @@ import type { Connection } from "./Connection";
 import type { MatchId } from "./MatchId";
 import type { Phase } from "./Phase";
 import type { PlayerView } from "./PlayerView";
+import type { PregameView } from "./PregameView";
 import type { Team } from "./Team";
 import type { TeamSummary } from "./TeamSummary";
 import type { Timestamp } from "./Timestamp";
@@ -11,7 +12,11 @@ import type { Timestamp } from "./Timestamp";
 /**
  * 当前比赛。
  */
-export type MatchView = { matchId: MatchId, phase: Phase, connection: Connection, 
+export type MatchView = { 
+/**
+ * 画面候选，与正式 ID 名单分开；日志到达即退出。
+ */
+pregame: PregameView, matchId: MatchId, phase: Phase, connection: Connection, 
 /**
  * 中途重连进入。
  */

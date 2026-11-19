@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PregamePlayers from "../shared/PregamePlayers.vue";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -324,6 +325,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
           </li>
         </ul>
       </section>
+      <PregamePlayers v-if="current && !current.rosterKnown && appearance.expanded" :view="current.pregame" compact />
       <section v-if="waiting.length && appearance.expanded" class="team waiting">
         <div class="team-head">
           <span class="team-title">等待室</span>
