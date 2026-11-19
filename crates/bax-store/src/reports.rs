@@ -48,6 +48,8 @@ pub struct QueuedReport {
     /// 下一次尝试的时刻；`None` 表示已经放弃。
     pub next_at: Option<Timestamp>,
     pub last_error: Option<String>,
+    /// 从计时起点到比赛结束有多久，毫秒；两者缺一时为 `None`。很短说明比赛没有真正打起来。
+    pub battle_ms: Option<i64>,
 }
 
 /// 一场比赛的战报状态。
@@ -253,9 +255,11 @@ impl Store {
     /// 到时间该试的比赛，最早的在前。
     pub fn due_reports(&self, now: Timestamp, limit: u32) -> Result<Vec<QueuedReport>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT match_id, queued_at, attempts, next_at, last_error FROM report_queue
-             WHERE next_at IS NOT NULL AND next_at <= ?1
-             ORDER BY next_at, match_id LIMIT ?2",
+            "SELECT q.match_id, q.queued_at, q.attempts, q.next_at, q.last_error,
+                    m.ended_at - m.start_at
+             FROM report_queue q LEFT JOIN matches m ON m.id = q.match_id
+             WHERE q.next_at IS NOT NULL AND q.next_at <= ?1
+             ORDER BY q.next_at, q.match_id LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![now.as_millis(), limit], queued_from_row)?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -286,8 +290,10 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT match_id, queued_at, attempts, next_at, last_error FROM report_queue
-                 WHERE match_id = ?1",
+                "SELECT q.match_id, q.queued_at, q.attempts, q.next_at, q.last_error,
+                        m.ended_at - m.start_at
+                 FROM report_queue q LEFT JOIN matches m ON m.id = q.match_id
+                 WHERE q.match_id = ?1",
                 [id_to_db(id.get())],
                 queued_from_row,
             )
@@ -317,15 +323,16 @@ impl Store {
         Ok(())
     }
 
-    /// 打起来了、已经结束、却既没有战报也不在队列里的比赛，结束得晚的在前。
+    /// 打起来了、已经结束、却既没有战报也不在队列里的比赛，结束得晚的在前：
+    /// 比赛、结束时刻、从计时起点到结束的毫秒数。
     /// 用于启动时补上应用没开着时结束的比赛。
     pub fn unreported_matches(
         &self,
         ended_since: Timestamp,
         limit: u32,
-    ) -> Result<Vec<(MatchId, Timestamp)>> {
+    ) -> Result<Vec<(MatchId, Timestamp, i64)>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT m.id, m.ended_at FROM matches m
+            "SELECT m.id, m.ended_at, m.ended_at - m.start_at FROM matches m
              WHERE m.ended_at IS NOT NULL AND m.ended_at >= ?1 AND m.start_at IS NOT NULL
                AND NOT EXISTS (SELECT 1 FROM match_reports r WHERE r.match_id = m.id)
                AND NOT EXISTS (SELECT 1 FROM report_queue q WHERE q.match_id = m.id)
@@ -335,6 +342,7 @@ impl Store {
             Ok((
                 MatchId(id_from_db(row.get(0)?)),
                 Timestamp::from_millis(row.get(1)?),
+                row.get(2)?,
             ))
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -412,6 +420,7 @@ fn queued_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueuedReport> {
         attempts: row.get(2)?,
         next_at: row.get::<_, Option<i64>>(3)?.map(Timestamp::from_millis),
         last_error: row.get(4)?,
+        battle_ms: row.get(5)?,
     })
 }
 

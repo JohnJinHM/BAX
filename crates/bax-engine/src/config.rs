@@ -36,6 +36,8 @@ pub struct EngineConfig {
     pub reminder_grace_ms: i64,
     /// 比赛结束后等战报：从结束算起的各个尝试时间点，过了最后一个就放弃。
     pub report_schedule: Vec<Duration>,
+    /// 没打起来的比赛（计时起点之后不到一分钟就结束）用的时间表。站点通常不收录这种比赛，少试几次。
+    pub report_schedule_unplayed: Vec<Duration>,
     /// 战报队列没有新消息时多久检查一次。
     pub report_poll_interval: Duration,
     /// 战后归档两次请求之间至少隔多久。
@@ -62,17 +64,19 @@ impl EngineConfig {
             retry_delays: vec![Duration::from_secs(12), Duration::from_secs(24)],
             rate_limit_pause: Duration::from_secs(30),
             reminder_grace_ms: bax_core::reminder::DEFAULT_GRACE_MS,
-            // ba-dragon 实测多在一两分钟内收录；本机观察疑似每 10 分钟左右刷新一次（验证 3）
-            report_schedule: [2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 240, 480, 1440]
-                .into_iter()
-                .map(|m| Duration::from_secs(m * 60))
-                .collect(),
+            // 验证 3：战报几乎实时收录，结束后 2 分钟内都已取到；后面的时间点覆盖站点偶尔的延迟或宕机
+            report_schedule: minutes(&[1, 3, 10, 30, 60, 180, 720, 1440]),
+            report_schedule_unplayed: minutes(&[1, 5, 15]),
             report_poll_interval: Duration::from_secs(30),
             report_spacing: Duration::from_millis(1500),
             report_catch_up: Duration::from_secs(3 * 24 * 3600),
             catalog_max_age: Duration::from_secs(7 * 24 * 3600),
         }
     }
+}
+
+fn minutes(points: &[u64]) -> Vec<Duration> {
+    points.iter().map(|m| Duration::from_secs(m * 60)).collect()
 }
 
 /// 默认的数据目录：环境变量 `BAX_DATA_DIR`，否则是 `%LOCALAPPDATA%\BAX`。

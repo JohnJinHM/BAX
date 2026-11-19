@@ -1041,6 +1041,7 @@ fn quick_reports(mut config: EngineConfig) -> EngineConfig {
         Duration::from_secs(2),
         Duration::from_secs(60),
     ];
+    config.report_schedule_unplayed = vec![Duration::from_secs(1)];
     config.report_poll_interval = Duration::from_millis(30);
     config.report_spacing = Duration::from_millis(5);
     config
@@ -1192,5 +1193,49 @@ async fn a_report_that_never_appears_is_given_up_and_can_be_requested_again() {
         assert!(tries < 200, "手动请求应该马上发出");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_match_that_ends_at_deployment_gives_up_quickly_and_says_why() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    Mock::given(method("GET"))
+        .and(path("/api/match"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&fx.server)
+        .await;
+
+    // 准备阶段一结束比赛就结束了（计时起点是场景加载后 60 秒）
+    let id = 9_000_003;
+    fx.append(
+        &(waiting_room(id, "18:52:05.318")
+            + &game_room(id, "18:53:01.979", &ROSTER)
+            + &scenario_loaded("18:53:33.861")
+            + &match_ended(id, "18:54:33.910")),
+    );
+    fx.clock.set(ts("18:54:34.000"));
+    let engine = fx.start_with(quick_reports(fx.config()));
+    wait_for(&engine, "排队等战报", |s| s.archive.pending == 1).await;
+
+    // 短时间表只有一个点：试一次就放弃，并说明原因
+    fx.clock.set(ts("18:54:35.000"));
+    let mut tries = 0;
+    let last_error = loop {
+        let history = engine.match_history(10, 0).await.expect("比赛记录");
+        if let Some(ReportState::GaveUp { last_error, .. }) = history.first().map(|r| &r.report) {
+            break last_error.clone();
+        }
+        tries += 1;
+        assert!(tries < 200, "应该已经放弃：{history:?}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(report_requests(&fx).await, 1);
+    assert!(
+        last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("没打起来")),
+        "{last_error:?}"
+    );
     engine.shutdown().await;
 }

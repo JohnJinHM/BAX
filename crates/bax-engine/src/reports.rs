@@ -1,8 +1,10 @@
 //! 战后归档：比赛结束后等 BATrace 收录战报，取到就存进长期库。
 //!
-//! 战报不是比赛一结束就有。ba-dragon 的经验是一两分钟，偶尔要好几分钟；本机测试中
-//! 疑似约 10 分钟刷新一次（验证 3 仍在进行）。所以按从比赛结束算起的一串时间点各试一次，
-//! 过了最后一个时间点就放弃，可以在界面上手动再试。
+//! 战报几乎是实时收录的（验证 3：结束后 2 分钟内都已取到），但偶尔取不到：站点延迟、宕机，
+//! 或者比赛没打起来就结束了（部署阶段结束时有人没进来之类），这种比赛站点通常不收录。
+//! 所以按从比赛结束算起的一串时间点各试一次，过了最后一个时间点就放弃，可以在界面上手动再试。
+//! 没打起来的比赛用一张短得多的时间表。应用关着时结束的比赛，下次启动时立刻试一次，
+//! 不等时间表里的下一个点。
 //!
 //! 归档在单独的任务里进行，用自己的数据库连接，不占用对局会话。待获取的比赛记在长期库里，
 //! 应用在战报出来之前退出，下次启动接着等。每次只发一个请求，两次之间至少隔一小段时间，
@@ -33,6 +35,8 @@ pub(crate) struct ReportEvent {
 pub(crate) struct ReportTiming {
     /// 从比赛结束算起的尝试时间点。
     pub schedule: Vec<Duration>,
+    /// 没打起来的比赛用的时间点。
+    pub unplayed_schedule: Vec<Duration>,
     /// 没有新消息时多久检查一次队列。
     pub poll: Duration,
     /// 两次请求之间至少隔多久。
@@ -47,13 +51,28 @@ impl ReportTiming {
     pub(crate) fn from_config(config: &EngineConfig) -> ReportTiming {
         ReportTiming {
             schedule: config.report_schedule.clone(),
+            unplayed_schedule: config.report_schedule_unplayed.clone(),
             poll: config.report_poll_interval,
             spacing: config.report_spacing,
             catch_up: config.report_catch_up,
             catalog_max_age: config.catalog_max_age,
         }
     }
+
+    /// 按这场比赛打了多久选时间表。
+    fn schedule_for(&self, battle_ms: Option<i64>) -> &[Duration] {
+        if is_unplayed(battle_ms) {
+            &self.unplayed_schedule
+        } else {
+            &self.schedule
+        }
+    }
 }
+
+/// 计时起点之后不到这么久就结束的比赛算没打起来。
+const UNPLAYED_BATTLE_MS: i64 = 60_000;
+/// 没打起来的比赛放弃时记下的原因。
+const UNPLAYED_GAVE_UP: &str = "比赛没打起来就结束了，站点通常不收录这种比赛";
 
 /// 被限流时至少等多久。
 const RATE_LIMIT_PAUSE: Duration = Duration::from_secs(5 * 60);
@@ -130,12 +149,17 @@ impl ReportWorker {
             }
         };
         let mut queued = 0;
-        for (id, ended_at) in found {
-            let next = next_after(&self.timing.schedule, ended_at, now).unwrap_or(now);
+        for (id, ended_at, battle_ms) in found {
+            let next = first_attempt(self.timing.schedule_for(Some(battle_ms)), ended_at, now);
             match self.store.queue_report(id, ended_at, next) {
                 Ok(true) => {
                     queued += 1;
-                    tracing::info!(match_id = %id, next_in_secs = next.millis_since(now) / 1000, "等待战报");
+                    tracing::info!(
+                        match_id = %id,
+                        next_in_secs = next.millis_since(now) / 1000,
+                        unplayed = is_unplayed(Some(battle_ms)),
+                        "等待战报"
+                    );
                 }
                 Ok(false) => {}
                 Err(err) => tracing::warn!(error = %err, match_id = %id, "排队等待战报失败"),
@@ -178,10 +202,16 @@ impl ReportWorker {
                 self.publish(Some(id));
             }
             Err(err) => {
-                let (counted, next) = retry_plan(&self.timing.schedule, &item, now, &err);
-                if let Err(store_err) =
-                    self.store
-                        .report_attempt_failed(id, counted, next, &err.to_string(), now)
+                let unplayed = is_unplayed(item.battle_ms);
+                let schedule = self.timing.schedule_for(item.battle_ms);
+                let (counted, next) = retry_plan(schedule, &item, now, &err);
+                let reason = match (&err, next) {
+                    (ApiError::NotFound, None) if unplayed => UNPLAYED_GAVE_UP.to_owned(),
+                    _ => err.to_string(),
+                };
+                if let Err(store_err) = self
+                    .store
+                    .report_attempt_failed(id, counted, next, &reason, now)
                 {
                     tracing::warn!(error = %store_err, match_id = %id, "记录战报重试失败");
                 }
@@ -190,6 +220,7 @@ impl ReportWorker {
                     attempts = counted,
                     error = %err,
                     gave_up = next.is_none(),
+                    unplayed,
                     next_in_secs = next.map(|n| n.millis_since(now) / 1000),
                     "还没有取到战报"
                 );
@@ -235,6 +266,20 @@ impl ReportWorker {
         let pending = self.store.pending_reports().unwrap_or(0);
         let _ = self.events.send(ReportEvent { pending, archived });
     }
+}
+
+fn is_unplayed(battle_ms: Option<i64>) -> bool {
+    battle_ms.is_some_and(|ms| ms < UNPLAYED_BATTLE_MS)
+}
+
+/// 刚排进队列的比赛第一次什么时候试：时间表的第一个点；已经过了（应用关着时结束的比赛）就马上试。
+/// 战报几乎实时收录，没有理由再等到后面的点。
+fn first_attempt(schedule: &[Duration], ended_at: Timestamp, now: Timestamp) -> Timestamp {
+    schedule
+        .first()
+        .map(|d| ended_at.plus_millis(d.as_millis() as i64))
+        .filter(|at| *at > now)
+        .unwrap_or(now)
 }
 
 /// 时间表里在 `now` 之后的第一个时间点；全都过了时为 `None`。
@@ -287,6 +332,7 @@ mod tests {
             attempts,
             next_at: None,
             last_error: None,
+            battle_ms: Some(20 * 60_000),
         }
     }
 
@@ -320,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn catch_up_starts_from_the_next_point() {
+    fn the_next_point_skips_passed_ones() {
         let schedule = [mins(2), mins(5), mins(10)];
         assert_eq!(next_after(&schedule, at_min(0), at_min(1)), Some(at_min(2)));
         assert_eq!(
@@ -328,5 +374,39 @@ mod tests {
             Some(at_min(10))
         );
         assert_eq!(next_after(&schedule, at_min(0), at_min(11)), None);
+    }
+
+    #[test]
+    fn a_match_that_ended_while_the_app_was_closed_is_tried_at_once() {
+        let schedule = [mins(1), mins(60), mins(1440)];
+        // 刚结束：等第一个点
+        assert_eq!(first_attempt(&schedule, at_min(0), at_min(0)), at_min(1));
+        // 结束 5 小时后才排进来：马上试，不等到 24 小时那个点
+        assert_eq!(
+            first_attempt(&schedule, at_min(0), at_min(300)),
+            at_min(300)
+        );
+        // 马上试也没取到：接着按时间表
+        let (_, next) = retry_plan(&schedule, &item(0), at_min(300), &ApiError::NotFound);
+        assert_eq!(next, Some(at_min(1440)));
+    }
+
+    #[test]
+    fn matches_that_never_got_going_use_the_short_schedule() {
+        let timing = ReportTiming {
+            schedule: vec![mins(1), mins(60)],
+            unplayed_schedule: vec![mins(1), mins(5)],
+            poll: mins(1),
+            spacing: mins(1),
+            catch_up: mins(1),
+            catalog_max_age: mins(1),
+        };
+        assert_eq!(timing.schedule_for(Some(48)), &[mins(1), mins(5)]);
+        assert_eq!(timing.schedule_for(Some(20 * 60_000)), &[mins(1), mins(60)]);
+        assert_eq!(
+            timing.schedule_for(None),
+            &[mins(1), mins(60)],
+            "不知道打了多久时照常等"
+        );
     }
 }

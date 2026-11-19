@@ -1,4 +1,6 @@
-use bax_core::{LogEvent, PlayerId, RoomKind, RoomStatus, RosterEntry, Tracker};
+use bax_core::{
+    BattleClock, ClockSource, LogEvent, PlayerId, RoomKind, RoomStatus, RosterEntry, Tracker,
+};
 
 use super::*;
 
@@ -99,6 +101,39 @@ fn a_queued_match_waits_until_its_time() {
 }
 
 #[test]
+fn queued_matches_carry_how_long_the_battle_lasted() {
+    let mut store = Store::open_in_memory().expect("打开长期库");
+    record(&mut store, 1, 100, true, true);
+    let (id, ended_at, _) = store.unreported_matches(t(0), 10).expect("查")[0];
+    store.queue_report(id, ended_at, ended_at).expect("排队");
+    // 计时基准以战报为准，固定在结束前 5 分钟
+    let clock = BattleClock {
+        start_at: ended_at.plus_millis(-300_000),
+        source: ClockSource::Report,
+    };
+    store.set_match_clock(id, clock).expect("修正计时基准");
+    let queued = store.queued_report(id).expect("读").expect("在队列里");
+    assert_eq!(queued.battle_ms, Some(300_000));
+    assert_eq!(
+        store.due_reports(ended_at, 10).expect("到了")[0].battle_ms,
+        queued.battle_ms
+    );
+
+    // 长期库里没有这场比赛（不该发生，但不能因此出错）
+    store
+        .queue_report(MatchId(2), t(100), t(100))
+        .expect("排队");
+    assert_eq!(
+        store
+            .queued_report(MatchId(2))
+            .expect("读")
+            .expect("在")
+            .battle_ms,
+        None
+    );
+}
+
+#[test]
 fn the_archive_remembers_when_the_report_was_still_missing() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let id = MatchId(1);
@@ -188,7 +223,7 @@ fn unreported_matches_only_include_finished_battles() {
         .expect("已在队列");
 
     let found = store.unreported_matches(t(0), 10).expect("查");
-    assert_eq!(found, vec![(MatchId(1), t(2330))]);
+    assert_eq!(found, vec![(MatchId(1), t(2330), 1_200_000)]);
     assert!(
         store
             .unreported_matches(t(2331), 10)

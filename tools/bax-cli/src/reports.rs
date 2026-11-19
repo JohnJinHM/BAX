@@ -117,7 +117,7 @@ pub fn list(data_dir: &Path, limit: u32) -> Result<()> {
             println!("最晚一次还没收录：结束后 {}", secs(*max_miss));
         }
         println!(
-            "收录发生在“最后一次没取到”与“取到”之间；尝试时间点见 EngineConfig::report_schedule。"
+            "收录发生在“最后一次没取到”与“取到”之间；尝试时间点见 EngineConfig::report_schedule（没打起来的比赛用 report_schedule_unplayed）。"
         );
     }
     Ok(())
