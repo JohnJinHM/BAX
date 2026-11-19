@@ -76,7 +76,8 @@ function reportText(row: HistoryRow): string {
           @click="selectedMatch = row.matchId"
         >
           <div class="row-top">
-            <span v-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
+            <span v-if="row.report.state === 'cancelled'" class="result cancelled">取消</span>
+            <span v-else-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
             <span class="map">{{ row.map ?? "地图未知" }}</span>
             <span class="when num">{{ date(row.at) }}</span>
           </div>
@@ -168,6 +169,12 @@ li.active {
 .result.loss {
   background: rgb(240 97 109 / 0.15);
   color: var(--bax-bad);
+}
+
+.result.cancelled {
+  background: color-mix(in srgb, var(--bax-muted) 15%, transparent);
+  color: var(--bax-muted);
+  white-space: nowrap;
 }
 
 .state {
