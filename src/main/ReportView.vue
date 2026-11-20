@@ -365,8 +365,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
-      <div class="row composition-head"><h3>兵种构成</h3><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
-      <div class="row composition-stat"><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label></div>
+      <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
       <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击类型排除或恢复，点击柱条只看该类型。</p>
       <ul class="composition-legend" aria-label="兵种类别，按条形图从左到右排列">
         <li v-for="group in compositionGroups" :key="group.key"><button :aria-pressed="visibleComposition.includes(group.key)" @click="toggleComposition(group.key)"><i :style="{ background: group.color }" />{{ group.name }}</button></li>
@@ -470,9 +469,8 @@ function pendingText(row: HistoryRow | null | undefined): string {
 .report h3 { color: var(--bax-fg); font-size: 14px; }
 .composition-head { margin-top: 20px; font-size: 12px; }
 .composition-head h3 { margin: 0 auto 0 0; }
-.composition-stat { justify-content: flex-end; margin-top: 8px; font-size: 12px; }
-.composition-stat label { display: flex; align-items: center; gap: 8px; }
-.composition-stat select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
+.composition-head label { display: flex; align-items: center; gap: 8px; }
+.composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
 .composition-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; }
 .composition-legend button[aria-pressed="false"] { color: var(--bax-muted); text-decoration: line-through; }
 .composition-legend button[aria-pressed="false"] i { opacity: .3; }
