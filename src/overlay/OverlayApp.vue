@@ -21,6 +21,12 @@ const current = computed(() => snapshot.value?.current ?? null);
 const locked = computed(() => status.value?.overlayLocked ?? false);
 const failure = ref<string | null>(null);
 const expanded = ref(appearance.value.expanded);
+const automaticMotion = ref(false);
+function setExpanded(value: boolean, automatic = false) {
+  if (expanded.value === value) return;
+  automaticMotion.value = automatic;
+  expanded.value = value;
+}
 const automation = new OverlayAutomation();
 const result = ref<MatchReportView | null>(null);
 let reportTicket = 0;
@@ -44,11 +50,10 @@ function deltaFor(id: number | null) {
   const p = id == null ? null : ratingResults.value.get(id);
   return p?.newRating != null && p.oldRating != null ? p.newRating - p.oldRating : null;
 }
-const hasResult = computed(() => !!result.value && result.value.analysis.players.some(p => p.oldRating != null && p.newRating != null));
-watch(() => appearance.value.expanded, value => { expanded.value = value; });
-watch([current, appearance, now, hasResult], () => {
-  const next = automation.update(current.value, appearance.value, now.value, hasResult.value);
-  if (next != null) expanded.value = next;
+watch(() => appearance.value.expanded, value => setExpanded(value));
+watch([current, appearance, now], () => {
+  const next = automation.update(current.value, appearance.value, now.value);
+  if (next != null) setExpanded(next, true);
 }, { immediate: true });
 
 // ---------------------------------------------------------------- 计时
@@ -150,8 +155,7 @@ async function run(action: () => Promise<void>) {
 }
 
 const toggleExpanded = () => {
-  automation.manual();
-  expanded.value = !expanded.value;
+  setExpanded(!expanded.value);
   return run(() => saveSetting(appearance.value, "ui.overlay", { expanded: expanded.value }));
 };
 
@@ -232,7 +236,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
   <div
     ref="panel"
     class="panel"
-    :class="{ unlocked: !locked, alerting: activeAlert, 'no-motion': !appearance.animations }"
+    :class="{ unlocked: !locked, alerting: activeAlert, 'automatic-motion': automaticMotion, 'no-motion': !appearance.animations }"
     :style="{ '--bax-opacity': appearance.opacity, zoom: appearance.scale }"
   >
     <header :data-tauri-drag-region="locked ? undefined : ''">
@@ -275,7 +279,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
     </div>
 
     <template v-if="current">
-      <section v-if="!expanded && meter" class="meter" :title="meter.title">
+      <div v-if="meter" class="reveal meter-reveal" :class="{ visible: !expanded }" :aria-hidden="expanded" :inert="expanded"><div class="reveal-content">
+      <section class="meter" :title="meter.title">
         <div class="meter-head">
           <span class="side" :class="meter.left.tone">
             <span class="side-title">{{ meter.left.title }}</span>
@@ -297,7 +302,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
           <span class="fill" :class="meter.right.tone" />
         </div>
       </section>
-      <div class="roster-reveal" :class="{ expanded }" :aria-hidden="!expanded" :inert="!expanded"><div class="roster-content">
+      </div></div>
+      <div class="reveal roster-reveal" :class="{ visible: expanded }" :aria-hidden="!expanded" :inert="!expanded"><div class="reveal-content">
       <div v-if="current.phase === 'ended'" class="result-summary" role="status">
         <template v-if="selfDelta != null"><span>本场 ELO</span><AnimatedNumber :key="current.matchId" class="result-delta" :class="{ gain: selfDelta > 0, loss: selfDelta < 0 }" :value="selfDelta" signed :enabled="appearance.animations" /><span class="result-total">{{ rating(selfResult?.oldRating) }} → {{ rating(selfResult?.newRating) }}</span></template>
         <span v-else class="next">{{ result ? '本场没有 ELO 变化数据' : '比赛已结束 · 等待加分数据' }}</span>
@@ -353,6 +359,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
 
 <style scoped>
 .panel {
+  --reveal-duration: 240ms;
+  --reveal-easing: cubic-bezier(.16, 1, .3, 1);
   width: 340px;
   padding: 8px 10px 10px;
   border-radius: var(--bax-radius);
@@ -361,10 +369,11 @@ watch(appearance, () => requestAnimationFrame(relayout));
   font-size: 13px;
   line-height: 1.35;
 }
-.roster-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 240ms cubic-bezier(.16, 1, .3, 1), opacity 180ms ease-out; }
-.roster-reveal.expanded { grid-template-rows: 1fr; opacity: 1; }
-.roster-content { min-height: 0; overflow: hidden; }
-.expand-chevron { transform-origin: center; transition: transform 180ms ease-out; }
+.panel.automatic-motion { --reveal-duration: 720ms; }
+.reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows var(--reveal-duration) var(--reveal-easing), opacity var(--reveal-duration) var(--reveal-easing); }
+.reveal.visible { grid-template-rows: 1fr; opacity: 1; }
+.reveal-content { min-height: 0; overflow: hidden; }
+.expand-chevron { transform-origin: center; transition: transform var(--reveal-duration) var(--reveal-easing); }
 .expand-chevron.expanded { transform: rotate(180deg); }
 .result-summary { display: flex; align-items: baseline; gap: 10px; padding-top: 8px; }
 .result-delta { font-size: 23px; font-weight: 600; animation: result-arrive 450ms cubic-bezier(.16, 1, .3, 1); }
@@ -545,7 +554,7 @@ header {
 .bar .fill {
   border-radius: 3px;
   background: var(--tone);
-  transition: width 0.4s ease;
+  transition: width 420ms var(--reveal-easing);
 }
 
 .bar .fill:last-child {

@@ -147,8 +147,8 @@ async function exportDiag() {
       <label class="check"><input type="checkbox" :checked="appearance.autoExpand" @change="run(() => saveSetting(appearance, 'ui.overlay', { autoExpand: ($event.target as HTMLInputElement).checked }))" />随比赛阶段展开与收起</label>
       <label for="collapse-before">准备剩余秒数</label>
       <div class="row"><input id="collapse-before" type="number" min="0" max="180" :disabled="!appearance.autoExpand" :value="appearance.collapseBeforeBattleSecs" @change="run(() => saveSetting(appearance, 'ui.overlay', { collapseBeforeBattleSecs: Math.max(0, Math.min(180, Number(($event.target as HTMLInputElement).value))) }))" /><span class="hint">默认 60 秒时收起</span></div>
-      <label for="result-duration">赛后展示秒数</label>
-      <div class="row"><input id="result-duration" type="number" min="3" max="60" :disabled="!appearance.autoExpand" :value="appearance.resultDisplaySecs" @change="run(() => saveSetting(appearance, 'ui.overlay', { resultDisplaySecs: Math.max(3, Math.min(60, Number(($event.target as HTMLInputElement).value))) }))" /><span class="hint">选图、选卡、选点时展开；战报延迟时，加分到达后再展示一次</span></div>
+      <label>赛后展示</label>
+      <span class="hint">比赛结束时展开并展示加分，退出房间时收起。选图、选卡、选点时自动展开。</span>
       <label>动效</label>
       <label class="check"><input type="checkbox" :checked="appearance.animations" @change="run(() => saveSetting(appearance, 'ui.overlay', { animations: ($event.target as HTMLInputElement).checked }))" />展开过渡、均分计数与加分动效</label>
       <label>锁定</label>

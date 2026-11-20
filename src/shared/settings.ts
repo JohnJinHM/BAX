@@ -16,7 +16,6 @@ export interface OverlayAppearance {
   expanded: boolean;
   autoExpand: boolean;
   collapseBeforeBattleSecs: number;
-  resultDisplaySecs: number;
   animations: boolean;
 }
 
@@ -49,7 +48,7 @@ interface Settings {
 export const defaults: Settings = {
   "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },
-  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, resultDisplaySecs: 10, animations: true },
+  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true },
   "ui.alerts": { sound: true, showOverlay: true },
   "ui.hotkeys": { toggleOverlay: "Ctrl+Alt+B", toggleLock: "Ctrl+Alt+L" },
   "ui.diag": { level: "standard" },

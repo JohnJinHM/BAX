@@ -9,15 +9,28 @@
         background: linear-gradient(135deg, #3d4a2f, #6b5d3f 45%, #2f3a44) !important;
         padding: 16px;
       }
+      #controls { position: fixed; left: 410px; top: 16px; display: flex; gap: 8px; }
+      #controls[hidden] { display: none; }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="controls" hidden aria-label="预览阶段控制">
+      <button data-stage="battle">模拟对局中</button>
+      <button data-stage="ended">模拟比赛结束</button>
+      <button data-stage="exited">模拟退出房间</button>
+    </div>
     <script type="module">
-      import { installMock } from "/src/dev/mock.ts";
+      import { installMock, previewOverlayStage } from "/src/dev/mock.ts";
       const params = new URLSearchParams(location.search);
       installMock({ locked: params.has("locked"), collapsed: params.has("collapsed") });
       await import("/src/overlay/main.ts");
+      if (params.has("controls")) {
+        document.querySelector("#controls").hidden = false;
+        document.querySelectorAll("[data-stage]").forEach(button => {
+          button.addEventListener("click", () => previewOverlayStage(button.dataset.stage));
+        });
+      }
     </script>
   </body>
 </html>

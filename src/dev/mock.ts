@@ -6,6 +6,19 @@ import type { JsonValue } from "../shared/bindings/serde_json/JsonValue";
 
 import { fixtureDetail, fixtureHistory, fixtureHits, fixtureReport, fixtureSnapshot } from "./fixture";
 
+/** 预览页控制按钮使用虚构快照模拟阶段变化，不进入正式构建。 */
+export function previewOverlayStage(stage: "battle" | "ended" | "exited") {
+  const match = fixtureSnapshot.current;
+  if (!match) return;
+  match.matchId = 8999927;
+  match.phase = stage === "battle" ? "inBattle" : "ended";
+  match.connection = stage === "exited" ? "disconnected" : "connected";
+  match.endedAt = stage === "battle" ? null : Date.now();
+  fixtureSnapshot.alert = null;
+  fixtureSnapshot.revision++;
+  void emit("bax://snapshot", structuredClone(fixtureSnapshot));
+}
+
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
   mockWindows("main");
   const params = new URLSearchParams(location.search);
