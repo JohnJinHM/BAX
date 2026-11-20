@@ -305,6 +305,10 @@ pub struct ClassShare {
     pub count: u32,
     /// 累计出兵估算价值，包含后来回收的单位。
     pub value: i64,
+    /// 单位记录的有效伤害合计，按出兵者归属。
+    pub damage: f64,
+    /// 已阵亡且未回收单位的估算成本，按出兵者归属。
+    pub loss_value: i64,
 }
 
 /// 某名玩家出过的一种单位。
@@ -449,7 +453,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
         };
 
         let mut value_by_minute = vec![0i64; minutes as usize];
-        let mut classes: BTreeMap<UnitClass, (u32, i64)> = BTreeMap::new();
+        let mut classes: BTreeMap<UnitClass, ClassShare> = BTreeMap::new();
         let mut units: BTreeMap<String, UnitRow> = BTreeMap::new();
         let (mut refunded, mut dead, mut transferred) = (0u32, 0u32, 0u32);
         let mut last_spawn = None;
@@ -494,9 +498,19 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
                 value_by_minute[minute_of(s)] += value;
                 last_spawn = last_spawn.max(Some(s));
             }
-            let entry = classes.entry(class).or_default();
-            entry.0 += 1;
-            entry.1 += cost;
+            let entry = classes.entry(class).or_insert(ClassShare {
+                class,
+                count: 0,
+                value: 0,
+                damage: 0.0,
+                loss_value: 0,
+            });
+            entry.count += 1;
+            entry.value += cost;
+            entry.damage += damage;
+            if u.death_time.is_some() && !u.refunded {
+                entry.loss_value += cost;
+            }
 
             let row = units.entry(variant_key.clone()).or_insert(UnitRow {
                 variant_key: variant_key.clone(),
@@ -542,14 +556,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
             }
         }
 
-        let mut composition: Vec<ClassShare> = classes
-            .into_iter()
-            .map(|(class, (count, value))| ClassShare {
-                class,
-                count,
-                value,
-            })
-            .collect();
+        let mut composition: Vec<ClassShare> = classes.into_values().collect();
         composition.sort_by(|a, b| b.value.cmp(&a.value).then(b.count.cmp(&a.count)));
         let mut units: Vec<UnitRow> = units.into_values().collect();
         units.sort_by(|a, b| b.value.cmp(&a.value).then(b.count.cmp(&a.count)));

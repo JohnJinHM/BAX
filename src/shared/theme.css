@@ -14,6 +14,7 @@
   --bax-border: rgb(255 255 255 / 0.09);
 
   --bax-accent: #4cc2ff;
+  --bax-row-hover: color-mix(in srgb, var(--bax-accent) 8%, transparent);
   --bax-alpha: #5ea8ff;
   --bax-bravo: #ff8f6b;
   /* 知道本机在哪一队时按敌我着色，不再按 Alpha/Bravo */

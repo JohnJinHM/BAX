@@ -261,14 +261,16 @@ export function fixtureReport(id: number): MatchReportView | null {
     }
     sorties.push(...own);
     const valueByMinute = Array.from({ length: minutes }, () => 0);
-    const comp = new Map<UnitClass, { count: number; value: number }>();
+    const comp = new Map<UnitClass, { count: number; value: number; damage: number; lossValue: number }>();
     const units = new Map<number, PlayerReport["units"][number]>();
     for (const s of own) {
       const v = s.refunded ? 0 : s.cost;
       valueByMinute[Math.min(minutes - 1, Math.floor(s.spawnSecs / 60))] += v;
-      const c = comp.get(s.class) ?? { count: 0, value: 0 };
+      const c = comp.get(s.class) ?? { count: 0, value: 0, damage: 0, lossValue: 0 };
       c.count++;
       c.value += s.cost;
+      c.damage += s.kills * 180 + 40;
+      if (s.deathSecs != null && !s.refunded) c.lossValue += s.cost;
       comp.set(s.class, c);
       const r = units.get(s.unitId) ?? {
         unitId: s.unitId,

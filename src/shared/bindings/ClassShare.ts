@@ -8,4 +8,12 @@ export type ClassShare = { class: UnitClass, count: number,
 /**
  * 累计出兵估算价值，包含后来回收的单位。
  */
-value: number, };
+value: number, 
+/**
+ * 单位记录的有效伤害合计，按出兵者归属。
+ */
+damage: number, 
+/**
+ * 已阵亡且未回收单位的估算成本，按出兵者归属。
+ */
+lossValue: number, };

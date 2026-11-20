@@ -239,9 +239,16 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
   };
 });
 
-/** 每人的兵种构成（估算价值）。 */
+/** 每人的兵种构成。 */
 const visibleComposition = ref(compositionGroups.map(g => g.key));
-const compositionMetric = ref<"value" | "count">("value");
+const compositionMetrics = {
+  value: { name: "出兵价值", hint: "累计每次出兵的估算成本，包含已回收单位。" },
+  damage: { name: "伤害", hint: "累计单位记录中的伤害，与下方单位明细一致，按出兵者归属。" },
+  lossValue: { name: "损失价值", hint: "累计已阵亡且未回收单位的估算成本，按出兵者归属。" },
+  count: { name: "出兵次数", hint: "每次出兵分别计数，包含回收与重复返场。" },
+};
+const compositionMetric = ref<keyof typeof compositionMetrics>("value");
+const compositionOptions = Object.entries(compositionMetrics).map(([value, metric]) => ({ value, label: metric.name }));
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 function selectComposition(key: string) {
   if (compositionGroups.some(g => g.key === key)) visibleComposition.value = [key];
@@ -277,7 +284,7 @@ const compositionOption = computed<EChartsCoreOption | null>(() => {
       formatter: (item: { seriesName: string; dataIndex: number; value: number; color: string }) => {
         const p = rows[item.dataIndex];
         const total = totals[item.dataIndex] || 1;
-        return `${escape(name(p))}<br><span style="color:${item.color}">■</span> ${escape(item.seriesName)}　${count(item.value)}（${Math.round((item.value / total) * 100)}%）`;
+        return `${escape(name(p))}<br>${compositionMetrics[compositionMetric.value].name}<br><span style="color:${item.color}">■</span> ${escape(item.seriesName)}　${count(item.value)}（${Math.round((item.value / total) * 100)}%）`;
       },
     },
     xAxis: { type: "value", ...axisCommon.value },
@@ -354,12 +361,12 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
-      <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option value="value">累计出兵价值</option><option value="count">出兵次数</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
-      <p class="hint">包含已回收单位，每次出兵分别计入。价值按单位成本估算；点击柱条只看该类型。</p>
+      <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
+      <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击柱条只看该类型。</p>
       <ul class="composition-legend" aria-label="兵种类别，按条形图从左到右排列">
         <li v-for="group in compositionGroups" :key="group.key"><label><input v-model="visibleComposition" type="checkbox" :value="group.key" /><i :style="{ background: group.color }" />{{ group.name }}</label></li>
       </ul>
-      <EChart v-if="compositionOption" animated-updates :option="compositionOption" :height="compositionHeight" :label="`每名玩家各兵种的${compositionMetric === 'value' ? '累计出兵估算价值' : '出兵次数'}，含回收`" @select="selectComposition" />
+      <EChart v-if="compositionOption" animated-updates :option="compositionOption" :height="compositionHeight" :label="`每名玩家各兵种的${compositionMetrics[compositionMetric].name}`" @select="selectComposition" />
 
       <h3>玩家</h3>
       <div class="table-scroll"><table>
@@ -382,6 +389,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
           <template v-for="p in players" :key="p.id">
             <tr class="player" :class="{ self: p.id === view.selfId, open: expanded === p.id }" @click="expanded = expanded === p.id ? null : p.id">
               <td class="left">
+                <button class="row-disclosure" :aria-expanded="expanded === p.id" :aria-controls="`player-units-${p.id}`" :aria-label="`${expanded === p.id ? '收起' : '展开'} ${name(p)} 的单位明细`" @click.stop="expanded = expanded === p.id ? null : p.id"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>
                 <span class="swatch" :style="{ background: teamColor(p.team) }" />
                 <a href="#" class="name" title="打开玩家档案" @click.prevent.stop="openPlayer(p.id)">{{ name(p) }}</a>
                 <span v-if="p.deserter" class="flag" title="游戏记录的离场">离场</span>
@@ -399,7 +407,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
               <td class="num">{{ p.dead }}</td>
               <td class="num">{{ p.lastSpawnSecs != null ? mmss(p.lastSpawnSecs * 1000) : "–" }}</td>
             </tr>
-            <tr v-if="expanded === p.id" class="units-row">
+            <tr v-if="expanded === p.id" :id="`player-units-${p.id}`" class="units-row">
               <td colspan="11">
                 <table class="units">
                   <thead>
@@ -556,10 +564,15 @@ tr.player {
   cursor: pointer;
 }
 
-tr.player:hover,
 tr.player.open {
   background: var(--bax-surface-2);
 }
+.row-disclosure { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 4px; padding: 4px; border: 0; background: transparent; vertical-align: middle; color: var(--bax-muted); }
+.row-disclosure svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease-out; }
+.row-disclosure[aria-expanded="true"] svg { transform: rotate(90deg); }
+.row-disclosure:hover { color: var(--bax-accent); }
+.row-disclosure:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .row-disclosure svg { transition: none; } }
 
 tr.self .name {
   font-weight: 600;

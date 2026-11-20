@@ -133,7 +133,7 @@ async function refresh() {
       </div>
       <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
       <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
-        <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`">
+        <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`" class="reading-row">
           <SpecIcon :id="spec.ids[0]!" :label="spec.name" />
           <span class="spec-name">{{ spec.name }}</span>
           <span class="spec-track" aria-hidden="true"><span :style="{ width: `${spec.games / maxSpecGames * 100}%` }" /></span>

@@ -180,6 +180,50 @@ fn implausible_scale_falls_back_to_base_prices() {
 }
 
 #[test]
+fn class_damage_and_losses_follow_unit_records_and_original_spawner() {
+    let mut dead = unit("dead", 1, 10);
+    dead.death_time = Some(START + 90);
+    dead.damage_dealt = Some(10.5);
+    let mut alive = unit("alive", 1, 15);
+    alive.damage_dealt = Some(-1.0);
+    let mut refunded = unit("refunded", 3, 20);
+    refunded.refunded = true;
+    refunded.death_time = Some(START + 120);
+    refunded.damage_dealt = Some(25.25);
+    let mut transferred = unit("transferred", 2, 30);
+    transferred.death_time = Some(START + 150);
+    transferred.damage_dealt = Some(5.0);
+    let mut sender = player(1, Team::Alpha, vec![dead, alive, refunded]);
+    sender.transferred_out.push("transferred".into());
+    sender.spawned_score = Some(1300);
+    sender.refunded_score = Some(300);
+    let analysis = analyze(
+        &input(vec![sender, player(2, Team::Alpha, vec![transferred])]),
+        &catalog(),
+    );
+    let sender = find(&analysis, 1);
+    let class = |kind| {
+        sender
+            .composition
+            .iter()
+            .find(|c| c.class == kind)
+            .expect("兵种")
+    };
+    assert_eq!(class(UnitClass::Tank).value, 800);
+    assert_eq!(class(UnitClass::Tank).loss_value, 400);
+    assert_eq!(class(UnitClass::Tank).damage, 10.5);
+    assert_eq!(class(UnitClass::Jet).loss_value, 0);
+    assert_eq!(class(UnitClass::Jet).damage, 25.25);
+    assert_eq!(class(UnitClass::Infantry).loss_value, 200);
+    assert_eq!(class(UnitClass::Infantry).damage, 5.0);
+    assert!(find(&analysis, 2).composition.is_empty());
+    assert_eq!(
+        sender.composition.iter().map(|c| c.damage).sum::<f64>(),
+        sender.units.iter().map(|u| u.damage).sum::<f64>()
+    );
+}
+
+#[test]
 fn times_are_relative_to_the_start_and_bucketed_by_minute() {
     let mut early = unit("1", 2, 3);
     early.death_time = Some(START + 95);

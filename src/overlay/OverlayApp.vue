@@ -626,6 +626,7 @@ li {
 li.self {
   background: rgb(76 194 255 / 0.1);
 }
+.panel.unlocked li:hover, .panel.unlocked li:focus-within { background: var(--bax-row-hover); }
 
 .elo {
   font-weight: 600;

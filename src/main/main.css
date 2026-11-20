@@ -81,6 +81,12 @@ button:disabled {
   cursor: default;
 }
 
+tbody > tr:not(.units-row):hover > td,
+tbody > tr:not(.units-row):focus-within > td,
+.reading-row:hover {
+  background: var(--bax-row-hover);
+}
+
 button.primary {
   background: var(--bax-accent);
   border-color: var(--bax-accent);

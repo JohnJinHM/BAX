@@ -6,6 +6,8 @@ import type { Team } from "../shared/bindings/Team";
 import { count, mmss, unitClassNames } from "../shared/format";
 import { clusterNearby, unitTiles, lifeMinimum, fitMark, inRange, netValue, packLanes, timeBins } from "./sortie-layout";
 import type { Entry } from "./sortie-layout";
+import { keysInBox, selectionBox, selectKeys } from "./sortie-selection";
+import type { Point, SelectionBox, SelectionMark } from "./sortie-selection";
 import UnitIcon from "./UnitIcon.vue";
 import ReturnBadge from "./ReturnBadge.vue";
 import CheckFilter from "./CheckFilter.vue";
@@ -27,9 +29,15 @@ const batch = ref(0);
 const start = ref(0);
 const end = ref(1);
 const selected = ref<number[]>([]);
+const selectedSet = computed(() => new Set(selected.value));
 const metric = ref<"count" | "value">("count");
 const expandedTeam = ref<Team | null>(null);
 const plot = ref<HTMLElement | null>(null);
+const selectionSurface = ref<HTMLElement | null>(null);
+const box = ref<SelectionBox | null>(null);
+let selectionDrag: { pointerId: number; surface: HTMLElement; anchor: Point; point: Point; client: Point;
+  marks: SelectionMark[]; previous: number[]; additive: boolean; moved: boolean } | null = null;
+let selectionFrame = 0;
 const plotWidth = ref(700);
 const preferences = useSetting(useSnapshot(), "ui.sortie");
 const plotHeight = ref(600);
@@ -71,7 +79,7 @@ const filtered = computed(() => entries.value.filter((s) =>
   (includeRefunded.value || !s.refunded)));
 const scoped = computed(() => filtered.value.filter((s) => inRange(s, scopeStart.value, scopeEnd.value)));
 const visiblePlayers = computed(() => props.players.filter((p) => (!team.value || p.team === team.value) && selectedPlayers.value.includes(p.id)));
-const detail = computed(() => entries.value.filter((s) => selected.value.includes(s.key)));
+const detail = computed(() => entries.value.filter((s) => selectedSet.value.has(s.key)));
 const ticks = computed(() => Array.from({ length: 5 }, (_, i) => start.value + span.value * i / 4));
 const binStep = computed(() => span.value > 1200 ? 120 : span.value > 300 ? 60 : 15);
 const summaries = computed(() => props.teams.map((t) => {
@@ -131,7 +139,68 @@ function pan(direction: number) {
 function resetFilters() {
   team.value = ""; selectedPlayers.value = props.players.map(p => p.id); selectedKinds.value = Object.keys(unitClassNames); query.value = ""; includeRefunded.value = true;
 }
-function select(units: Entry[]) { selected.value = units.map((s) => s.key); }
+function select(units: Entry[], event: MouseEvent) { selected.value = selectKeys(selected.value, units.map(s => s.key), event.shiftKey, true); }
+function selectionPoint(client: Point, surface: HTMLElement): Point {
+  const rect = surface.getBoundingClientRect();
+  return { x: Math.max(0, Math.min(rect.width, client.x - rect.left)), y: Math.max(0, Math.min(rect.height, client.y - rect.top)) };
+}
+function beginSelection(event: PointerEvent) {
+  const surface = selectionSurface.value;
+  if (mode.value !== "life" || event.button !== 0 || event.pointerType === "touch" || !surface ||
+    (event.target as Element).closest("button, a, input, select")) return;
+  event.preventDefault();
+  surface.focus({ preventScroll: true });
+  const rect = surface.getBoundingClientRect();
+  const client = { x: event.clientX, y: event.clientY };
+  const point = selectionPoint(client, surface);
+  const marks = [...surface.querySelectorAll<HTMLElement>(".mark")].map(el => {
+    const bounds = el.getBoundingClientRect();
+    return { key: Number(el.dataset.key), x: bounds.left - rect.left, y: bounds.top - rect.top, width: bounds.width, height: bounds.height };
+  });
+  selectionDrag = { pointerId: event.pointerId, surface, anchor: point, point, client, marks,
+    previous: [...selected.value], additive: event.shiftKey, moved: false };
+  surface.setPointerCapture(event.pointerId);
+}
+function applySelection() {
+  const drag = selectionDrag;
+  if (!drag) return;
+  const next = selectionBox(drag.anchor, drag.point);
+  drag.moved ||= Math.max(next.width, next.height) >= 4;
+  if (!drag.moved) return;
+  box.value = next;
+  selected.value = selectKeys(drag.previous, keysInBox(next, drag.marks), drag.additive);
+}
+function moveSelection(event?: PointerEvent) {
+  const drag = selectionDrag;
+  if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+  if (event) drag.client = { x: event.clientX, y: event.clientY };
+  drag.point = selectionPoint(drag.client, drag.surface);
+  cancelAnimationFrame(selectionFrame);
+  selectionFrame = requestAnimationFrame(applySelection);
+}
+function closeSelection(cancelled = false) {
+  const drag = selectionDrag;
+  if (!drag) return;
+  cancelAnimationFrame(selectionFrame);
+  if (cancelled) selected.value = drag.previous;
+  selectionDrag = null;
+  box.value = null;
+  if (drag.surface.hasPointerCapture(drag.pointerId)) drag.surface.releasePointerCapture(drag.pointerId);
+}
+function finishSelection(event: PointerEvent) {
+  const drag = selectionDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  drag.point = selectionPoint({ x: event.clientX, y: event.clientY }, drag.surface);
+  applySelection();
+  if (!drag.moved && !drag.additive) selected.value = [];
+  closeSelection();
+}
+function escapeSelection(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+  if (selectionDrag) closeSelection(true);
+  else selected.value = [];
+  event.stopPropagation();
+}
 function title(units: Entry[]) {
   const first = units[0];
   const last = Math.max(...units.map((s) => s.spawnSecs));
@@ -165,10 +234,10 @@ onMounted(() => {
   });
   if (plot.value) observer.observe(plot.value);
 });
-onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(resizeFrame); });
+onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(resizeFrame); closeSelection(true); });
 watch(() => props.analysis.matchId, () => { start.value = 0; end.value = fullEnd.value; selected.value = []; resetFilters(); }, { immediate: true });
 watch([scopeStart, scopeEnd], () => emit("range", scopeStart.value, scopeEnd.value), { immediate: true });
-watch([filtered, mode, scopeStart, scopeEnd], () => { selected.value = []; });
+watch([filtered, mode, scopeStart, scopeEnd], () => { closeSelection(); selected.value = []; });
 watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop = 0; });
 </script>
 
@@ -204,13 +273,14 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <div class="ranges"><label>从 {{ time(start) }}<input aria-label="区间开始" type="range" min="0" :max="fullEnd" :value="start" @input="setRange(Math.min(Number(($event.target as HTMLInputElement).value), end), end)" /></label><label>至 {{ time(end) }}<input aria-label="区间结束" type="range" min="0" :max="fullEnd" :value="end" @input="setRange(start, Math.max(Number(($event.target as HTMLInputElement).value), start))" /></label></div>
       </div>
 
-    <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }">
+    <p v-if="mode === 'life'" class="selection-help muted">空白处拖动框选；Shift + 点击增减选择，Shift + 框选追加。Esc 取消框选。</p>
+    <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }" @scroll="moveSelection()">
         <div class="axis"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
-        <Transition name="analysis-view" mode="out-in"><div :key="mode">
+        <Transition name="analysis-view" mode="out-in"><div :key="mode" ref="selectionSurface" class="plot-content" :class="{ selecting: box }" :tabindex="mode === 'life' ? 0 : undefined" :aria-label="mode === 'life' ? '存续时间单位选择' : undefined" @pointerdown="beginSelection" @pointermove="moveSelection" @pointerup="finishSelection" @pointercancel="closeSelection(true)" @lostpointercapture="closeSelection(true)" @keydown="escapeSelection">
         <template v-if="mode === 'teams'">
           <div v-for="t in teamBins.filter((t) => !team || team === t.team)" :key="t.team" class="timeline-row team-row">
             <button class="owner" :style="{ color: teamColor(t.team) }" :aria-expanded="expandedTeam === t.team" @click="expandedTeam = expandedTeam === t.team ? null : t.team">{{ teamLabel(t.team) }}<small>{{ expandedTeam === t.team ? '收起玩家' : '展开玩家' }}</small></button>
-            <div class="histogram"><button v-for="(b, i) in t.bins" :key="i" :disabled="!b.entries.length" :title="`${time(b.start)}–${time(b.end)} · ${count(binValue(b))}`" :aria-label="`${teamLabel(t.team)} ${time(b.start)}，${count(binValue(b))}${metric === 'count' ? '次' : '净估算价值'}`" @click="select(b.entries)"><span :style="{ height: `${binValue(b) / maxBin * 68}px`, background: teamColor(t.team) }" /></button></div>
+            <div class="histogram"><button v-for="(b, i) in t.bins" :key="i" :disabled="!b.entries.length" :title="`${time(b.start)}–${time(b.end)} · ${count(binValue(b))}`" :aria-label="`${teamLabel(t.team)} ${time(b.start)}，${count(binValue(b))}${metric === 'count' ? '次' : '净估算价值'}`" @click="select(b.entries, $event)"><span :style="{ height: `${binValue(b) / maxBin * 68}px`, background: teamColor(t.team) }" /></button></div>
           </div>
           <p class="muted">每格 {{ binStep }} 秒；双方共用刻度。点击柱条查看该批单位，点击队伍展开玩家。</p>
         </template>
@@ -218,7 +288,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
           <button class="owner" :style="{ color: teamColor(row.player.team) }" @click="selectedPlayers = [row.player.id]">{{ playerName(row.player.id) }}<small>{{ mode === 'life' ? '记录存续' : `${row.marks.reduce((n, m) => n + m.entries.length, 0)} 次出兵` }}</small></button>
           <div class="lane" :style="{ height: `${row.height}px` }">
             <i v-for="n in 5" :key="n" class="gridline" :style="{ left: `${(n - 1) * 25}%` }" />
-            <button v-for="mark in row.marks" :key="mark.entries[0].key" class="mark" :class="{ batch: mode !== 'life', life: mode === 'life' && !mark.entries[0].refunded, selected: mark.entries.some((s) => selected.includes(s.key)) }" :style="{ left: `${mark.x}px`, top: `${mark.top}px`, height: `${mark.height}px`, width: `${mark.width}px`, '--team-color': teamColor(row.player.team) }" :title="title(mark.entries)" :aria-label="title(mark.entries)" :aria-pressed="mark.entries.some((s) => selected.includes(s.key))" @click="select(mark.entries)">
+            <button v-for="mark in row.marks" :key="mark.entries[0].key" :data-key="mark.entries[0].key" class="mark" :class="{ batch: mode !== 'life', life: mode === 'life' && !mark.entries[0].refunded, selected: mark.entries.some((s) => selectedSet.has(s.key)) }" :style="{ left: `${mark.x}px`, top: `${mark.top}px`, height: `${mark.height}px`, width: `${mark.width}px`, '--team-color': teamColor(row.player.team) }" :title="title(mark.entries)" :aria-label="title(mark.entries)" :aria-pressed="mark.entries.some((s) => selectedSet.has(s.key))" @click="select(mark.entries, $event)">
               <template v-if="mode === 'life'">
                 <span class="mark-visual" :style="{ width: `${mark.iconWidth}px` }">
                   <UnitIcon unit-only :id="mark.entries[0].unitId" :thumbnail="mark.entries[0].thumbnail" :name="mark.entries[0].unitName" :kind="mark.entries[0].class" />
@@ -239,6 +309,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         </div>
       <p v-if="!filtered.length" class="empty">没有符合筛选的出兵记录。<button @click="resetFilters">清除筛选</button></p>
       <p v-else-if="!scoped.length && mode !== 'life'" class="empty">所选时间范围内没有出兵。</p>
+        <div v-if="box" class="selection-box" :style="{ left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px` }" aria-hidden="true" />
         </div></Transition>
     </div>
     <div class="resize-handle" role="separator" tabindex="0" aria-label="调整出兵时间线高度" aria-orientation="horizontal" :aria-valuenow="plotHeight" :aria-valuemin="240" :aria-valuemax="2400" @pointerdown="resizeBegin" @pointermove="resizeMove" @pointerup="resizeEnd" @pointercancel="resizeEnd" @lostpointercapture="resizeEnd" @keydown="resizeKey"><span /></div>
@@ -288,6 +359,13 @@ select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px s
 .navigator { margin: 12px 0; }.overview { width: 100%; height: 40px; cursor: crosshair; touch-action: none; }
 .ranges { display: flex; gap: 24px; }.ranges label { flex: 1; }.ranges input { width: 100%; }
 .plot { min-width: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-color: var(--bax-faint) var(--bax-surface); }
+.plot-content { position: relative; }
+.plot-content:focus-visible { outline: 1px solid var(--bax-accent); outline-offset: -1px; }
+.plot-content.selecting { user-select: none; cursor: crosshair; }
+.selection-box { position: absolute; z-index: 3; pointer-events: none; border: 1px solid var(--bax-accent); background: color-mix(in srgb, var(--bax-accent) 15%, transparent); }
+.selection-help { margin: 8px 0; }
+.detail-list { scrollbar-color: var(--bax-faint) var(--bax-surface); }
+.timeline-row:hover, .stat-line:hover, .detail-list article:hover, .stat-line:focus-within, .detail-list article:focus-within { background: var(--bax-row-hover); }
 .resize-handle { height: 18px; display: grid; place-items: center; cursor: ns-resize; touch-action: none; border-top: 1px solid var(--bax-border); }
 .resize-handle span { width: 40px; height: 3px; background: var(--bax-faint); border-radius: 2px; }
 .resize-handle:hover span, .resize-handle:focus-visible span { background: var(--bax-accent); }
