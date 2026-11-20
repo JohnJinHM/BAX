@@ -10,7 +10,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 
 ## 首次准备
 
-当前尚无公开 Release。本次完成客户端、签名打包及发布工作流，保留 0.2.0 版本号；首次公开发布前完成[验证记录](../validation/player-specs-updater.md)中的实机项目。
+首个公开版本使用 0.2.0 版本号。发布前检查[验证记录](../validation/player-specs-updater.md)中的实机项目；尚未覆盖的场景需在 Release 说明中准确列明。
 
 公钥已写入 `src-tauri/tauri.conf.json`。对应私钥在维护者本机仓库外的 `$HOME/.tauri/bax-updater.key`，不要提交到 Git。备份该文件；后续发布必须使用同一私钥，否则已有安装无法验证更新。
 
@@ -21,7 +21,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 | `TAURI_SIGNING_PRIVATE_KEY` | 私钥文件完整内容，不是本机路径 |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码；本次私钥无密码，可不设 |
 
-当前连接的 GitHub 工具不支持设置 Actions Secrets；本次未写入远端 Secret、推送标签或创建 Release。
+2026-11-19 已通过 GitHub CLI 配置签名 Secret，并在维护者本机仓库外备份现有密钥。无密码密钥不需要配置密码 Secret。
 
 ## 发布
 
