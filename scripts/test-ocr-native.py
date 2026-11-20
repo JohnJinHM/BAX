@@ -28,6 +28,7 @@ def run(image, label, repeats=1):
     (output / (label + '.jsonl')).write_text(result.stdout, encoding='utf8')
     data = [json.loads(line) for line in result.stdout.splitlines()]
     assert data[0]['ready'] is True
+    assert data[0].get('runtime') == 'native' and data[0].get('protocolVersion') == 1
     return data[0], data[1:]
 
 

@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- 修复 Dev/Portable 构建未刷新 OCR 资源的问题；Full 强制同步并校验原生工作进程，拒绝旧协议，防止新版主程序误用旧 Python OCR。
+- OCR 按卡片连续两帧稳定后发布，部分名单持续补齐；本地只有身份但没有资料时继续查分。
+
 - 统一构建入口支持 Dev、Portable、Installer，均可选择 Full/Lite；便携 ZIP 附带本地数据目录启动器。
 
 ### Full / Lite 与赛前 OCR

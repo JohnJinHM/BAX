@@ -55,6 +55,29 @@ try {
     $output = Join-Path $env:CARGO_TARGET_DIR $buildProfile
     $exe = Join-Path $output 'bax-app.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw "未找到程序：$exe" }
+    if ($Edition -eq 'Full') {
+        # --no-bundle 不保证刷新已有资源，必须显式替换旧 Python/原生工作进程。
+        $resolvedOutput = (Resolve-Path -LiteralPath $output).Path.TrimEnd('\')
+        $destination = [IO.Path]::GetFullPath((Join-Path $resolvedOutput 'ocr-runtime'))
+        if ((Split-Path -Parent $destination) -ne $resolvedOutput -or $destination -eq $runtime) {
+            throw 'OCR 资源目标目录越界'
+        }
+        if (Test-Path -LiteralPath $destination) {
+            if ((Get-Item -LiteralPath $destination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'OCR 资源目标不能是链接' }
+            Remove-Item -LiteralPath $destination -Recurse -Force
+        }
+        Copy-Item -LiteralPath $runtime -Destination $destination -Recurse
+        foreach ($file in Get-ChildItem -LiteralPath $runtime -Recurse -File) {
+            $copied = Join-Path $destination ([IO.Path]::GetRelativePath($runtime, $file.FullName))
+            if ((Get-FileHash -LiteralPath $copied).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash) {
+                throw "OCR 资源复制校验失败：$copied"
+            }
+        }
+        $hello = & (Join-Path $destination 'bax-ocr.exe') (Join-Path $destination 'models') --self-test
+        if ($LASTEXITCODE -ne 0) { throw '输出目录 OCR 自检失败' }
+        $protocol = $hello | ConvertFrom-Json
+        if ($protocol.protocolVersion -ne 1 -or $protocol.runtime -ne 'native') { throw '输出目录 OCR 协议不匹配' }
+    }
     if ($Mode -eq 'Dev') {
         Write-Output "Debug 程序：$exe"
         if ($Edition -eq 'Full') { Write-Output "配套资源：$(Join-Path $output 'ocr-runtime')" }

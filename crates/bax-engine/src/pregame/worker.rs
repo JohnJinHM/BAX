@@ -43,6 +43,9 @@ impl Process {
         if hello.get("ready").and_then(serde_json::Value::as_bool) != Some(true) {
             return Err("OCR 模型未就绪，请重新安装 BAX".into());
         }
+        if !compatible_runtime(&hello) {
+            return Err("OCR 组件版本不匹配，请重新构建或安装 Full 版".into());
+        }
         Ok(process)
     }
     async fn read(&mut self) -> Result<serde_json::Value, String> {
@@ -99,6 +102,14 @@ impl Process {
     }
 }
 
+fn compatible_runtime(hello: &serde_json::Value) -> bool {
+    hello
+        .get("protocolVersion")
+        .and_then(serde_json::Value::as_u64)
+        == Some(1)
+        && hello.get("runtime").and_then(serde_json::Value::as_str) == Some("native")
+}
+
 fn local_index(path: PathBuf) -> Vec<Candidate> {
     let Ok(store) = Store::open(&path) else {
         return vec![];
@@ -136,11 +147,12 @@ fn local_index(path: PathBuf) -> Vec<Candidate> {
 fn prefer_local(p: &PregamePlayer) -> bool {
     !p.ambiguous
         && p.candidates.first().is_some_and(|c| {
-            (normalized(&c.name) == normalized(&p.observed.name)
-                || p.observed
-                    .alternatives
-                    .iter()
-                    .any(|n| normalized(n) == normalized(&c.name)))
+            c.profile.is_some()
+                && (normalized(&c.name) == normalized(&p.observed.name)
+                    || p.observed
+                        .alternatives
+                        .iter()
+                        .any(|n| normalized(n) == normalized(&c.name)))
                 && c.level.is_some_and(|n| n.abs_diff(p.observed.level) <= 10)
         })
 }
@@ -222,7 +234,8 @@ async fn resolve(
 struct CaptureLatch {
     identity: Option<(MatchId, Timestamp)>,
     previous: Vec<Observation>,
-    frozen: Option<Vec<Observation>>,
+    stable: Vec<Observation>,
+    complete: bool,
 }
 impl CaptureLatch {
     fn select(&mut self, identity: (MatchId, Timestamp)) -> bool {
@@ -236,15 +249,31 @@ impl CaptureLatch {
         true
     }
     fn observe(&mut self, rows: Vec<Observation>) -> bool {
-        if self.frozen.is_some() {
-            return true;
+        if self.complete {
+            return false;
         }
-        if !rows.is_empty() && rows == self.previous {
-            self.frozen = Some(rows);
-            return true;
+        let before = self.stable.clone();
+        for row in &rows {
+            if !self.previous.contains(row) {
+                continue;
+            }
+            if let Some(old) = self
+                .stable
+                .iter_mut()
+                .find(|p| p.side == row.side && p.row == row.row)
+            {
+                // 已稳定的身份不因动画或遮挡反复替换；允许后续补全敌我判定。
+                if old.friendly.is_none() && old.name == row.name && old.level == row.level {
+                    old.friendly = row.friendly;
+                }
+            } else {
+                self.stable.push(row.clone());
+            }
         }
+        self.stable.sort_by_key(|p| (p.side.clone(), p.row));
+        self.complete = self.stable.len() == 10 && self.stable.iter().all(|r| r.friendly.is_some());
         self.previous = rows;
-        false
+        before != self.stable
     }
 }
 
@@ -290,7 +319,7 @@ pub(crate) async fn run(
             .await
             .unwrap_or_default();
         }
-        if latch.frozen.is_none() {
+        if !latch.complete {
             if tokio::time::Instant::now() < process_retry {
                 continue;
             }
@@ -308,11 +337,20 @@ pub(crate) async fn run(
                     Ok((rows, status)) => {
                         if latch.observe(rows) {
                             view.players = latch
-                                .frozen
-                                .as_ref()
-                                .expect("frozen")
+                                .stable
                                 .iter()
-                                .map(|row| rank(row.clone(), index.clone(), false))
+                                .map(|row| {
+                                    let mut p = view
+                                        .players
+                                        .iter()
+                                        .find(|p| {
+                                            p.observed.side == row.side && p.observed.row == row.row
+                                        })
+                                        .cloned()
+                                        .unwrap_or_else(|| rank(row.clone(), index.clone(), false));
+                                    p.observed = row.clone();
+                                    p
+                                })
                                 .collect();
                             reject_duplicate_candidates(&mut view.players);
                             tracing::info!(
@@ -323,9 +361,12 @@ pub(crate) async fn run(
                                     .iter()
                                     .filter(|p| p.observed.friendly == Some(false))
                                     .count(),
-                                "OCR 名单已锁定，本场不再重新采集"
+                                complete = latch.complete,
+                                "OCR 稳定名单更新"
                             );
-                            process = None;
+                            if latch.complete {
+                                process = None;
+                            }
                         } else {
                             view.status = status;
                         }
@@ -341,8 +382,13 @@ pub(crate) async fn run(
         if ticket(&snapshots.borrow()).as_ref() != Some(&key) {
             continue;
         }
-        if latch.frozen.is_some() && !stopped {
-            view.status = "赛前识别，等待日志确认".into();
+        if !view.players.is_empty() && !stopped {
+            view.status = if latch.complete {
+                "赛前识别，等待日志确认"
+            } else {
+                "继续补全名单，等待日志确认"
+            }
+            .into();
         }
         let _ = tx
             .send(Message {
@@ -351,7 +397,7 @@ pub(crate) async fn run(
                 view: view.clone(),
             })
             .await;
-        if latch.frozen.is_none() || stopped {
+        if view.players.is_empty() || stopped {
             continue;
         }
         for pos in 0..view.players.len() {
@@ -395,10 +441,16 @@ pub(crate) async fn run(
                 }
             }
             // Identifiers only in approved diagnostic fields; no names/search strings.
-            tracing::debug!(
+            tracing::info!(
                 match_id = key.id.get(),
                 remaining = before,
                 stopped,
+                candidates = view.players[pos].candidates.len(),
+                ambiguous = view.players[pos].ambiguous,
+                profile = view.players[pos]
+                    .candidates
+                    .first()
+                    .is_some_and(|c| c.profile.is_some()),
                 "OCR 候选查询完成"
             );
             reject_duplicate_candidates(&mut view.players);
@@ -433,13 +485,17 @@ mod tests {
     }
     #[test]
     fn local_preference_requires_name_and_plausible_level() {
-        let c = Candidate {
+        let mut c = Candidate {
             id: PlayerId(1),
             name: "raven".into(),
             level: Some(57),
             local: true,
             profile: None,
         };
+        assert!(!prefer_local(&rank(row(), vec![c.clone()], false)));
+        c.profile = ProfileSummary::from_json(
+            r#"{"info":{"id":1,"name":"raven","level":57,"rating":2200}}"#,
+        );
         assert!(prefer_local(&rank(row(), vec![c.clone()], false)));
         let mut old = c.clone();
         old.level = Some(10);
@@ -489,21 +545,45 @@ mod tests {
         assert!(p.candidates[0].profile.is_some());
     }
     #[test]
-    fn frozen_roster_survives_empty_or_changed_screens_until_a_new_match() {
+    fn partial_roster_grows_and_survives_screen_changes_until_a_new_match() {
         let mut latch = CaptureLatch::default();
         let identity = (MatchId(7), Timestamp::from_millis(10));
         assert!(latch.select(identity));
         assert!(!latch.observe(vec![row()]));
         assert!(latch.observe(vec![row()]));
-        let frozen = latch.frozen.clone();
-        assert!(latch.observe(vec![]));
+        let stable = latch.stable.clone();
+        assert!(!latch.complete);
+        assert!(!latch.observe(vec![]));
         let mut changed = row();
         changed.level = 19;
-        assert!(latch.observe(vec![changed]));
+        assert!(!latch.observe(vec![changed]));
         assert!(!latch.select(identity));
-        assert_eq!(latch.frozen, frozen);
+        assert_eq!(latch.stable, stable);
+        let mut extra = row();
+        extra.row = 1;
+        assert!(!latch.observe(vec![extra.clone()]));
+        assert!(latch.observe(vec![extra]));
+        assert_eq!(latch.stable.len(), 2);
         assert!(latch.select((MatchId(8), identity.1)));
-        assert!(latch.frozen.is_none());
+        assert!(latch.stable.is_empty());
+    }
+    #[test]
+    fn native_protocol_rejects_old_workers() {
+        assert!(!compatible_runtime(&serde_json::json!({"ready":true})));
+        assert!(compatible_runtime(
+            &serde_json::json!({"ready":true,"runtime":"native","protocolVersion":1})
+        ));
+    }
+    #[test]
+    fn unknown_side_can_be_completed_without_replacing_stable_identity() {
+        let mut latch = CaptureLatch::default();
+        let mut unknown = row();
+        unknown.friendly = None;
+        latch.observe(vec![unknown.clone()]);
+        latch.observe(vec![unknown]);
+        latch.observe(vec![row()]);
+        assert!(latch.observe(vec![row()]));
+        assert_eq!(latch.stable[0].friendly, Some(false));
     }
     #[tokio::test]
     async fn friendly_and_unknown_sides_never_query_the_api() {

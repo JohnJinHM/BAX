@@ -216,7 +216,7 @@ int wmain(int argc, wchar_t** argv) {
         Recognizer general(env, models / "PP-OCRv6_rec_small.onnx"), russian(env, models / "eslav_PP-OCRv5_rec_mobile.onnx");
         general.run({Image(160, 48)}); russian.run({Image(160, 48)});
         double init_ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
-        std::cout << "{\"ready\":true,\"initializationMs\":" << init_ms << "}" << std::endl;
+        std::cout << "{\"ready\":true,\"protocolVersion\":1,\"runtime\":\"native\",\"initializationMs\":" << init_ms << "}" << std::endl;
         if (argc >= 3 && std::wstring(argv[2]) == L"--self-test") { if (SUCCEEDED(initialized)) CoUninitialize(); return 0; }
         if (argc >= 4 && std::wstring(argv[2]) == L"--image") {
             Image image = load_image(argv[3]);

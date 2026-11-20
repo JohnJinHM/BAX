@@ -31,6 +31,8 @@ Full 对应 `editions/full` 与 `BAX-Full`。Dev 与 Release 分开，Full 与 L
 
 Full 的 `bax-app.exe` 必须与旁边的 `ocr-runtime/` 一起复制，包含原生工作进程、运行库、两个模型和许可证。Lite 不读取或构建 OCR 产物。
 
+Full 在所有模式下显式替换输出目录的 `ocr-runtime/`，逐文件校验 SHA-256，并从输出目录运行模型及协议自检。不能依赖 Tauri 的 `--no-bundle` 更新已有资源：旧目录可能残留 Python 工作进程。引擎要求原生工作进程协议版本 1，不兼容时会提示重新构建或安装 Full。
+
 ## 增量构建与旧入口
 
 默认执行 `npm ci`，Full 默认重建原生 OCR。已有依赖、只改 Rust/Vue 时可以复用：
