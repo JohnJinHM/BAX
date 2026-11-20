@@ -8,9 +8,9 @@
 
 Dev / Portable 可检查，但通过“打开发布页”手动下载。便携更新保留旧 `data` 文件夹。安装更新继续使用原数据目录。没有公开 Release、网络失败、缺少更新清单或签名不符会显示状态，不会把它们当作“已经最新”。检查超时 20 秒，下载超时五分钟，失败可重试。应用不会自动下载或退出。尚不含 updater 的旧程序需先手动安装一次新版。
 
-## 首次准备
+## 签名配置
 
-首个公开版本 [v0.2.0](https://github.com/JohnJinHM/BAX/releases/tag/v0.2.0) 已于 2026-11-20 发布并设为 Latest，结果见[首版发布验收](../validation/release-0.2.0.md)。后续发布前检查[验证记录](../validation/player-specs-updater.md)中的剩余项目；尚未覆盖的场景需在 Release 说明中准确列明。
+当前 Latest 为 [v0.2.1](https://github.com/JohnJinHM/BAX/releases/tag/v0.2.1)，结果见[本次发布验收](../validation/release-0.2.1.md)；首版记录见[0.2.0 发布验收](../validation/release-0.2.0.md)。后续发布前查看最新验收记录，Release 说明列明本次覆盖的范围与剩余项目。
 
 公钥已写入 `src-tauri/tauri.conf.json`。对应私钥在维护者本机仓库外的 `$HOME/.tauri/bax-updater.key`，不要提交到 Git。备份该文件；后续发布必须使用同一私钥，否则已有安装无法验证更新。
 
@@ -28,7 +28,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 1. 验收并合入 `main`。同步 Cargo workspace、Tauri 配置、package.json 和两份 lock 文件的版本号，整理 CHANGELOG。
 2. 在该提交创建并推送附注标签 `vX.Y.Z`。工作流分别测试、构建 Full / Lite 签名安装包及便携 ZIP。
 3. 工作流用客户端内置公钥验证安装包，再生成 `latest.json`、SHA256SUMS 和**草稿** Release。任何一版构建或验证失败，都不进入草稿阶段。
-4. 从草稿下载验收两版，核对版本、OCR 资源和用户数据保留。公开 Release 并设为最新后，客户端才会从 `/releases/latest/download/latest.json` 发现更新。预发布不用于稳定更新通道。
+4. 从草稿下载资产，核对两版校验和与更新清单；按当次约定的本机验收范围检查版本、运行资源与用户数据保留，并记录实际结果。0.2.1 的本机验收使用 Full，Lite 由 CI 完成测试、构建与签名验证。公开 Release 并设为最新后，客户端才会从 `/releases/latest/download/latest.json` 发现更新。预发布不用于稳定更新通道。
 
 工作流也可手动运行，但必须选择与配置版本匹配的 tag。草稿已存在时创建步骤会报错；重试前先在 GitHub 处理旧草稿。不要覆盖已公开资产，应发布新版本。
 
