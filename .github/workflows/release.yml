@@ -65,7 +65,8 @@ jobs:
         shell: pwsh
         run: |
           $edition = '${{ matrix.edition }}'.ToLowerInvariant()
-          $files = @(Get-ChildItem "target/editions/$edition/release/bundle/nsis/BAX-*.exe" | ForEach-Object FullName)
+          $targetRoot = if ($edition -eq 'full') { 'target' } else { "target/editions/$edition" }
+          $files = @(Get-ChildItem "$targetRoot/release/bundle/nsis/BAX-*.exe" | ForEach-Object FullName)
           if ($files.Count -ne 1) { throw 'Expected one installer' }
           cargo run --locked -p bax-app --example verify-update -- @files
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -74,6 +75,9 @@ jobs:
           name: windows-${{ matrix.edition }}
           if-no-files-found: error
           path: |
+            target/release/bundle/nsis/BAX-*.exe
+            target/release/bundle/nsis/BAX-*.sig
+            target/release/bundle/portable/BAX-*.zip
             target/editions/*/release/bundle/nsis/BAX-*.exe
             target/editions/*/release/bundle/nsis/BAX-*.sig
             target/editions/*/release/bundle/portable/BAX-*.zip

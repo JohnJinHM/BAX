@@ -41,7 +41,7 @@ try {
         throw '-SkipOcrBuild 仅适用于 Full；Lite 本身不构建 OCR'
     }
     $targetRoot = if ($previousTarget) { [IO.Path]::GetFullPath($previousTarget, $repo) } else { Join-Path $repo 'target' }
-    $env:CARGO_TARGET_DIR = Join-Path $targetRoot "editions/$($Edition.ToLowerInvariant())"
+    $env:CARGO_TARGET_DIR = if ($Edition -eq 'Full') { $targetRoot } else { Join-Path $targetRoot 'editions/lite' }
     if (-not $SkipNpmInstall) {
         npm ci --no-audit --no-fund
         if ($LASTEXITCODE -ne 0) { throw '前端依赖安装失败；已有依赖且开发服务器占用文件时，可使用 -SkipNpmInstall' }
