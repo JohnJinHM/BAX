@@ -61,7 +61,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       case "player_detail":
         return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
       case "match_history":
-        return fixtureHistory;
+        return structuredClone(fixtureHistory);
+      case "open_batrace_player":
+        window.open(`https://dash.batrace.top/player/${Number((args as { id: number }).id)}`, "_blank", "noopener,noreferrer");
+        return null;
       case "match_report":
         return fixtureReport(Number((args as { id?: number } | undefined)?.id));
       case "search_players": {

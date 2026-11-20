@@ -49,10 +49,11 @@ async function load() {
 }
 
 watch(
-  () => [props.id, props.row?.report.state],
+  [() => props.id, () => props.row?.report.state],
   () => {
     view.value = null;
     expanded.value = null;
+    selectedRange.value = null;
     void load();
   },
   { immediate: true },
@@ -176,7 +177,8 @@ function playerAxisLabel(rows: PlayerReport[]) {
   return {
     color: c.fg,
     fontSize: 11,
-    formatter: (value: string, i: number) => {
+    formatter: (_value: string, i: number) => {
+      const value = name(rows[i]);
       const short = value.length > 14 ? `${value.slice(0, 13)}…` : value;
       return `{t${rows[i]?.team === teamOrder.value[0] ? 0 : 1}|▍}${short}`;
     },
@@ -237,15 +239,22 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
 });
 
 /** 每人的兵种构成（估算价值）。 */
+const visibleComposition = ref(new Set(compositionGroups.map(g => g.key)));
+function toggleComposition(key: string) {
+  if (visibleComposition.value.has(key)) visibleComposition.value.delete(key);
+  else visibleComposition.value.add(key);
+}
 const compositionOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
   if (!v) return null;
   const rows = players.value;
   const totals = rows.map((p) => p.composition.reduce((s, c) => s + c.value, 0));
   const series = compositionGroups.map((group) => ({
+    id: group.key,
     name: group.name,
     type: "bar",
     stack: "value",
+    stackOrder: "seriesAsc",
     color: group.color,
     barWidth: 14,
     itemStyle: { borderColor: colors.value.surface, borderWidth: 1 },
@@ -256,8 +265,8 @@ const compositionOption = computed<EChartsCoreOption | null>(() => {
   }));
   return {
     animation: false,
-    grid: { left: 130, right: 24, top: 36, bottom: 28 },
-    legend: { top: 0, left: 0, textStyle: { color: colors.value.muted }, itemWidth: 12, itemHeight: 12 },
+    grid: { left: 130, right: 24, top: 12, bottom: 28 },
+    legend: { show: false, selected: Object.fromEntries(compositionGroups.map(g => [g.name, visibleComposition.value.has(g.key)])) },
     tooltip: {
       ...tooltipCommon.value,
       trigger: "item",
@@ -271,7 +280,7 @@ const compositionOption = computed<EChartsCoreOption | null>(() => {
     yAxis: {
       type: "category",
       inverse: true,
-      data: rows.map((p) => name(p)),
+      data: rows.map((p) => String(p.id)),
       ...axisCommon.value,
       splitLine: { show: false },
       axisLabel: playerAxisLabel(rows),
@@ -280,7 +289,7 @@ const compositionOption = computed<EChartsCoreOption | null>(() => {
   };
 });
 
-const compositionHeight = computed(() => players.value.length * 26 + 70);
+const compositionHeight = computed(() => players.value.length * 26 + 46);
 
 function pendingText(row: HistoryRow | null | undefined): string {
   const r = row?.report;
@@ -339,6 +348,9 @@ function pendingText(row: HistoryRow | null | undefined): string {
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
       <h3>兵种构成（估算价值）</h3>
+      <ul class="composition-legend" aria-label="兵种类别，按条形图从左到右排列">
+        <li v-for="group in compositionGroups" :key="group.key"><button :aria-pressed="visibleComposition.has(group.key)" @click="toggleComposition(group.key)"><i :style="{ background: group.color }" />{{ group.name }}</button></li>
+      </ul>
       <EChart v-if="compositionOption" :option="compositionOption" :height="compositionHeight" label="每名玩家各兵种的估算出兵价值" />
 
       <h3>玩家</h3>
@@ -434,6 +446,10 @@ function pendingText(row: HistoryRow | null | undefined): string {
 </template>
 
 <style scoped>
+.composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-muted); font-size: 12px; }
+.composition-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.composition-legend button[aria-pressed="false"] { text-decoration: line-through; }
+.composition-legend i { width: 10px; height: 10px; flex: none; border-radius: 2px; }
 .report {
   min-width: 0;
 }

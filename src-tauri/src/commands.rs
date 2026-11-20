@@ -35,6 +35,19 @@ pub fn get_app_status(state: State<'_, AppState>) -> AppStatus {
     state.status()
 }
 
+/// 只接受玩家 ID，由外壳组装固定站点地址并交给默认浏览器。
+#[tauri::command]
+pub fn open_batrace_player(id: PlayerId) -> CommandResult {
+    if id.0 == 0 {
+        return Err("玩家 ID 无效".to_owned());
+    }
+    std::process::Command::new("explorer.exe")
+        .arg(format!("https://dash.batrace.top/player/{}", id.0))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("无法打开 BATrace 玩家页面：{e}"))
+}
+
 #[tauri::command]
 pub async fn refresh_players(state: State<'_, AppState>) -> CommandResult {
     tracing::info!(via = %"界面", "刷新玩家资料");

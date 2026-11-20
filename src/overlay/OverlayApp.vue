@@ -24,7 +24,7 @@ const expanded = ref(appearance.value.expanded);
 const automation = new OverlayAutomation();
 const result = ref<MatchReportView | null>(null);
 let reportTicket = 0;
-watch(() => [current.value?.matchId, current.value?.phase, snapshot.value?.archive.seq], async () => {
+watch([() => current.value?.matchId, () => current.value?.phase, () => snapshot.value?.archive.seq], async () => {
   const ticket = ++reportTicket;
   const match = current.value;
   if (result.value?.analysis.matchId !== match?.matchId) result.value = null;
@@ -326,7 +326,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
             <span class="name">
-              {{ p.name }}<span v-if="p.note" class="note"> · {{ p.note }}</span>
+              <a v-if="p.id != null" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
+              <template v-else>{{ p.name }}</template><span v-if="p.note" class="note"> · {{ p.note }}</span>
             </span>
             <span
               v-if="p.fetch.state !== 'idle'"
@@ -647,6 +648,10 @@ li.stale .elo {
   color: var(--bax-warn);
   font-size: 11px;
 }
+
+.name a { color: inherit; text-decoration: underline; text-decoration-color: var(--bax-faint); text-underline-offset: 3px; }
+.name a:hover { color: var(--bax-accent); text-decoration-color: currentColor; }
+.name a:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; border-radius: 2px; }
 
 .fetch {
   color: var(--bax-faint);

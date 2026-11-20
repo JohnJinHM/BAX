@@ -97,6 +97,7 @@ pub fn run() {
             commands::set_overlay_hotspot,
             commands::set_overlay_visible,
             commands::open_main_window,
+            commands::open_batrace_player,
             commands::report_ui_error,
             commands::open_diag_dir,
             commands::export_diag,

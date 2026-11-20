@@ -85,6 +85,7 @@ export const commands = {
     invoke<void>("set_overlay_hotspot", { hotspot }),
   setOverlayVisible: (visible: boolean) => invoke<void>("set_overlay_visible", { visible }),
   openMainWindow: () => invoke<void>("open_main_window"),
+  openBatracePlayer: (id: number) => invoke<void>("open_batrace_player", { id }),
   openDiagDir: () => invoke<void>("open_diag_dir"),
   /** 导出诊断包，返回文件路径。 */
   exportDiag: () => invoke<string>("export_diag"),

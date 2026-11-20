@@ -99,19 +99,20 @@ export const unitClassNames: Record<UnitClass, string> = {
 };
 
 /**
- * 兵种构成图的分组与配色。八个色位按固定顺序取用（dataviz 参考色板的暗色档，
- * 已对 #161b22 底色验证相邻对），运输、补给与其他并作灰色。
+ * 兵种构成图与筛选、区间统计共用类别顺序；每类颜色固定，不按各玩家的价值重新排序。
  */
 export const compositionGroups: { key: string; name: string; color: string; classes: UnitClass[] }[] = [
+  { key: "recon", name: "侦察", color: "#c98500", classes: ["recon"] },
+  { key: "infantry", name: "步兵", color: "#199e70", classes: ["infantry"] },
   { key: "tank", name: "坦克", color: "#3987e5", classes: ["tank"] },
   { key: "ifv", name: "步战与反坦克车", color: "#d95926", classes: ["ifv"] },
-  { key: "infantry", name: "步兵", color: "#199e70", classes: ["infantry"] },
-  { key: "recon", name: "侦察", color: "#c98500", classes: ["recon"] },
-  { key: "artillery", name: "火炮", color: "#d55181", classes: ["artillery"] },
+  { key: "transport", name: "运输车", color: "#8398ad", classes: ["transport"] },
+  { key: "supply", name: "补给", color: "#b3a184", classes: ["supply"] },
   { key: "airDefense", name: "防空", color: "#0ca30c", classes: ["airDefense"] },
+  { key: "artillery", name: "火炮", color: "#d55181", classes: ["artillery"] },
   { key: "helicopter", name: "直升机", color: "#9085e9", classes: ["helicopter"] },
   { key: "jet", name: "固定翼", color: "#e66767", classes: ["jet"] },
-  { key: "logistics", name: "运输、补给与其他", color: "#5b636d", classes: ["transport", "supply", "other"] },
+  { key: "other", name: "其他", color: "#5b636d", classes: ["other"] },
 ];
 
 /**

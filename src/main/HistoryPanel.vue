@@ -33,7 +33,7 @@ async function load(more = false) {
 onMounted(() => void load());
 // 有新比赛、新战报或者队列变了就刷新列表
 watch(
-  () => [snapshot.value?.archive.seq, snapshot.value?.current?.matchId, snapshot.value?.current?.phase],
+  [() => snapshot.value?.archive.seq, () => snapshot.value?.current?.matchId, () => snapshot.value?.current?.phase],
   () => void load(),
 );
 
