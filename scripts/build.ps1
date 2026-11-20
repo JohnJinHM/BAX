@@ -3,6 +3,7 @@ param(
     [ValidateSet('Dev', 'Portable', 'Installer')][string]$Mode = 'Dev',
     [ValidateSet('Full', 'Lite')][string]$Edition = 'Full',
     [switch]$SkipOcrBuild,
+    [switch]$SignUpdate,
     [switch]$SkipNpmInstall
 )
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,8 @@ $stage = $null
 $temporaryZip = $null
 Push-Location $repo
 try {
+    if ($SignUpdate -and $Mode -ne 'Installer') { throw '-SignUpdate 只用于 Installer' }
+    if ($SignUpdate -and -not $env:TAURI_SIGNING_PRIVATE_KEY) { throw '签名发布需要 TAURI_SIGNING_PRIVATE_KEY' }
     $Mode = @{'dev'='Dev'; 'portable'='Portable'; 'installer'='Installer'}[$Mode.ToLowerInvariant()]
     $Edition = @{'full'='Full'; 'lite'='Lite'}[$Edition.ToLowerInvariant()]
     if ($Edition -eq 'Full') {
@@ -48,6 +51,8 @@ try {
     if ($Mode -eq 'Installer') { $buildArgs += @('--bundles', 'nsis') } else { $buildArgs += '--no-bundle' }
     if ($Mode -eq 'Dev') { $buildArgs += '--debug' }
     if ($Edition -eq 'Full') { $buildArgs += @('--features', 'ocr', '--config', 'src-tauri/tauri.ocr.conf.json') }
+    if ($Mode -eq 'Installer') { $buildArgs += @('--features', 'installed-updater') }
+    if ($SignUpdate) { $buildArgs += @('--config', 'src-tauri/tauri.updater.conf.json') }
     $buildArgs += @('--', '--no-default-features')
     node node_modules/@tauri-apps/cli/tauri.js @buildArgs
     if ($LASTEXITCODE -ne 0) { throw "$Mode 构建失败" }
@@ -89,6 +94,10 @@ try {
             $namedInstaller = Join-Path $bundle "BAX-$($Edition)_$($version)_x64-setup.exe"
             if (-not (Test-Path -LiteralPath $installer)) { throw "未找到安装包：$installer" }
             Move-Item -LiteralPath $installer -Destination $namedInstaller -Force
+            if ($SignUpdate) {
+                if (-not (Test-Path -LiteralPath "$installer.sig")) { throw '未生成安装包签名' }
+                Move-Item -LiteralPath "$installer.sig" -Destination "$namedInstaller.sig" -Force
+            }
             Write-Output "安装包：$namedInstaller"
         } else {
             $bundle = Join-Path $output 'bundle/portable'

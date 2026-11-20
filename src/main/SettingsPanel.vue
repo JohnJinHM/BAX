@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
+const update = computed(() => status.value?.update);
+const updateBusy = computed(() => ["checking", "downloading", "installing"].includes(update.value?.state ?? ""));
+const matchActive = computed(() => snapshot.value?.current != null && snapshot.value.current.phase !== "ended" && snapshot.value.current.connection !== "disconnected");
+const updateError = ref("");
+async function updateAction(action: () => Promise<void>) {
+  updateError.value = "";
+  try { await action(); } catch (error) { updateError.value = errorText(error); }
+}
 const ocr = useSetting(snapshot, "ui.ocr");
 const appearance = useSetting(snapshot, "ui.overlay");
 const alerts = useSetting(snapshot, "ui.alerts");
@@ -92,6 +100,24 @@ async function exportDiag() {
 </script>
 
 <template>
+  <section v-if="update" class="card">
+    <h2>应用更新</h2>
+    <p>BAX {{ update.edition }} · {{ update.currentVersion }}</p>
+    <p role="status" aria-live="polite" :class="update.state === 'error' ? 'error' : 'hint'">{{ update.message }}</p>
+    <p v-if="update.state === 'downloading'" class="hint num">
+      已下载 {{ (update.downloaded / 1048576).toFixed(1) }} MB<span v-if="update.total"> / {{ (update.total / 1048576).toFixed(1) }} MB</span>
+    </p>
+    <p v-if="!update.canInstall" class="hint">开发／便携版请从发布页下载对应版本。便携版更新时保留 data 文件夹。</p>
+    <p v-else class="hint">启动后自动检查。点击安装后会退出 BAX，更新当前 {{ update.edition }} 版本并保留本地数据。</p>
+    <div class="row">
+      <button :disabled="updateBusy" @click="updateAction(commands.checkUpdate)">{{ update.state === 'checking' ? '正在检查…' : '检查更新' }}</button>
+      <button v-if="update.version && update.canInstall" class="primary" :disabled="updateBusy || matchActive" @click="updateAction(commands.installUpdate)">下载并安装 {{ update.version }}</button>
+      <button @click="updateAction(commands.openReleases)">打开发布页</button>
+    </div>
+    <p v-if="update.version && matchActive && update.canInstall" class="hint">本场比赛结束后可安装更新。</p>
+    <p v-if="updateError" class="error" role="alert">{{ updateError }}</p>
+    <details v-if="update.notes"><summary>版本说明</summary><p class="release-notes">{{ update.notes }}</p></details>
+  </section>
   <section v-if="status?.ocrSupported" class="card">
     <h2>赛前玩家识别</h2>
     <label class="row">
@@ -254,6 +280,7 @@ async function exportDiag() {
 </template>
 
 <style scoped>
+.release-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
 input[type="number"] { width: 72px; padding: 5px 8px; border: 1px solid var(--bax-border); border-radius: 6px; background: var(--bax-surface-2); color: var(--bax-fg); }
 input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .card + .card {

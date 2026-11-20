@@ -19,13 +19,35 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
-    "shortDescription": "《断箭》对局辅助工具",
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "ã€Šæ–­ç®­ã€‹å¯¹å±€è¾…åŠ©å·¥å…·",
     "copyright": "Copyright (c) 2026 BAX contributors",
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "nsis": { "installMode": "currentUser" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyM0NCNTlBRTE0NDA0RUQKUldUdEJFVGhtclU4Z3BJNm9UUXgzb1pBeUpkd1pLb1RvQmVRd2RQeHdVK3ZrLy8zejY2UVFpVXoK",
+      "endpoints": [
+        "https://github.com/JohnJinHM/BAX/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

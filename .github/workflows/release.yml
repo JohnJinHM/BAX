@@ -1,0 +1,103 @@
+name: Signed Windows release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [Full, Lite]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88.0'
+          components: clippy, rustfmt
+      - name: Verify version and signing configuration
+        shell: pwsh
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:SIGNING_KEY) { throw 'Missing TAURI_SIGNING_PRIVATE_KEY repository secret' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF -ne "refs/tags/v$version") { throw 'Run release workflow on the matching version tag' }
+          if ((Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version -ne $version) { throw 'Tauri version mismatch' }
+          $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          if ($metadata.packages | Where-Object version -ne $version) { throw 'Cargo version mismatch' }
+      - run: npm ci --no-audit --no-fund
+      - name: Validate
+        shell: pwsh
+        run: |
+          cargo fmt --all --check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --workspace --locked --features bax-app/ocr,bax-app/installed-updater
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo clippy --workspace --all-targets --locked --features bax-app/ocr,bax-app/installed-updater -- -D warnings
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run test:ui
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build signed installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: ./scripts/build.ps1 -Mode Installer -Edition ${{ matrix.edition }} -SignUpdate -SkipNpmInstall
+      - name: Build portable package
+        shell: pwsh
+        run: |
+          $buildOptions = @{ Mode='Portable'; Edition='${{ matrix.edition }}'; SkipNpmInstall=$true }
+          if ($buildOptions.Edition -eq 'Full') { $buildOptions.SkipOcrBuild = $true }
+          ./scripts/build.ps1 @buildOptions
+      - name: Verify installer against embedded public key
+        shell: pwsh
+        run: |
+          $edition = '${{ matrix.edition }}'.ToLowerInvariant()
+          $files = @(Get-ChildItem "target/editions/$edition/release/bundle/nsis/BAX-*.exe" | ForEach-Object FullName)
+          if ($files.Count -ne 1) { throw 'Expected one installer' }
+          cargo run --locked -p bax-app --example verify-update -- @files
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.edition }}
+          if-no-files-found: error
+          path: |
+            target/editions/*/release/bundle/nsis/BAX-*.exe
+            target/editions/*/release/bundle/nsis/BAX-*.sig
+            target/editions/*/release/bundle/portable/BAX-*.zip
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: windows-*
+          path: artifacts
+      - name: Assemble update feed
+        run: |
+          mkdir release
+          find artifacts -type f -exec cp '{}' release/ \;
+          node scripts/release-manifest.mjs release "${GITHUB_REF_NAME#v}"
+          cd release && sha256sum BAX-* > SHA256SUMS.txt
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --draft --title "BAX $GITHUB_REF_NAME" --generate-notes

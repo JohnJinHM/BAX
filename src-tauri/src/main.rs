@@ -11,6 +11,7 @@ mod commands;
 mod hotkeys;
 mod overlay;
 mod tray;
+mod updater;
 #[cfg(windows)]
 mod win32;
 

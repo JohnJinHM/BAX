@@ -14,6 +14,8 @@
 | [reference/sortie-explorer.md](reference/sortie-explorer.md) | 出兵分析：时间筛选、批次、价值、存续与单位图标 | 图表如何呈现与计算 |
 | [guides/development.md](guides/development.md) | 开发环境、构建、测试与命令行工具 | 怎么在本机把项目跑起来 |
 | [guides/packaging.md](guides/packaging.md) | Windows Full / Lite 安装包 | 怎么一键编译打包 |
+| [guides/releases.md](guides/releases.md) | GitHub 签名更新与草稿发布 | 怎么发布可自动更新的版本 |
+| [reference/player-specializations.md](reference/player-specializations.md) | 常用专精试运行口径 | 专精倾向如何计算 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 分支、提交、版本与发布约定 | 怎么提交改动 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 变更日志 | 每个版本变了什么 |
 | [../NOTICE.md](../NOTICE.md) | 原型来源与许可声明 | 复用了谁的代码 |

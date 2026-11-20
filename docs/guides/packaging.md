@@ -35,6 +35,8 @@ Full 在所有模式下显式替换输出目录的 `ocr-runtime/`，逐文件校
 
 ## 增量构建与旧入口
 
+自动更新发布增加 `-SignUpdate`，只适用于 Installer；签名密钥、双版本清单和草稿 Release 工作流见[发布指南](releases.md)。普通本地构建仍不需要签名密钥。
+
 默认执行 `npm ci`，Full 默认重建原生 OCR。已有依赖、只改 Rust/Vue 时可以复用：
 
 ```powershell

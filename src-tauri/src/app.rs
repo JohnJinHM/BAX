@@ -22,6 +22,7 @@ pub const MAIN_LABEL: &str = "main";
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppStatus {
+    pub update: crate::updater::UpdateStatus,
     pub ocr_supported: bool,
     pub overlay_visible: bool,
     pub overlay_locked: bool,
@@ -75,6 +76,8 @@ pub fn run() {
 
     let setup_diag = Arc::clone(&diag);
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(crate::updater::PendingUpdate::default())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 已经在运行时再次启动：打开主窗口
             tracing::info!("再次启动，打开主窗口");
@@ -87,6 +90,9 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
+            crate::updater::check_update,
+            crate::updater::install_update,
+            crate::updater::open_releases,
             commands::get_app_status,
             commands::refresh_players,
             commands::set_log_dir,
@@ -157,6 +163,7 @@ pub fn run() {
             tray::create(handle)?;
             hotkeys::apply(handle, &ui);
             forward_snapshots(handle.clone(), snapshots);
+            crate::updater::start(handle.clone());
             Ok(())
         })
         .build(tauri::generate_context!());

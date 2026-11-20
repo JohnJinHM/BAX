@@ -17,6 +17,7 @@
 | [0009](0009-bundled-ocr.md) | 随安装包分发离线 OCR 运行时 | 打包实现被 ADR-0010 取代 | 2026-11-19 |
 | [0010](0010-native-fixed-region-ocr.md) | 独立 OCR 分支使用原生固定区域识别 | 分支约定被 ADR-0011 取代 | 2026-11-19 |
 | [0011](0011-full-lite-builds.md) | 同一主线构建 Full 与 Lite | 已采纳 | 2026-11-19 |
+| [0012](0012-signed-github-updates.md) | GitHub Release 签名更新与双版本发布 | 已采纳 | 2026-11-19 |
 
 ## 什么时候写
 

@@ -60,6 +60,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       }
       case "get_app_status":
         return {
+          update: { currentVersion: "0.2.0", edition: "Full", canInstall: true, state: "available", version: "0.2.1", notes: "预览数据：常用专精与自动更新。", downloaded: 0, total: null, message: "发现新版本 0.2.1" },
           ocrSupported: !new URLSearchParams(location.search).has("lite"),
           overlayVisible: true,
           overlayLocked: options.locked ?? false,
@@ -71,6 +72,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         };
       case "export_diag":
         return "C:\\Users\\example\\AppData\\Local\\BAX\\diag\\export\\bax-diag-20261117-203015.txt";
+      case "check_update":
+      case "install_update":
+      case "open_releases":
+        return null;
       case "player_detail":
         return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
       case "match_history":

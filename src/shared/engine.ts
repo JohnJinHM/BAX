@@ -18,6 +18,11 @@ const APP_STATUS_EVENT = "bax://app";
 
 /** 外壳自己的状态：悬浮窗与快捷键。对应 src-tauri/src/app.rs 的 AppStatus。 */
 export interface AppStatus {
+  update: {
+    currentVersion: string; edition: string; canInstall: boolean;
+    state: string; version: string | null; notes: string | null;
+    downloaded: number; total: number | null; message: string;
+  };
   ocrSupported: boolean;
   overlayVisible: boolean;
   overlayLocked: boolean;
@@ -73,6 +78,9 @@ export function useAppStatus(): ShallowRef<AppStatus | null> {
 }
 
 export const commands = {
+  checkUpdate: () => invoke<void>("check_update"),
+  installUpdate: () => invoke<void>("install_update"),
+  openReleases: () => invoke<void>("open_releases"),
   refreshPlayers: () => invoke<void>("refresh_players"),
   setLogDir: (dir: string | null) => invoke<void>("set_log_dir", { dir }),
   setReminders: (rules: ReminderRule[]) => invoke<void>("set_reminders", { rules }),

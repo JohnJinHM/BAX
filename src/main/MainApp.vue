@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { useSnapshot } from "../shared/engine";
+import { useAppStatus, useSnapshot } from "../shared/engine";
 import { errorNames } from "../shared/format";
 import HistoryPanel from "./HistoryPanel.vue";
 import MatchPanel from "./MatchPanel.vue";
@@ -11,6 +11,7 @@ import RemindersPanel from "./RemindersPanel.vue";
 import SettingsPanel from "./SettingsPanel.vue";
 
 const snapshot = useSnapshot();
+const appStatus = useAppStatus();
 
 const logLine = computed(() => {
   const s = snapshot.value;
@@ -40,6 +41,7 @@ const apiLine = computed(() => {
       <button :class="{ active: tab === 'reminders' }" @click="tab = 'reminders'">提醒与计时</button>
       <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
       <div class="status">
+        <button v-if="appStatus?.update?.version" @click="tab = 'settings'">新版本 {{ appStatus.update.version }}</button>
         <div :class="{ error: snapshot?.log.error }">{{ logLine }}</div>
         <div v-if="apiLine">{{ apiLine }}</div>
         <div v-if="snapshot?.archive.pending">{{ snapshot.archive.pending }} 场在等战报</div>
