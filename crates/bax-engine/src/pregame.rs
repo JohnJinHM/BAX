@@ -83,6 +83,7 @@ pub(crate) fn enabled(snapshot: &Snapshot) -> bool {
 pub(crate) fn ticket(snapshot: &Snapshot) -> Option<Ticket> {
     let m = snapshot.current.as_ref()?;
     (enabled(snapshot)
+        && m.mode != crate::MatchMode::Pve
         && snapshot.log.ready
         && !m.roster_known
         && !m.rejoined

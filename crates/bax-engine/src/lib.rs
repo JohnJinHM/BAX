@@ -26,6 +26,7 @@ pub mod diag;
 mod engine;
 pub mod history;
 mod logthread;
+mod match_mode;
 mod player;
 mod postmatch;
 pub mod pregame;
@@ -45,6 +46,7 @@ pub use bax_store::{
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use config::{EngineConfig, cache_path, default_data_dir, store_path};
 pub use engine::{CommandError, Engine, EngineError, ImportSummary};
+pub use match_mode::MatchMode;
 pub use player::PlayerDetail;
 pub use postmatch::MatchReportView;
 pub use profile::{ProfileSummary, RankedStats};

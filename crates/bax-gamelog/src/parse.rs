@@ -83,7 +83,7 @@ impl LogParser {
             Mode::PlayerList { players, .. } => match parse_roster_line(line) {
                 Some(RosterLine::Player(entry)) => players.push(entry),
                 // AI 玩家不进名单，但名单还没有结束
-                Some(RosterLine::Ai) => {}
+                Some(RosterLine::Ai) => emit(out, at, LogEvent::AiDetected),
                 // 空行或别的内容：名单到此为止
                 None => self.flush(out),
             },

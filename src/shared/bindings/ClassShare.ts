@@ -6,6 +6,6 @@ import type { UnitClass } from "./UnitClass";
  */
 export type ClassShare = { class: UnitClass, count: number, 
 /**
- * 估算价值，不含回收的。
+ * 累计出兵估算价值，包含后来回收的单位。
  */
 value: number, };

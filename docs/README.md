@@ -12,6 +12,7 @@
 | [reference/gamelog.md](reference/gamelog.md) | 游戏日志：文件、记录格式、事件与取值 | 日志里写了什么，怎么读 |
 | [reference/batrace-api.md](reference/batrace-api.md) | BATrace 接口：路径、错误分类、字段含义与特殊取值 | 接口返回什么，哪些值要特殊对待 |
 | [reference/sortie-explorer.md](reference/sortie-explorer.md) | 出兵分析：时间筛选、批次、价值、存续与单位图标 | 图表如何呈现与计算 |
+| [reference/match-modes.md](reference/match-modes.md) | 自定义人数、旁观者、PvE 与 OCR | 特殊对局如何显示与识别 |
 | [guides/development.md](guides/development.md) | 开发环境、构建、测试与命令行工具 | 怎么在本机把项目跑起来 |
 | [guides/packaging.md](guides/packaging.md) | Windows Full / Lite 安装包 | 怎么一键编译打包 |
 | [guides/releases.md](guides/releases.md) | GitHub 签名更新与草稿发布 | 怎么发布可自动更新的版本 |

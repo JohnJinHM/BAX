@@ -11,7 +11,10 @@ use tokio::sync::{mpsc, watch};
 
 fn identity(snapshot: &Snapshot) -> Option<(MatchId, Timestamp)> {
     let m = snapshot.current.as_ref()?;
-    (snapshot.log.ready && m.phase != Phase::Ended && m.connection == Connection::Connected)
+    (snapshot.log.ready
+        && m.phase != Phase::Ended
+        && m.mode != crate::MatchMode::Pve
+        && m.connection == Connection::Connected)
         .then_some((m.match_id, m.discovered_at))
 }
 
@@ -186,6 +189,7 @@ mod tests {
             })
             .collect();
         s.current = Some(MatchView {
+            mode: crate::MatchMode::Unknown,
             pregame: Default::default(),
             match_id: MatchId(900001),
             phase: Phase::Deployment,

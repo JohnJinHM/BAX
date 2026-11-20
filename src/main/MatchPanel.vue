@@ -15,15 +15,20 @@ import {
 } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import { openMatch, openPlayer } from "./navigation";
+import SpecIcon from "../shared/SpecIcon.vue";
+import { useCurrentReport } from "../shared/useCurrentReport";
+import { matchSpecs, rosterSummary } from "../shared/match-presentation";
 
 const snapshot = useSnapshot();
 const now = useNow(1000);
 const current = computed(() => snapshot.value?.current ?? null);
+const { report, failure: reportFailure } = useCurrentReport(snapshot);
+const specsFor = (p: RosterRow) => matchSpecs(p, current.value, report.value);
 const message = ref<string | null>(null);
 const refreshing = ref(false);
 
 const groups = computed(() => rosterGroups(current.value).map(g => ({
-  ...g, title: `${g.title}  均分 ${rating(g.averageValue)}（${g.rated}/${g.count} 人有分）`,
+  ...g, title: g.key === 'spectators' ? `旁观者 · ${g.count} 人` : `${g.title} · ${g.count} 人　均分 ${rating(g.averageValue)}（${g.rated} 人有分）`,
 })));
 
 const clockLine = computed(() => {
@@ -62,23 +67,25 @@ async function refresh() {
         {{ current.connection === "reconnecting" ? "重连中" : "已断开" }}
       </span>
       <span class="hint">{{ current.map ?? "地图未知" }}</span>
+      <span class="hint">{{ rosterSummary(current, report) }}</span>
       <span class="hint">{{ clockLine }}</span>
       <button class="refresh" :disabled="refreshing" @click="refresh">刷新资料</button>
     </div>
-    <p v-if="message" class="error">{{ message }}</p>
+    <p v-if="message || reportFailure" class="error">{{ message || reportFailure }}</p>
     <p v-if="current.phase === 'ended'" class="hint">
-      <template v-if="snapshot?.archive.lastArchived === current.matchId">
+      <template v-if="report || snapshot?.archive.lastArchived === current.matchId">
         战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">查看战后分析</a>
       </template>
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>
 
-    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.pregame.players.length ? current.pregame.status : "等待玩家名单" }}</p>
+    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.mode === 'pve' ? 'PvE · OCR 已暂停，等待日志名单' : current.pregame.players.length ? current.pregame.status : "等待玩家名单" }}</p>
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>
-      <table>
+      <div class="roster-table"><table>
         <colgroup>
           <col class="c-name" />
+          <col class="c-specs" />
           <col v-for="n in 9" :key="n" />
           <col class="c-met" />
           <col class="c-fetched" />
@@ -86,6 +93,7 @@ async function refresh() {
         <thead>
           <tr>
             <th class="left">玩家</th>
+            <th>{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</th>
             <th>ELO</th>
             <th>等级</th>
             <th>排名</th>
@@ -107,6 +115,7 @@ async function refresh() {
               <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
               <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
             </td>
+            <td><span class="specs"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
             <td class="num strong">{{ rating(p.profile?.rating) }}</td>
             <td class="num">{{ p.displayLevel ?? "–" }}</td>
             <td class="num">{{ p.profile?.rank ?? "–" }}</td>
@@ -123,7 +132,7 @@ async function refresh() {
             </td>
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
     <p class="hint">
       损毁比与价值比是排位累计的击毁 ÷ 损失（数量与价值）。灰色的资料时间表示资料不是这场比赛开始之后取得的。
@@ -139,6 +148,11 @@ async function refresh() {
 .head h2 {
   margin: 0;
 }
+.roster-table { overflow-x: auto; scrollbar-color: var(--bax-faint) var(--bax-surface); }
+.roster-table table { min-width: 1160px; }
+.c-specs { width: 82px; }
+.specs { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.hint a { color: var(--bax-accent); text-underline-offset: 3px; }
 
 .tag {
   padding: 1px 8px;

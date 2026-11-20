@@ -27,7 +27,7 @@ static NAMES: LazyLock<BTreeMap<u32, String>> = LazyLock::new(|| {
     serde_json::from_str(include_str!("specializations.json")).expect("专精名称表")
 });
 
-fn entry(ids: Vec<u32>, games: u32) -> SpecPreference {
+pub(crate) fn entry(ids: Vec<u32>, games: u32) -> SpecPreference {
     let name = ids
         .iter()
         .map(|id| {

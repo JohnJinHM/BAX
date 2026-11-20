@@ -34,7 +34,7 @@ export function rosterGroups(m: MatchView | null): RosterGroup[] {
     const order: Team[] = m.selfTeam === 'bravo' ? ['bravo', 'alpha', 'spectators'] : ['alpha', 'bravo', 'spectators'];
     return order.map(team => {
       const mine = m.selfTeam === 'alpha' || m.selfTeam === 'bravo';
-      const title = team === 'spectators' ? '观战' : mine ? (team === m.selfTeam ? '我方' : '敌方') : team === 'alpha' ? 'Alpha' : 'Bravo';
+      const title = team === 'spectators' ? '旁观者' : mine ? (team === m.selfTeam ? '我方' : '敌方') : team === 'alpha' ? 'Alpha' : 'Bravo';
       const tone = team === 'spectators' ? 'waiting' : mine ? (team === m.selfTeam ? 'mine' : 'enemy') : team;
       return group(team, title, tone, m.players.filter(p => p.team === team).map(confirmed));
     }).filter(g => g.count);

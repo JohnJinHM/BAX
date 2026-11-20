@@ -104,6 +104,7 @@ export const fixtureSnapshot: Snapshot = {
   alert: { seq: 1, matchId: 9000001, ruleId: 1, label: "第 10 分钟", at: now - 2000 },
   ui: {},
   current: {
+    mode: "unknown",
     matchId: 9000001,
     phase: "inBattle",
     connection: "connected",
@@ -267,7 +268,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       valueByMinute[Math.min(minutes - 1, Math.floor(s.spawnSecs / 60))] += v;
       const c = comp.get(s.class) ?? { count: 0, value: 0 };
       c.count++;
-      c.value += v;
+      c.value += s.cost;
       comp.set(s.class, c);
       const r = units.get(s.unitId) ?? {
         unitId: s.unitId,
@@ -360,6 +361,10 @@ export function fixtureReport(id: number): MatchReportView | null {
       sorties,
       unitNames: Object.fromEntries(fixtureUnits.map((u) => [u.id, u.name])),
     },
+    mode: "ranked",
+    spectators: [],
+    aiPlayers: [0, 0],
+    specs: Object.fromEntries(players.map(p => [p.id, [{ ids: [5], name: "空降部队", games: 1 }, { ids: [6], name: "海军陆战队", games: 1 }]])),
     map: row.map,
     selfId: fixtureSnapshot.selfId,
     selfTeam: "bravo",

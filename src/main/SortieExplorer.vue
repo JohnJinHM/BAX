@@ -3,12 +3,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import type { MatchAnalysis } from "../shared/bindings/MatchAnalysis";
 import type { PlayerReport } from "../shared/bindings/PlayerReport";
 import type { Team } from "../shared/bindings/Team";
-import type { UnitClass } from "../shared/bindings/UnitClass";
 import { count, mmss, unitClassNames } from "../shared/format";
 import { clusterNearby, unitTiles, lifeMinimum, fitMark, inRange, netValue, packLanes, timeBins } from "./sortie-layout";
 import type { Entry } from "./sortie-layout";
 import UnitIcon from "./UnitIcon.vue";
 import ReturnBadge from "./ReturnBadge.vue";
+import CheckFilter from "./CheckFilter.vue";
 import { useSnapshot, errorText } from "../shared/engine";
 import { useSetting, saveSetting } from "../shared/settings";
 
@@ -16,8 +16,11 @@ const props = defineProps<{ analysis: MatchAnalysis; players: PlayerReport[]; te
 const emit = defineEmits<{ range: [start: number, end: number] }>();
 const mode = ref<"players" | "teams" | "life">("players");
 const team = ref("");
-const player = ref<number | "">("");
-const kind = ref<UnitClass | "">("");
+const selectedPlayers = ref<(string | number)[]>([]);
+const selectedKinds = ref<(string | number)[]>(Object.keys(unitClassNames));
+const playerOptions = computed(() => props.players.filter(p => !team.value || p.team === team.value)
+  .map(p => ({ value: p.id, label: playerName(p.id) })));
+const kindOptions = Object.entries(unitClassNames).map(([value, label]) => ({ value, label }));
 const query = ref("");
 const includeRefunded = ref(true);
 const batch = ref(0);
@@ -63,11 +66,11 @@ const scopeEnd = end;
 const span = computed(() => Math.max(1, end.value - start.value));
 const filtered = computed(() => entries.value.filter((s) =>
   (!team.value || owners.value.get(s.player)?.team === team.value) &&
-  (player.value === "" || s.player === player.value) && (!kind.value || s.class === kind.value) &&
+  selectedPlayers.value.includes(s.player) && selectedKinds.value.includes(s.class) &&
   (!query.value.trim() || s.unitName.toLowerCase().includes(query.value.trim().toLowerCase())) &&
   (includeRefunded.value || !s.refunded)));
 const scoped = computed(() => filtered.value.filter((s) => inRange(s, scopeStart.value, scopeEnd.value)));
-const visiblePlayers = computed(() => props.players.filter((p) => (!team.value || p.team === team.value) && (player.value === "" || p.id === player.value)));
+const visiblePlayers = computed(() => props.players.filter((p) => (!team.value || p.team === team.value) && selectedPlayers.value.includes(p.id)));
 const detail = computed(() => entries.value.filter((s) => selected.value.includes(s.key)));
 const ticks = computed(() => Array.from({ length: 5 }, (_, i) => start.value + span.value * i / 4));
 const binStep = computed(() => span.value > 1200 ? 120 : span.value > 300 ? 60 : 15);
@@ -126,7 +129,7 @@ function pan(direction: number) {
   setRange(lo, lo + span.value);
 }
 function resetFilters() {
-  team.value = ""; player.value = ""; kind.value = ""; query.value = ""; includeRefunded.value = true;
+  team.value = ""; selectedPlayers.value = props.players.map(p => p.id); selectedKinds.value = Object.keys(unitClassNames); query.value = ""; includeRefunded.value = true;
 }
 function select(units: Entry[]) { selected.value = units.map((s) => s.key); }
 function title(units: Entry[]) {
@@ -164,7 +167,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(resizeFrame); });
 watch(() => props.analysis.matchId, () => { start.value = 0; end.value = fullEnd.value; selected.value = []; resetFilters(); }, { immediate: true });
-watch(team, () => { player.value = ""; });
 watch([scopeStart, scopeEnd], () => emit("range", scopeStart.value, scopeEnd.value), { immediate: true });
 watch([filtered, mode, scopeStart, scopeEnd], () => { selected.value = []; });
 watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop = 0; });
@@ -172,20 +174,20 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 
 <template>
   <section class="explorer" aria-label="出兵分析">
+    <div class="explorer-controls">
     <div class="heading"><h3>出兵分析</h3><span class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
     <div class="modes" role="group" aria-label="分析视图">
       <button v-for="item in ([['players', '按玩家'], ['life', '存续时间'], ['teams', '双方合并']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
     </div>
     <div class="filters">
       <label>队伍<select v-model="team"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
-      <label>玩家<select v-model="player"><option value="">全部玩家</option><option v-for="p in players.filter((p) => !team || p.team === team)" :key="p.id" :value="p.id">{{ playerName(p.id) }}</option></select></label>
-      <label>兵种<select v-model="kind"><option value="">全部兵种</option><option v-for="(label, value) in unitClassNames" :key="value" :value="value">{{ label }}</option></select></label>
+      <CheckFilter v-model="selectedPlayers" label="玩家" :options="playerOptions" />
+      <CheckFilter v-model="selectedKinds" label="兵种" :options="kindOptions" />
       <label class="search">单位<input v-model="query" type="search" placeholder="搜索单位名称" /></label>
       <label class="check"><input v-model="includeRefunded" type="checkbox" />包含回收</label>
       <button @click="resetFilters">重置筛选</button>
     </div>
 
-    <div>
       <div class="toolbar">
         <button :disabled="span <= 15" @click="zoom(0.5)">放大</button><button :disabled="span >= fullEnd" @click="zoom(2)">缩小</button>
         <button :disabled="start === 0" @click="pan(-1)">前移</button><button :disabled="end === fullEnd" @click="pan(1)">后移</button>
@@ -193,6 +195,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <label v-if="mode === 'players'">批次<select v-model.number="batch"><option :value="0">自动密度</option><option :value="5">5 秒</option><option :value="15">15 秒</option><option :value="30">30 秒</option></select></label>
         <label v-if="mode === 'teams'">统计<select v-model="metric"><option value="count">出兵数量</option><option value="value">净估算价值</option></select></label>
       </div>
+    </div>
       <div class="navigator">
         <svg class="overview" viewBox="0 0 800 40" preserveAspectRatio="none" aria-label="全局出兵密度，拖动选择时间范围" @pointerdown="beginDrag" @pointermove="drag" @pointerup="finishDrag" @pointercancel="dragAnchor = null">
           <rect v-for="(b, i) in overview" :key="i" :x="i * 10" :y="38 - b.entries.length / overviewMax * 32" width="8" :height="Math.max(1, b.entries.length / overviewMax * 32)" fill="var(--bax-muted)" />
@@ -200,10 +203,10 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         </svg>
         <div class="ranges"><label>从 {{ time(start) }}<input aria-label="区间开始" type="range" min="0" :max="fullEnd" :value="start" @input="setRange(Math.min(Number(($event.target as HTMLInputElement).value), end), end)" /></label><label>至 {{ time(end) }}<input aria-label="区间结束" type="range" min="0" :max="fullEnd" :value="end" @input="setRange(start, Math.max(Number(($event.target as HTMLInputElement).value), start))" /></label></div>
       </div>
-    </div>
 
     <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }">
         <div class="axis"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
+        <Transition name="analysis-view" mode="out-in"><div :key="mode">
         <template v-if="mode === 'teams'">
           <div v-for="t in teamBins.filter((t) => !team || team === t.team)" :key="t.team" class="timeline-row team-row">
             <button class="owner" :style="{ color: teamColor(t.team) }" :aria-expanded="expandedTeam === t.team" @click="expandedTeam = expandedTeam === t.team ? null : t.team">{{ teamLabel(t.team) }}<small>{{ expandedTeam === t.team ? '收起玩家' : '展开玩家' }}</small></button>
@@ -212,7 +215,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
           <p class="muted">每格 {{ binStep }} 秒；双方共用刻度。点击柱条查看该批单位，点击队伍展开玩家。</p>
         </template>
         <div v-for="row in rows" v-show="mode !== 'teams' || expandedTeam" :key="row.player.id" class="timeline-row" :style="{ minHeight: `${row.height}px` }">
-          <button class="owner" :style="{ color: teamColor(row.player.team) }" @click="player = player === row.player.id ? '' : row.player.id">{{ playerName(row.player.id) }}<small>{{ mode === 'life' ? '记录存续' : `${row.marks.reduce((n, m) => n + m.entries.length, 0)} 次出兵` }}</small></button>
+          <button class="owner" :style="{ color: teamColor(row.player.team) }" @click="selectedPlayers = [row.player.id]">{{ playerName(row.player.id) }}<small>{{ mode === 'life' ? '记录存续' : `${row.marks.reduce((n, m) => n + m.entries.length, 0)} 次出兵` }}</small></button>
           <div class="lane" :style="{ height: `${row.height}px` }">
             <i v-for="n in 5" :key="n" class="gridline" :style="{ left: `${(n - 1) * 25}%` }" />
             <button v-for="mark in row.marks" :key="mark.entries[0].key" class="mark" :class="{ batch: mode !== 'life', life: mode === 'life' && !mark.entries[0].refunded, selected: mark.entries.some((s) => selected.includes(s.key)) }" :style="{ left: `${mark.x}px`, top: `${mark.top}px`, height: `${mark.height}px`, width: `${mark.width}px`, '--team-color': teamColor(row.player.team) }" :title="title(mark.entries)" :aria-label="title(mark.entries)" :aria-pressed="mark.entries.some((s) => selected.includes(s.key))" @click="select(mark.entries)">
@@ -236,6 +239,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         </div>
       <p v-if="!filtered.length" class="empty">没有符合筛选的出兵记录。<button @click="resetFilters">清除筛选</button></p>
       <p v-else-if="!scoped.length && mode !== 'life'" class="empty">所选时间范围内没有出兵。</p>
+        </div></Transition>
     </div>
     <div class="resize-handle" role="separator" tabindex="0" aria-label="调整出兵时间线高度" aria-orientation="horizontal" :aria-valuenow="plotHeight" :aria-valuemin="240" :aria-valuemax="2400" @pointerdown="resizeBegin" @pointermove="resizeMove" @pointerup="resizeEnd" @pointercancel="resizeEnd" @lostpointercapture="resizeEnd" @keydown="resizeKey"><span /></div>
     <p v-if="resizeError" class="error">高度保存失败：{{ resizeError }}</p>
@@ -248,7 +252,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <h4>区间投入 <span class="muted">{{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></h4>
         <p class="muted">按当前筛选和出兵时间统计，回收计次数、净价值记 0。</p>
         <div class="comparison"><div v-for="s in summaries" :key="s.team"><strong :style="{ color: teamColor(s.team) }">{{ teamLabel(s.team) }}</strong><p><b>{{ count(s.entries.length) }}</b> 次 <span class="muted">/</span> <b>{{ count(s.value) }}</b> 净估算价值</p><div v-for="c in s.classes" :key="c.label" class="stat-line"><span>{{ c.label }}</span><span>{{ c.count }} 次 · {{ s.value ? Math.round(c.value / s.value * 100) : 0 }}%</span></div></div></div>
-        <details><summary>各玩家投入</summary><div v-for="p in visiblePlayers" :key="p.id" class="stat-line"><button class="text-button" @click="player = p.id">{{ playerName(p.id) }}</button><span>{{ scoped.filter((s) => s.player === p.id).length }} 次 · {{ count(netValue(scoped.filter((s) => s.player === p.id))) }}</span></div></details>
+        <details><summary>各玩家投入</summary><div v-for="p in visiblePlayers" :key="p.id" class="stat-line"><button class="text-button" @click="selectedPlayers = [p.id]">{{ playerName(p.id) }}</button><span>{{ scoped.filter((s) => s.player === p.id).length }} 次 · {{ count(netValue(scoped.filter((s) => s.player === p.id))) }}</span></div></details>
       </section>
       <section class="detail" aria-label="选中单位详情" aria-live="polite">
         <div class="heading"><h4>单位详情 <span v-if="detail.length" class="muted">{{ detail.length }} 次出兵</span></h4><button v-if="detail.length" @click="selected = []">取消选择</button></div>
@@ -261,6 +265,12 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 
 <style scoped>
 .explorer { margin: 24px 0; min-width: 0; font-size: 13px; font-variant-numeric: tabular-nums; container-type: inline-size; }
+.explorer-controls { position: sticky; top: 0; z-index: 5; background: var(--bax-surface); padding: 10px 0 2px; border-bottom: 1px solid var(--bax-border); }
+.analysis-view-enter-active { transition: opacity 180ms ease-out, transform 180ms cubic-bezier(.16, 1, .3, 1); }
+.analysis-view-leave-active { transition: opacity 100ms ease-out; }
+.analysis-view-enter-from { opacity: 0; transform: translateY(4px); }
+.analysis-view-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .analysis-view-enter-active, .analysis-view-leave-active { transition: none; } .analysis-view-enter-from { transform: none; } }
 .heading, .toolbar, .filters, .modes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .heading { justify-content: space-between; }
 h3, h4 { margin: 0; color: var(--bax-fg); font-size: 14px; }

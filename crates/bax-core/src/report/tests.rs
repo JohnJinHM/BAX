@@ -162,6 +162,13 @@ fn unit_costs_are_scaled_to_the_official_total() {
     let jet = p.units.iter().find(|u| u.unit_id == 3).expect("飞机");
     assert_eq!(jet.value, 0, "回收的不计入花费");
     assert_eq!(jet.refunded, 1);
+    let aircraft = p
+        .composition
+        .iter()
+        .find(|c| c.class == UnitClass::Jet)
+        .expect("飞机构成");
+    assert_eq!(aircraft.value, 400, "回收保留在累计出兵构成中");
+    assert_eq!(aircraft.count, 1);
 }
 
 #[test]

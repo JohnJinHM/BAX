@@ -35,6 +35,41 @@ fn enter(s: &mut Session, id: u64) {
     );
     s.handle_updates(updates, false);
 }
+
+#[test]
+#[cfg(feature = "ocr")]
+fn pve_cancels_ocr_and_late_candidates_and_next_pvp_resumes() {
+    let dir = tempfile::tempdir().expect("验证数据");
+    let mut s = setup(dir.path());
+    let stale = message(&s);
+    s.tracker.apply(
+        Timestamp::from_millis(2000),
+        &LogEvent::LoadingStarted {
+            map: "Example".into(),
+            scenario: Some("Example_Skirmish".into()),
+        },
+    );
+    assert_eq!(
+        s.build_snapshot().current.expect("验证数据").mode,
+        crate::MatchMode::Pve
+    );
+    assert!(ticket(&s.build_snapshot()).is_none());
+    s.on_pregame(stale);
+    assert!(
+        s.build_snapshot()
+            .current
+            .expect("验证数据")
+            .pregame
+            .players
+            .is_empty()
+    );
+    enter(&mut s, 7002);
+    assert!(ticket(&s.build_snapshot()).is_some());
+    s.tracker
+        .apply(Timestamp::from_millis(3000), &LogEvent::AiDetected);
+    assert!(ticket(&s.build_snapshot()).is_none());
+    assert!(!s.ui.contains_key("ui.ocr"), "只暂停本局，不修改用户开关");
+}
 fn message(s: &Session) -> Message {
     Message {
         ticket: ticket(&s.build_snapshot()).expect("eligible"),

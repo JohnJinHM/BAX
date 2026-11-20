@@ -303,7 +303,7 @@ pub struct PlayerReport {
 pub struct ClassShare {
     pub class: UnitClass,
     pub count: u32,
-    /// 估算价值，不含回收的。
+    /// 累计出兵估算价值，包含后来回收的单位。
     pub value: i64,
 }
 
@@ -496,7 +496,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
             }
             let entry = classes.entry(class).or_default();
             entry.0 += 1;
-            entry.1 += value;
+            entry.1 += cost;
 
             let row = units.entry(variant_key.clone()).or_insert(UnitRow {
                 variant_key: variant_key.clone(),

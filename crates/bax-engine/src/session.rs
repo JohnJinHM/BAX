@@ -1409,7 +1409,14 @@ impl Session {
                 .map(|team| TeamSummary::of(team, &players))
                 .collect();
             MatchView {
+                mode: crate::match_mode::live_mode(
+                    m.scenario.as_deref(),
+                    m.has_ai,
+                    m.roster.iter().any(|p| p.team == Team::Spectators),
+                ),
                 pregame: if m.roster.is_empty()
+                    && !m.has_ai
+                    && !crate::match_mode::scenario_is_pve(m.scenario.as_deref())
                     && !m.rejoined
                     && m.connection == Connection::Connected
                     && matches!(
@@ -1527,6 +1534,7 @@ fn event_kind(event: &LogEvent) -> &'static str {
         LogEvent::LoadingStarted { .. } => "LoadingStarted",
         LogEvent::FightInfo { .. } => "FightInfo",
         LogEvent::PlayerList { .. } => "PlayerList",
+        LogEvent::AiDetected => "AiDetected",
         LogEvent::ScenarioLoaded => "ScenarioLoaded",
         LogEvent::MatchEnded { .. } => "MatchEnded",
     }

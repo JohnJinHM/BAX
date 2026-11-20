@@ -19,6 +19,7 @@ import {
 import EChart from "./EChart.vue";
 import SortieExplorer from "./SortieExplorer.vue";
 import { openPlayer } from "./navigation";
+import { matchModeNames } from "../shared/match-presentation";
 
 const props = defineProps<{ id: number; row?: HistoryRow | null }>();
 const emit = defineEmits<{ requested: [] }>();
@@ -189,7 +190,7 @@ function playerAxisLabel(rows: PlayerReport[]) {
   };
 }
 
-/** 双方累计出兵价值随时间。 */
+/** 双方累计净出兵价值随时间。 */
 const curveOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
   if (!v) return null;
@@ -239,16 +240,17 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
 });
 
 /** 每人的兵种构成（估算价值）。 */
-const visibleComposition = ref(new Set(compositionGroups.map(g => g.key)));
-function toggleComposition(key: string) {
-  if (visibleComposition.value.has(key)) visibleComposition.value.delete(key);
-  else visibleComposition.value.add(key);
+const visibleComposition = ref(compositionGroups.map(g => g.key));
+const compositionMetric = ref<"value" | "count">("value");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+function selectComposition(key: string) {
+  if (compositionGroups.some(g => g.key === key)) visibleComposition.value = [key];
 }
 const compositionOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
   if (!v) return null;
   const rows = players.value;
-  const totals = rows.map((p) => p.composition.reduce((s, c) => s + c.value, 0));
+  const totals = rows.map((p) => p.composition.reduce((s, c) => s + c[compositionMetric.value], 0));
   const series = compositionGroups.map((group) => ({
     id: group.key,
     name: group.name,
@@ -260,13 +262,15 @@ const compositionOption = computed<EChartsCoreOption | null>(() => {
     itemStyle: { borderColor: colors.value.surface, borderWidth: 1 },
     emphasis: { focus: "series" },
     data: rows.map((p) =>
-      p.composition.filter((c) => group.classes.includes(c.class)).reduce((s, c) => s + c.value, 0),
+      visibleComposition.value.includes(group.key) ? p.composition.filter((c) => group.classes.includes(c.class)).reduce((s, c) => s + c[compositionMetric.value], 0) : 0,
     ),
   }));
   return {
-    animation: false,
+    animation: !reduceMotion.matches,
+    animationDuration: 240,
+    animationDurationUpdate: 240,
+    animationEasingUpdate: "cubicOut",
     grid: { left: 130, right: 24, top: 12, bottom: 28 },
-    legend: { show: false, selected: Object.fromEntries(compositionGroups.map(g => [g.name, visibleComposition.value.has(g.key)])) },
     tooltip: {
       ...tooltipCommon.value,
       trigger: "item",
@@ -313,6 +317,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
     <template v-if="view">
       <div class="row head">
         <h2>比赛 {{ view.analysis.matchId }}</h2>
+        <span class="hint">{{ matchModeNames[view.mode] }} · {{ view.analysis.teams[0]?.players ?? 0 }} v {{ view.analysis.teams[1]?.players ?? 0 }}{{ view.mode === 'pve' ? ' 真人' : '' }}</span>
         <span v-if="result" class="result" :class="result === '胜' ? 'win' : 'loss'">{{ result }}</span>
         <span class="hint">
           {{ view.map ?? (view.analysis.mapId != null ? `地图 #${view.analysis.mapId}` : "地图未知") }} ·
@@ -320,6 +325,8 @@ function pendingText(row: HistoryRow | null | undefined): string {
           时长 {{ view.analysis.durationSecs != null ? mmss(view.analysis.durationSecs * 1000) : "–" }}
         </span>
       </div>
+      <p v-if="view.spectators.length" class="hint">旁观者 {{ view.spectators.length }} 人：<template v-for="(p, i) in view.spectators" :key="p.id"><span v-if="i">、</span><a class="name" href="#" @click.prevent="openPlayer(p.id)">{{ p.name ?? `ID ${p.id}` }}</a></template></p>
+      <p v-if="view.aiPlayers.some(n => n > 0)" class="hint">AI：Alpha {{ view.aiPlayers[0] }} · Bravo {{ view.aiPlayers[1] }}；下方统计为真人玩家。</p>
 
       <div class="teams">
         <div v-for="team in teamOrder" :key="team" class="team" :style="{ borderTopColor: teamColor(team) }">
@@ -342,16 +349,17 @@ function pendingText(row: HistoryRow | null | undefined): string {
         </div>
       </div>
 
-      <h3>累计出兵价值</h3>
-      <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计出兵价值随时间的变化" />
+      <h3>累计净出兵价值</h3>
+      <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计净出兵价值随时间的变化" />
 
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
-      <h3>兵种构成（估算价值）</h3>
+      <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option value="value">累计出兵价值</option><option value="count">出兵次数</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
+      <p class="hint">包含已回收单位，每次出兵分别计入。价值按单位成本估算；点击柱条只看该类型。</p>
       <ul class="composition-legend" aria-label="兵种类别，按条形图从左到右排列">
-        <li v-for="group in compositionGroups" :key="group.key"><button :aria-pressed="visibleComposition.has(group.key)" @click="toggleComposition(group.key)"><i :style="{ background: group.color }" />{{ group.name }}</button></li>
+        <li v-for="group in compositionGroups" :key="group.key"><label><input v-model="visibleComposition" type="checkbox" :value="group.key" /><i :style="{ background: group.color }" />{{ group.name }}</label></li>
       </ul>
-      <EChart v-if="compositionOption" :option="compositionOption" :height="compositionHeight" label="每名玩家各兵种的估算出兵价值" />
+      <EChart v-if="compositionOption" animated-updates :option="compositionOption" :height="compositionHeight" :label="`每名玩家各兵种的${compositionMetric === 'value' ? '累计出兵估算价值' : '出兵次数'}，含回收`" @select="selectComposition" />
 
       <h3>玩家</h3>
       <div class="table-scroll"><table>
@@ -447,8 +455,10 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
 <style scoped>
 .composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-muted); font-size: 12px; }
-.composition-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; }
-.composition-legend button[aria-pressed="false"] { text-decoration: line-through; }
+.composition-head { margin-top: 20px; font-size: 12px; }
+.composition-head h3 { margin: 0 auto 0 0; }
+.composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
+.composition-legend label { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; cursor: pointer; }
 .composition-legend i { width: 10px; height: 10px; flex: none; border-radius: 2px; }
 .report {
   min-width: 0;

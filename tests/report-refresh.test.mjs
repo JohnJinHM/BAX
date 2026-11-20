@@ -24,6 +24,7 @@ function component(file, engine, extra = {}) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: id => id === 'vue' ? vue : id.endsWith('/engine') ? engine : id.endsWith('/format') ? format : (extra[id] ?? {}),
     getComputedStyle: () => ({ getPropertyValue: () => '#ffffff' }), document: { documentElement: {} },
+    window: { matchMedia: () => ({ matches: false }) },
   });
   return { ...exports.default, render: () => null };
 }

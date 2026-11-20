@@ -232,17 +232,22 @@ ID: -15, Name: Bot 4, Team: Bravo\n\
 \n";
     assert_eq!(
         events(text),
-        vec![LogEvent::PlayerList {
-            players: vec![
-                entry(101, Some("Ash"), Team::Alpha),
-                entry(102, Some("Birch"), Team::Alpha),
-            ]
-        }]
+        vec![
+            LogEvent::AiDetected,
+            LogEvent::AiDetected,
+            LogEvent::AiDetected,
+            LogEvent::PlayerList {
+                players: vec![
+                    entry(101, Some("Ash"), Team::Alpha),
+                    entry(102, Some("Birch"), Team::Alpha),
+                ]
+            }
+        ]
     );
-    // 只有 AI 的名单不产生事件
+    // 只有 AI 时仍发布模式线索。
     let bots_only =
         "[2026-11-16 18:53:01.979]\nLog: Player list: \nID: -5, Name: Bot 0, Team: Bravo\n\n";
-    assert_eq!(events(bots_only), vec![]);
+    assert_eq!(events(bots_only), vec![LogEvent::AiDetected]);
 }
 
 #[test]

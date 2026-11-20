@@ -8,7 +8,8 @@ import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine
 import { fetchText, mmss, percent, phaseNames, rating } from "../shared/format";
 import { saveSetting, useSetting } from "../shared/settings";
 import { useNow } from "../shared/useNow";
-import type { MatchReportView } from "../shared/bindings/MatchReportView";
+import { useCurrentReport } from "../shared/useCurrentReport";
+import { matchSpecs, rosterSummary, showOverlaySpecs } from "../shared/match-presentation";
 import AnimatedNumber from "../shared/AnimatedNumber.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 import { OverlayAutomation } from "../shared/overlay-automation";
@@ -29,18 +30,9 @@ function setExpanded(value: boolean, automatic = false) {
   expanded.value = value;
 }
 const automation = new OverlayAutomation();
-const result = ref<MatchReportView | null>(null);
-let reportTicket = 0;
-watch([() => current.value?.matchId, () => current.value?.phase, () => snapshot.value?.archive.seq], async () => {
-  const ticket = ++reportTicket;
-  const match = current.value;
-  if (result.value?.analysis.matchId !== match?.matchId) result.value = null;
-  if (!match || match.phase !== "ended") return;
-  try {
-    const report = await commands.matchReport(match.matchId);
-    if (ticket === reportTicket) result.value = report;
-  } catch (error) { if (ticket === reportTicket) failure.value = errorText(error); }
-}, { immediate: true });
+const { report: result, failure: reportFailure } = useCurrentReport(snapshot);
+const specsVisible = computed(() => showOverlaySpecs(current.value));
+const specsFor = (p: RosterRow) => matchSpecs(p, current.value, result.value);
 const ratingResults = computed(() => new Map(result.value?.analysis.players.map(p => [p.id, p]) ?? []));
 const selfResult = computed(() => ratingResults.value.get(result.value?.selfId ?? snapshot.value?.selfId ?? -1));
 const selfDelta = computed(() => {
@@ -94,7 +86,7 @@ const activeAlert = computed(() => {
 function beforeRating(p: RosterRow): number | null {
   return (p.id != null ? ratingResults.value.get(p.id)?.oldRating : null) ?? p.profile?.rating ?? null;
 }
-const teams = computed(() => rosterGroups(current.value).filter(g => g.key !== "spectators")
+const teams = computed(() => rosterGroups(current.value)
   .map(g => {
     const values = g.players.flatMap(p => beforeRating(p) != null ? [beforeRating(p)!] : []);
     return { ...g, rated: values.length, averageValue: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
@@ -105,7 +97,7 @@ const teams = computed(() => rosterGroups(current.value).filter(g => g.key !== "
  * E = 1 / (1 + 10^((右 − 左) / 400))。均分只算有 ELO 的玩家。
  */
 const meter = computed(() => {
-  const [left, right] = teams.value;
+  const [left, right] = teams.value.filter(g => g.key !== "spectators");
   if (!left || !right) return null;
   const a = left.averageValue;
   const b = right.averageValue;
@@ -226,7 +218,6 @@ onMounted(async () => {
 onUnmounted(() => {
   observer?.disconnect();
   cancelAnimationFrame(layoutFrame);
-  ++reportTicket;
   window.removeEventListener("resize", reportHotspot);
   unlistenHover?.();
 });
@@ -273,6 +264,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
         </button>
       </span>
     </header>
+    <div v-if="rosterSummary(current, result)" class="match-context">{{ rosterSummary(current, result) }}</div>
 
     <div v-if="activeAlert" class="alert">⏰ {{ activeAlert.label }}</div>
     <div v-else-if="nextReminder && current?.phase !== 'ended'" class="next">
@@ -317,8 +309,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
       >
         <div class="team-head">
           <span class="team-title">{{ block.title }}</span>
-          <span class="team-avg num">{{ current.phase === 'ended' ? '赛前均分' : '均分' }} <AnimatedNumber :value="block.averageValue" :enabled="appearance.animations" /></span>
-          <span class="team-count num">{{ block.rated }}/{{ block.count }}</span>
+          <span v-if="block.key !== 'spectators'" class="team-avg num">{{ current.phase === 'ended' ? '赛前均分' : '均分' }} <AnimatedNumber :value="block.averageValue" :enabled="appearance.animations" /></span>
+          <span class="team-count num">{{ block.count }} 人</span>
         </div>
         <ul>
           <li
@@ -335,8 +327,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="name">
               <a v-if="p.id != null" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
               <template v-else>{{ p.name }}</template><span v-if="p.note" class="note"> · {{ p.note }}</span>
-              <span v-if="p.profile?.lastSpecs.length" class="spec-hint" :title="`最近已有战报：${p.profile.lastSpecs.map(s => s.name).join(' + ')}`">
-                <span>上次专精</span><SpecIcon v-for="spec in p.profile.lastSpecs.slice(0, 2)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" />
+              <span class="spec-reveal" :class="{ visible: specsVisible && specsFor(p).length }" :aria-hidden="!specsVisible || !specsFor(p).length">
+                <span class="spec-hint" :title="specsFor(p).map(s => s.name).join(' + ')"><span>{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</span><SpecIcon v-for="spec in specsFor(p).slice(0, 2)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /></span>
               </span>
             </span>
             <span
@@ -351,18 +343,21 @@ watch(appearance, () => requestAnimationFrame(relayout));
         </ul>
       </section>
       <p v-if="current && !current.rosterKnown" class="next" role="status">
-        {{ current.pregame.players.length ? current.pregame.status : '等待玩家名单' }}
+        {{ current.mode === 'pve' ? 'PvE · 等待日志名单' : current.pregame.players.length ? current.pregame.status : '等待玩家名单' }}
       </p>
       </div></div>
     </template>
     <div v-else class="empty">{{ emptyText }}</div>
 
-    <div v-if="failure" class="failure">{{ failure }}</div>
+    <div v-if="failure || reportFailure" class="failure">{{ failure || reportFailure }}</div>
   </div>
 </template>
 
 <style scoped>
-.spec-hint { display: flex; align-items: center; gap: 4px; color: var(--bax-muted); font-size: 10px; }
+.match-context { margin-top: 4px; color: var(--bax-muted); font-size: 11px; }
+.spec-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 220ms cubic-bezier(.16, 1, .3, 1), opacity 160ms ease-out; }
+.spec-reveal.visible { grid-template-rows: 1fr; opacity: 1; }
+.spec-hint { display: flex; align-items: center; min-height: 0; overflow: hidden; gap: 4px; color: var(--bax-muted); font-size: 10px; }
 .spec-hint .spec-icon { width: 22px; height: 22px; }
 .panel {
   --reveal-duration: 240ms;

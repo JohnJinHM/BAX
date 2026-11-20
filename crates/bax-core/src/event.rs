@@ -121,6 +121,8 @@ pub enum LogEvent {
     },
     /// 完整名单，包含队伍。
     PlayerList { players: Vec<RosterEntry> },
+    /// 名单中出现 AI，保留模式线索而不建立真人档案。
+    AiDetected,
     /// 场景加载完成（`Scenario controller loaded`）。正常开局时，准备阶段从这里开始。
     ScenarioLoaded,
     /// 比赛结束（`Network traffic history | Cause=MatchEnded`）。

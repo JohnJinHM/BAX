@@ -1,6 +1,6 @@
 //! 战报的解读：把接口模型转成核心库的输入，加上日志里的信息，交给界面。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use bax_batrace::model::{MatchInfo, UnitsResponse};
 use bax_core::report::{self, MatchAnalysis, PlayerInput, ReportInput, UnitInput, UnitKind};
@@ -16,6 +16,11 @@ pub(crate) const UNITS_KEY: &str = "batrace.units";
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchReportView {
+    pub mode: crate::MatchMode,
+    pub spectators: Vec<ReportSpectator>,
+    pub ai_players: [u32; 2],
+    /// 仅由这一场战报推导出的专精。
+    pub specs: BTreeMap<PlayerId, Vec<crate::specs::SpecPreference>>,
     pub analysis: MatchAnalysis,
     /// 日志里的地图名。
     pub map: Option<String>,
@@ -24,6 +29,14 @@ pub struct MatchReportView {
     pub fetched_at: Timestamp,
     /// 用到的单位目录的获取时间；还没有目录时为 `None`。
     pub catalog_fetched_at: Option<Timestamp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ReportSpectator {
+    pub id: PlayerId,
+    pub name: Option<String>,
 }
 
 /// 摘出列表要用的几项。
@@ -143,7 +156,73 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
         None => (HashMap::new(), None),
     };
 
-    let mut analysis = report::analyze(&report_input(id, &info), &kinds);
+    let record = store.match_record(id).map_err(|e| e.to_string())?;
+    let roster = store.match_players(id).map_err(|e| e.to_string())?;
+    let mut input = report_input(id, &info);
+    for p in &mut input.players {
+        if let Some(team) = roster
+            .iter()
+            .find(|r| r.player == p.id)
+            .and_then(|r| r.team)
+        {
+            p.team = Some(team);
+        }
+    }
+    let mut spectators: BTreeMap<PlayerId, Option<String>> = input
+        .players
+        .iter()
+        .filter(|p| p.team == Some(Team::Spectators))
+        .map(|p| (p.id, p.name.clone()))
+        .collect();
+    for p in roster.iter().filter(|p| p.team == Some(Team::Spectators)) {
+        let name = spectators.entry(p.player).or_default();
+        if name.is_none() {
+            *name = p.log_name.clone();
+        }
+    }
+    input.players.retain(|p| p.team != Some(Team::Spectators));
+    let specs = input
+        .players
+        .iter()
+        .filter_map(|p| {
+            Some((
+                p.id,
+                crate::specs::infer(&info, p.id)?
+                    .into_iter()
+                    .map(|id| crate::specs::entry(vec![id], 1))
+                    .collect(),
+            ))
+        })
+        .collect();
+    let mut ai_players = [0; 2];
+    for (key, player) in &info.data {
+        if player
+            .id
+            .or_else(|| key.parse().ok())
+            .is_some_and(|id| id < 0)
+        {
+            match player.team() {
+                Some(Team::Alpha) => ai_players[0] += 1,
+                Some(Team::Bravo) => ai_players[1] += 1,
+                _ => {}
+            }
+        }
+    }
+    let live_mode = crate::match_mode::live_mode(
+        record.as_ref().and_then(|r| r.scenario.as_deref()),
+        ai_players.iter().any(|n| *n > 0),
+        !spectators.is_empty(),
+    );
+    let mode = if live_mode == crate::MatchMode::Pve {
+        live_mode
+    } else {
+        match info.match_type.unwrap_or(0) {
+            0 if spectators.is_empty() => crate::MatchMode::Ranked,
+            1 => crate::MatchMode::Custom,
+            _ => live_mode,
+        }
+    };
+    let mut analysis = report::analyze(&input, &kinds);
     // 战报里没有名字的，用档案或日志里的名字补上
     for p in &mut analysis.players {
         if p.name.is_none()
@@ -152,8 +231,14 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
             p.name = record.display_name().map(str::to_owned);
         }
     }
-    let record = store.match_record(id).map_err(|e| e.to_string())?;
     Ok(Some(MatchReportView {
+        mode,
+        spectators: spectators
+            .into_iter()
+            .map(|(id, name)| ReportSpectator { id, name })
+            .collect(),
+        ai_players,
+        specs,
         analysis,
         map: record.as_ref().and_then(|m| m.map.clone()),
         self_id: record.as_ref().and_then(|m| m.self_id),
@@ -169,6 +254,69 @@ mod tests {
 
     const REPORT: &str = include_str!("../../../fixtures/batrace/match_report.json");
     const UNITS: &str = include_str!("../../../fixtures/batrace/units.json");
+
+    #[test]
+    fn custom_reports_separate_spectators_and_keep_small_teams() {
+        let mut store = Store::open_in_memory().expect("验证数据");
+        let raw = serde_json::json!({"matchInfo": {"Type": 1, "Data": {
+            "101": {"Name": "Ash", "TeamId": 0},
+            "102": {"Name": "Birch", "TeamId": 1},
+            "103": {"Name": "Cedar", "TeamId": 100}
+        }}})
+        .to_string();
+        store
+            .save_report(
+                MatchId(9_000_001),
+                &raw,
+                ReportMeta::default(),
+                Timestamp::from_secs(1),
+            )
+            .expect("验证数据");
+        let view = load_view(&store, MatchId(9_000_001))
+            .expect("验证数据")
+            .expect("验证数据");
+        assert_eq!(view.mode, crate::MatchMode::Custom);
+        assert_eq!(view.analysis.players.len(), 2);
+        assert_eq!(
+            view.analysis
+                .teams
+                .iter()
+                .map(|t| t.players)
+                .collect::<Vec<_>>(),
+            vec![1, 1]
+        );
+        assert_eq!(
+            view.spectators,
+            vec![ReportSpectator {
+                id: PlayerId(103),
+                name: Some("Cedar".into())
+            }]
+        );
+        assert!(!view.specs.contains_key(&PlayerId(103)));
+    }
+
+    #[test]
+    fn pve_reports_count_ai_without_creating_human_players() {
+        let mut store = Store::open_in_memory().expect("验证数据");
+        let raw = serde_json::json!({"matchInfo": {"Data": {
+            "101": {"Name": "Ash"}, "-2": {"Id": -2, "TeamId": 1}, "-3": {"TeamId": 1}
+        }}})
+        .to_string();
+        store
+            .save_report(
+                MatchId(9_000_002),
+                &raw,
+                ReportMeta::default(),
+                Timestamp::from_secs(1),
+            )
+            .expect("验证数据");
+        let view = load_view(&store, MatchId(9_000_002))
+            .expect("验证数据")
+            .expect("验证数据");
+        assert_eq!(view.mode, crate::MatchMode::Pve);
+        assert_eq!(view.ai_players, [0, 2]);
+        assert_eq!(view.analysis.players.len(), 1);
+    }
 
     #[test]
     fn cached_option_ids_reach_the_report_without_refetching() {

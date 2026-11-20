@@ -110,6 +110,8 @@ pub struct MatchState {
     pub game_version: Option<String>,
     pub early: Vec<EarlyPlayer>,
     pub roster: Vec<RosterEntry>,
+    #[serde(default)]
+    pub has_ai: bool,
     /// 本机玩家在这场比赛里的名字（来自 `FID` 行）。
     pub self_name: Option<String>,
     pub self_id: Option<PlayerId>,
@@ -150,6 +152,7 @@ impl MatchState {
             game_version: None,
             early: Vec::new(),
             roster: Vec::new(),
+            has_ai: false,
             self_name: None,
             self_id: None,
             clock: None,
@@ -360,6 +363,16 @@ impl Tracker {
                 }
             }
             LogEvent::PlayerList { players } => self.on_player_list(players, &mut out),
+            LogEvent::AiDetected => {
+                if let Some(m) = self.current.as_mut()
+                    && !m.has_ai
+                {
+                    m.has_ai = true;
+                    out.push(Update::Changed {
+                        match_id: m.match_id,
+                    });
+                }
+            }
             LogEvent::ScenarioLoaded => self.on_scenario_loaded(at, &mut out),
             LogEvent::MatchEnded { match_id } => {
                 if let Some(m) = self.current.as_mut()

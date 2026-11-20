@@ -9,7 +9,8 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 echarts.use([BarChart, LineChart, ScatterChart, GridComponent, LegendComponent, TooltipComponent, MarkAreaComponent, SVGRenderer]);
 
-const props = defineProps<{ option: EChartsCoreOption; height: number; label: string }>();
+const props = defineProps<{ option: EChartsCoreOption; height: number; label: string; animatedUpdates?: boolean }>();
+const emit = defineEmits<{ select: [seriesId: string, dataIndex: number] }>();
 
 const el = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
@@ -20,13 +21,18 @@ onMounted(() => {
   if (!el.value) return;
   chart = echarts.init(el.value, null, { renderer: "svg" });
   chart.setOption(props.option);
+  chart.on("click", (event) => {
+    if (event.componentType === "series" && typeof event.seriesId === "string" && typeof event.dataIndex === "number") {
+      emit("select", event.seriesId, event.dataIndex);
+    }
+  });
   observer = new ResizeObserver(() => { cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(() => chart?.resize()); });
   observer.observe(el.value);
 });
 
 watch(
   () => props.option,
-  (option) => chart?.setOption(option, { notMerge: true }),
+  (option) => chart?.setOption(option, props.animatedUpdates ? { replaceMerge: ["series"] } : { notMerge: true }),
 );
 
 watch(
