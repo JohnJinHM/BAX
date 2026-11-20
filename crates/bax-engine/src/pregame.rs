@@ -56,6 +56,10 @@ pub struct PregamePlayer {
 pub struct PregameView {
     pub players: Vec<PregamePlayer>,
     pub status: String,
+    /// 当前观测批次的身份查询已结束，允许后台补战报。
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) queries_complete: bool,
 }
 
 /// 比赛代次由 ID、发现时间以及日志来源标识共同隔离。

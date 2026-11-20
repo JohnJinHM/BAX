@@ -66,6 +66,7 @@ pub struct Engine {
     log_zone: LogZone,
     /// 战后归档任务。
     reports: JoinHandle<()>,
+    spec_reports: JoinHandle<()>,
     report_notify: Arc<Notify>,
     /// 按需读取比赛记录与战报用的连接，不经过对局会话。
     reader: Arc<Mutex<Store>>,
@@ -105,6 +106,8 @@ impl Engine {
         // 战后归档与按需读取各用自己的连接；WAL 下读写互不阻塞
         let report_notify = Arc::new(Notify::new());
         let (report_tx, report_rx) = mpsc::unbounded_channel();
+        let spec_store = Store::open(&config.store_path)?;
+        let spec_events = report_tx.clone();
         let worker = ReportWorker {
             store: Store::open(&config.store_path)?,
             client: client.clone(),
@@ -130,6 +133,13 @@ impl Engine {
         });
         let task = tokio::spawn(session.run(command_rx));
         let reports = tokio::spawn(worker.run());
+        let spec_reports = tokio::spawn(crate::spec_worker::run(
+            spec_store,
+            client.clone(),
+            Arc::clone(&clock),
+            snapshots.clone(),
+            spec_events,
+        ));
         tracing::info!(
             store = %config_store.display(),
             log_dir_source = %log_dir_source,
@@ -144,6 +154,7 @@ impl Engine {
             store_path,
             log_zone,
             reports,
+            spec_reports,
             report_notify,
             reader,
             clock,
@@ -366,13 +377,16 @@ impl Engine {
             commands,
             task,
             reports,
+            spec_reports,
             ..
         } = self;
         drop(commands);
         let _ = task.await;
         // 会话停下后归档任务会自己退出；正在等网络的请求不必等完
         reports.abort();
+        spec_reports.abort();
         let _ = reports.await;
+        let _ = spec_reports.await;
     }
 
     async fn send(&self, command: Command) -> Result<(), CommandError> {

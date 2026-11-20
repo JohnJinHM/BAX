@@ -33,6 +33,8 @@ mod profile;
 mod reports;
 mod session;
 mod snapshot;
+mod spec_worker;
+mod specs;
 
 pub use bax_core::report::{
     ClassShare, MatchAnalysis, PlayerReport, Sortie, TeamReport, UnitClass, UnitRow,

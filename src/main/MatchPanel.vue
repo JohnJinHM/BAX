@@ -73,7 +73,7 @@ async function refresh() {
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>
 
-    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.pregame.players.length ? `OCR 识别可能不准确 · ${current.pregame.status}` : "等待玩家名单" }}</p>
+    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.pregame.players.length ? current.pregame.status : "等待玩家名单" }}</p>
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>
       <table>
@@ -103,7 +103,7 @@ async function refresh() {
           <tr v-for="p in group.players" :key="p.key" :class="{ self: p.isSelf }">
             <td class="left">
               <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
-              <span v-else class="name" title="OCR 识别可能不准确，以日志确认结果为准">{{ p.name }}</span>
+              <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
               <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
               <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
             </td>

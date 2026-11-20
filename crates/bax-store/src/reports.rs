@@ -101,6 +101,22 @@ pub struct HistoryRow {
 }
 
 impl Store {
+    /// 玩家最近已有的完整战报，不依赖同场日志是否存在。
+    pub fn recent_player_reports(
+        &self,
+        id: bax_core::PlayerId,
+        limit: u32,
+    ) -> Result<Vec<(MatchId, String)>> {
+        let path = format!("$.matchInfo.Data.\"{}\"", id.get());
+        let mut stmt = self.conn.prepare(
+            "SELECT match_id, raw FROM match_reports WHERE json_type(raw, ?1) = 'object'
+             ORDER BY start_time DESC, match_id DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![path, limit], |r| {
+            Ok((MatchId(id_from_db(r.get(0)?)), r.get(1)?))
+        })?;
+        rows.map(|r| r.map_err(Into::into)).collect()
+    }
     pub fn report_cancelled(&self, id: MatchId) -> Result<bool> {
         Ok(self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM cancelled_matches WHERE id = ?1)",

@@ -32,6 +32,8 @@ Full / Lite 构建验证：[同一主线的两个安装包](full-lite-builds.md)
 
 新增功能验证：[常用专精与 GitHub 签名更新](player-specs-updater.md)。
 
+专精后续修正：[最近战报、请求预算与资料字段合并](player-specs-history.md)。
+
 安装与分发验证：[OCR 安装包与 v5 数据库](ocr-packaging.md)（离线运行时、实际安装、文件体积、数据库保留检查）。
 
 1. 开始一项验证时，复制 [template.md](template.md) 为 `NN-简短英文标题.md`，例如 `01-overlay-compat.md`，并把上表的状态改为“进行中”。

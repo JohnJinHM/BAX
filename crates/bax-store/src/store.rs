@@ -158,7 +158,7 @@ pub struct PlayerRecord {
     pub rating: Option<f64>,
     pub rank: Option<i64>,
     pub rating_games: Option<i64>,
-    /// 最近一次成功取得的接口响应原文。
+    /// 按字段合并的接口资料；缺失字段保留上次有效值。
     pub profile_json: Option<String>,
     /// 最近一次成功取得资料的时刻；从未取到过时为 `None`。
     pub fetched_at: Option<Timestamp>,
@@ -294,6 +294,51 @@ impl Store {
     pub fn save_profile(&mut self, profile: &ProfileUpdate, at: Timestamp) -> Result<()> {
         let tx = self.conn.transaction()?;
         let id = id_to_db(profile.id.get());
+        let previous = tx
+            .query_row(
+                &format!("SELECT {PLAYER_COLUMNS} FROM players WHERE id = ?1"),
+                [id],
+                player_from_row,
+            )
+            .optional()?;
+        if previous
+            .as_ref()
+            .and_then(|p| p.fetched_at)
+            .is_some_and(|old| old > at)
+        {
+            return Ok(());
+        }
+        let mut profile = profile.clone();
+        profile.name = profile.name.filter(|v| !v.trim().is_empty());
+        profile.steam_id = profile.steam_id.filter(|v| !v.trim().is_empty());
+        if let Some(old) = &previous {
+            profile.name = profile.name.or_else(|| old.name.clone());
+            profile.steam_id = profile.steam_id.or_else(|| old.steam_id.clone());
+            profile.level = profile.level.or(old.level);
+            profile.rating = profile.rating.or(old.rating);
+            profile.rank = profile.rank.or(old.rank);
+            profile.rating_games = profile.rating_games.or(old.rating_games);
+        }
+        let incoming: serde_json::Value = serde_json::from_str(&profile.raw_json)
+            .map_err(|_| StoreError::Corrupt("玩家资料 JSON 无效".into()))?;
+        if !incoming.is_object() {
+            return Err(StoreError::Corrupt("玩家资料必须是 JSON 对象".into()));
+        }
+        let mut merged = previous
+            .as_ref()
+            .and_then(|p| p.profile_json.as_deref())
+            .and_then(|raw| serde_json::from_str(raw).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        merge_profile_fields(&mut merged, incoming);
+        // 查询列和资料摘要保持一致，旧资料中缺失的基本字段也能补齐。
+        merge_profile_fields(
+            &mut merged,
+            serde_json::json!({ "info": {
+                "id": profile.id.get(), "name": profile.name, "steamId": profile.steam_id,
+                "level": profile.level, "rating": profile.rating, "rank": profile.rank, "ratingGames": profile.rating_games,
+            }}),
+        );
+        profile.raw_json = merged.to_string();
         tx.execute(
             "INSERT INTO players(id, name, steam_id, level, rating, rank, rating_games, profile_json, fetched_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -670,6 +715,22 @@ impl Store {
             out.push((rule, outcome_from_db(&outcome)?, Timestamp::from_millis(at)));
         }
         Ok(out)
+    }
+}
+
+fn merge_profile_fields(current: &mut serde_json::Value, incoming: serde_json::Value) {
+    if incoming.is_null() || incoming.as_str().is_some_and(|s| s.trim().is_empty()) {
+        return;
+    }
+    if let serde_json::Value::Object(fields) = incoming {
+        if !current.is_object() {
+            *current = serde_json::json!({});
+        }
+        for (key, value) in fields {
+            merge_profile_fields(&mut current[&key], value);
+        }
+    } else {
+        *current = incoming;
     }
 }
 

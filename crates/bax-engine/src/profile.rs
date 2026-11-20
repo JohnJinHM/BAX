@@ -4,8 +4,6 @@
 
 use bax_batrace::model::{PlayerInfoResponse, PlayerStats};
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::sync::LazyLock;
 
 /// 一名玩家的资料摘要。
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -23,78 +21,15 @@ pub struct ProfileSummary {
     pub ranked: Option<RankedStats>,
     /// 站点更新这份统计的时间，原样保留站点给出的文本。
     pub stats_updated_at: Option<String>,
-    /// 试运行：按累计经验排序，不代表使用场次或本场选择。
-    pub favorite_specs: Vec<SpecPreference>,
-    pub favorite_spec_pairs: Vec<SpecPreference>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-pub struct SpecPreference {
-    pub ids: Vec<u32>,
-    pub name: String,
-    pub experience: i64,
-    pub experience_share: f64,
-}
-
-static SPEC_NAMES: LazyLock<BTreeMap<String, String>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("specializations.json")).expect("内置专精目录有效")
-});
-
-fn preferences(values: &BTreeMap<String, i64>, pairs: bool) -> Vec<SpecPreference> {
-    let mut normalized = BTreeMap::<Vec<u32>, i64>::new();
-    for (key, &experience) in values {
-        if experience <= 0 {
-            continue;
-        }
-        let Some(mut ids) = key
-            .split('_')
-            .map(|v| v.parse::<u32>().ok().filter(|id| *id > 0))
-            .collect::<Option<Vec<_>>>()
-        else {
-            continue;
-        };
-        ids.sort_unstable();
-        ids.dedup();
-        if ids.len() != if pairs { 2 } else { 1 } {
-            continue;
-        }
-        // 有些响应同时带正反组合键，只计较大的值，避免重复累加。
-        normalized
-            .entry(ids)
-            .and_modify(|value| *value = (*value).max(experience))
-            .or_insert(experience);
-    }
-    let total: f64 = normalized.values().map(|v| *v as f64).sum();
-    let mut result: Vec<_> = normalized
-        .into_iter()
-        .map(|(ids, experience)| {
-            let name = ids
-                .iter()
-                .map(|id| {
-                    SPEC_NAMES
-                        .get(&id.to_string())
-                        .cloned()
-                        .unwrap_or_else(|| format!("专精 #{id}"))
-                })
-                .collect::<Vec<_>>()
-                .join(" + ");
-            SpecPreference {
-                ids,
-                name,
-                experience,
-                experience_share: experience as f64 / total,
-            }
-        })
-        .collect();
-    result.sort_by(|a, b| {
-        b.experience
-            .cmp(&a.experience)
-            .then_with(|| a.ids.cmp(&b.ids))
-    });
-    result.truncate(3);
-    result
+    pub favorite_specs: Vec<crate::specs::SpecPreference>,
+    pub favorite_spec_pairs: Vec<crate::specs::SpecPreference>,
+    pub last_specs: Vec<crate::specs::SpecPreference>,
+    pub last_spec_match: Option<bax_core::MatchId>,
+    pub spec_sample_matches: u32,
+    pub spec_identified_matches: u32,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub(crate) recent_match_id: Option<bax_core::MatchId>,
 }
 
 /// 排位赛的累计统计。比率在分母为零或数据缺失时为 `None`。
@@ -131,16 +66,13 @@ impl ProfileSummary {
                 .stat_info
                 .as_ref()
                 .and_then(|s| s.updated_at.clone()),
-            favorite_specs: response
-                .stat_info
-                .as_ref()
-                .map(|s| preferences(&s.spec_exp, false))
-                .unwrap_or_default(),
-            favorite_spec_pairs: response
-                .stat_info
-                .as_ref()
-                .map(|s| preferences(&s.combined_specs_exp, true))
-                .unwrap_or_default(),
+            favorite_specs: vec![],
+            favorite_spec_pairs: vec![],
+            last_specs: vec![],
+            last_spec_match: None,
+            spec_sample_matches: 0,
+            spec_identified_matches: 0,
+            recent_match_id: response.recent_match_ids().next(),
         })
     }
 
@@ -184,37 +116,6 @@ mod tests {
     use super::*;
 
     const PLAYER_INFO: &str = include_str!("../../../fixtures/batrace/player_info.json");
-
-    #[test]
-    fn preferences_rank_experience_and_keep_unknown_ids() {
-        let summary = ProfileSummary::from_json(PLAYER_INFO).expect("fixture");
-        assert_eq!(summary.favorite_specs[0].ids, vec![5]);
-        assert!((summary.favorite_specs[0].experience_share - 240000.0 / 360000.0).abs() < 1e-9);
-        assert_eq!(summary.favorite_spec_pairs[0].ids, vec![3, 5]);
-        let values =
-            serde_json::from_str(r#"{"3":10,"4":10,"5":10,"999":20,"7":-1,"8":0,"oops":99}"#)
-                .expect("fixture");
-        let ranked = preferences(&values, false);
-        assert_eq!(ranked.len(), 3);
-        assert_eq!(ranked[0].name, "专精 #999");
-        assert_eq!(ranked[0].experience_share, 0.4);
-        assert_eq!(ranked[1].ids, vec![3]);
-    }
-
-    #[test]
-    fn preferences_handle_missing_and_malformed_pairs() {
-        let values =
-            serde_json::from_str(r#"{"3_5":20,"5_3":30,"4_4":50,"0_3":80,"3_4_5":90,"bad":100}"#)
-                .expect("fixture");
-        let ranked = preferences(&values, true);
-        assert_eq!(ranked.len(), 1);
-        assert_eq!(ranked[0].experience, 30);
-        assert_eq!(ranked[0].experience_share, 1.0);
-        let summary =
-            ProfileSummary::from_json(r#"{"info":{"id":1},"statInfo":null}"#).expect("fixture");
-        assert!(summary.favorite_specs.is_empty());
-        assert!(summary.favorite_spec_pairs.is_empty());
-    }
 
     #[test]
     fn summarizes_a_full_profile() {

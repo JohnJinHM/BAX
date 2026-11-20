@@ -345,4 +345,6 @@ flowchart LR
 
 ## Full / Lite 构建
 
+敌方专精由独立战报补查任务提供：身份查询结束后每局最多请求 5 份最近战报，复用缓存、限流状态与归档通知；Rust 通过单位可用性求唯一专精组合，再将图标数据与已有战报场次放入快照。OCR 与日志确认名单共用预算，见 [ADR-0013](../adr/0013-last-match-specializations.md)。
+
 两版在 main 共用代码和快照协议。桌面 ocr feature 传递给引擎，Full 编译工作进程调度并打包原生 OCR 资源；默认 Lite 排除调度与资源。界面读取后端 AppStatus.ocrSupported 控制 OCR 设置。安装身份与用户数据共用，构建目录隔离，见 [ADR-0011](../adr/0011-full-lite-builds.md)。

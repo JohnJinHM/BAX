@@ -41,6 +41,7 @@ fn message(s: &Session) -> Message {
         revision: s.revision,
         view: PregameView {
             status: "候选".into(),
+            queries_complete: true,
             players: vec![PregamePlayer {
                 observed: Observation {
                     side: "left".into(),

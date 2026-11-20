@@ -390,6 +390,7 @@ pub(crate) async fn run(
             }
             .into();
         }
+        view.queries_complete = stopped;
         let _ = tx
             .send(Message {
                 ticket: key.clone(),
@@ -465,6 +466,14 @@ pub(crate) async fn run(
                 break;
             }
         }
+        view.queries_complete = true;
+        let _ = tx
+            .send(Message {
+                ticket: key.clone(),
+                revision: snapshot.revision,
+                view: view.clone(),
+            })
+            .await;
     }
 }
 

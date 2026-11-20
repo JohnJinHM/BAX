@@ -185,6 +185,63 @@ fn rating_history_records_changes_only() {
 }
 
 #[test]
+fn partial_profile_refresh_preserves_missing_fields_and_merges_statistics() {
+    let mut store = Store::open_in_memory().expect("store");
+    let mut full = profile(101, "Ash", 2100.0);
+    full.raw_json = r#"{"info":{"id":101,"name":"Ash","rating":2100},"statInfo":{"winCountRt":12,"specExp":{"12":100,"15":200},"futureField":true},"last_fights_data":["900001"]}"#.into();
+    store.save_profile(&full, t(1000)).expect("full");
+    let mut partial = ProfileUpdate {
+        id: PlayerId(101),
+        name: None,
+        steam_id: None,
+        level: None,
+        rating: Some(2120.0),
+        rank: None,
+        rating_games: None,
+        raw_json: r#"{"info":{"id":101,"name":"  ","rating":2120},"statInfo":null}"#.into(),
+    };
+    store.save_profile(&partial, t(2000)).expect("partial");
+    let saved = store.player(PlayerId(101)).expect("read").expect("exists");
+    assert_eq!(saved.name.as_deref(), Some("Ash"));
+    assert_eq!(saved.level, Some(40));
+    assert_eq!(saved.rating, Some(2120.0));
+    let raw: serde_json::Value =
+        serde_json::from_str(saved.profile_json.as_deref().expect("raw")).expect("json");
+    assert_eq!(raw["statInfo"]["specExp"]["15"], 200);
+    assert_eq!(raw["statInfo"]["futureField"], true);
+    assert_eq!(raw["last_fights_data"][0], "900001");
+    assert_eq!(raw["info"]["level"], 40);
+    partial.rating = None;
+    partial.raw_json = r#"{"statInfo":{"winCountRt":0,"specExp":{"12":300},"futureField":false},"last_fights_data":[]}"#.into();
+    store
+        .save_profile(&partial, t(3000))
+        .expect("update values");
+    let saved = store.player(PlayerId(101)).expect("read").expect("exists");
+    let raw: serde_json::Value =
+        serde_json::from_str(saved.profile_json.as_deref().expect("raw")).expect("json");
+    assert_eq!(raw["statInfo"]["winCountRt"], 0);
+    assert_eq!(raw["statInfo"]["specExp"]["12"], 300);
+    assert_eq!(raw["statInfo"]["specExp"]["15"], 200);
+    assert_eq!(raw["statInfo"]["futureField"], false);
+    assert_eq!(raw["last_fights_data"], serde_json::json!([]));
+    assert_eq!(
+        store.rating_history(PlayerId(101)).expect("history").len(),
+        2
+    );
+    store.save_profile(&full, t(1500)).expect("late ignored");
+    assert_eq!(
+        store.player(PlayerId(101)).expect("read").expect("exists"),
+        saved
+    );
+    partial.raw_json = "not json".into();
+    assert!(store.save_profile(&partial, t(4000)).is_err());
+    assert_eq!(
+        store.player(PlayerId(101)).expect("read").expect("exists"),
+        saved
+    );
+}
+
+#[test]
 fn recording_a_match_stores_its_details_roster_and_sightings() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let tr = played(9_000_001, 1000, standard_roster());

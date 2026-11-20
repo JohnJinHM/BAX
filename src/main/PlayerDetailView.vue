@@ -3,11 +3,12 @@ import { computed, ref, watch } from "vue";
 
 import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
 import type { Relation } from "../shared/bindings/Relation";
-import { commands, errorText } from "../shared/engine";
+import { commands, errorText, useSnapshot } from "../shared/engine";
 import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import { openMatch } from "./navigation";
 import Sparkline from "./Sparkline.vue";
+import SpecIcon from "../shared/SpecIcon.vue";
 
 const props = defineProps<{ id: number }>();
 
@@ -20,19 +21,24 @@ const noteDraft = ref("");
 const noteDirty = ref(false);
 const noteMessage = ref<{ ok: boolean; text: string } | null>(null);
 const refreshing = ref(false);
+const snapshot = useSnapshot();
+let loadSequence = 0;
 
 async function load() {
+  const sequence = ++loadSequence;
+  const requestedId = props.id;
   loading.value = true;
   failure.value = null;
   try {
-    const result = await commands.playerDetail(props.id);
+    const result = await commands.playerDetail(requestedId);
+    if (sequence !== loadSequence || requestedId !== props.id) return;
     detail.value = result;
     missing.value = result == null;
     if (!noteDirty.value) noteDraft.value = result?.note?.body ?? "";
   } catch (error) {
-    failure.value = errorText(error);
+    if (sequence === loadSequence) failure.value = errorText(error);
   } finally {
-    loading.value = false;
+    if (sequence === loadSequence) loading.value = false;
   }
 }
 
@@ -46,6 +52,9 @@ watch(
   },
   { immediate: true },
 );
+watch(() => snapshot.value?.archive.seq, (next, previous) => {
+  if (previous != null && next !== previous) void load();
+});
 
 const title = computed(() => {
   const d = detail.value;
@@ -57,6 +66,7 @@ const historyPoints = computed(() =>
     .filter((p) => p.rating != null)
     .map((p) => ({ at: p.at, value: p.rating as number })),
 );
+const maxSpecGames = computed(() => Math.max(1, ...(detail.value?.profile?.favoriteSpecs.map(s => s.games) ?? [])));
 
 const relationNames: Record<Relation, string> = { teammate: "队友", opponent: "对手", other: "其他" };
 
@@ -116,17 +126,21 @@ async function refresh() {
         <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
       </div>
 
-      <h3>常用专精 <span class="hint">试运行</span></h3>
-      <p class="hint">按累计经验推测，显示前三项及经验占比；不代表使用场次或本场选择。</p>
-      <div v-if="detail.profile?.favoriteSpecs.length" class="preferences">
-        <span v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids.join('_')">
-          {{ spec.name }} <span class="hint num">{{ percent(spec.experienceShare) }}</span>
-        </span>
+      <h3>专精使用</h3>
+      <div v-if="detail.profile?.lastSpecs.length" class="last-specs">
+        <span class="hint">上次专精</span>
+        <span v-for="spec in detail.profile.lastSpecs" :key="spec.ids[0]"><SpecIcon :id="spec.ids[0]!" :label="spec.name" /> {{ spec.name }}</span>
       </div>
-      <p v-else class="hint">暂无专精经验数据。</p>
-      <p v-if="detail.profile?.favoriteSpecPairs.length" class="hint">
-        常用组合：{{ detail.profile.favoriteSpecPairs.map(s => `${s.name}（${percent(s.experienceShare)}）`).join('；') }}
-      </p>
+      <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
+      <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
+        <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`">
+          <SpecIcon :id="spec.ids[0]!" :label="spec.name" />
+          <span class="spec-name">{{ spec.name }}</span>
+          <span class="spec-track" aria-hidden="true"><span :style="{ width: `${spec.games / maxSpecGames * 100}%` }" /></span>
+          <span class="num spec-count">{{ spec.games }} 场</span>
+        </li>
+      </ul>
+      <p v-else class="hint">暂无可识别的专精战报。</p>
 
       <h3>备注</h3>
       <textarea
@@ -184,7 +198,14 @@ async function refresh() {
   margin: 0;
 }
 
-.preferences { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.last-specs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.last-specs > span { display: inline-flex; align-items: center; gap: 6px; }
+.spec-chart { list-style: none; padding: 0; margin: 12px 0 24px; max-width: 760px; }
+.spec-chart li { display: grid; grid-template-columns: 28px minmax(100px, 1fr) minmax(60px, 2fr) 44px; align-items: center; gap: 10px; margin: 8px 0; }
+.spec-name { overflow-wrap: anywhere; font-size: 13px; }
+.spec-track { display: block; height: 8px; border-radius: 3px; background: var(--bax-surface-2); }
+.spec-track > span { display: block; height: 100%; border-radius: inherit; background: var(--bax-accent); }
+.spec-count { text-align: right; font-size: 12px; }
 
 .tag {
   padding: 1px 8px;

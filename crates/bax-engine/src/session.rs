@@ -365,11 +365,34 @@ impl Session {
 
     // ------------------------------------------------------------ 输入
 
-    fn on_pregame(&mut self, message: crate::pregame::Message) {
+    fn on_pregame(&mut self, mut message: crate::pregame::Message) {
         if message.revision >= self.pregame_cutoff
             && crate::pregame::ticket(&self.build_snapshot()).as_ref() == Some(&message.ticket)
-            && self.pregame != message.view
         {
+            for p in &mut message.view.players {
+                if p.ambiguous {
+                    continue;
+                }
+                if let Some(candidate) = p.candidates.first_mut()
+                    && let Some(profile) = candidate.profile.as_mut()
+                {
+                    let previous = self
+                        .pregame
+                        .players
+                        .iter()
+                        .flat_map(|p| &p.candidates)
+                        .find(|c| c.id == candidate.id)
+                        .and_then(|c| c.profile.as_ref());
+                    if let Some(old) = previous {
+                        crate::specs::copy_usage(old, profile);
+                    } else {
+                        crate::specs::enrich(profile, &self.store, candidate.id);
+                    }
+                }
+            }
+            if self.pregame == message.view {
+                return;
+            }
             self.pregame = message.view;
             self.dirty = true;
         }
@@ -475,10 +498,11 @@ impl Session {
         if record.is_none() && note.is_none() {
             return Ok(None);
         }
-        let profile = record
-            .as_ref()
-            .and_then(|r| r.profile_json.as_deref())
-            .and_then(ProfileSummary::from_json);
+        let profile = crate::specs::from_store(
+            record.as_ref().and_then(|r| r.profile_json.as_deref()),
+            &self.store,
+            id,
+        );
         let self_id = self
             .tracker
             .current()
@@ -531,11 +555,13 @@ impl Session {
             .map_err(|e| e.to_string())?;
         if self.slots.iter().any(|s| s.id == id) {
             let record = self.store.player(id).ok().flatten();
+            let profile = crate::specs::from_store(
+                record.as_ref().and_then(|r| r.profile_json.as_deref()),
+                &self.store,
+                id,
+            );
             if let Some(slot) = self.slot_mut(id) {
-                slot.profile = record
-                    .as_ref()
-                    .and_then(|r| r.profile_json.as_deref())
-                    .and_then(ProfileSummary::from_json);
+                slot.profile = profile;
                 slot.record = record;
                 slot.failures = 0;
                 if matches!(slot.fetch, FetchState::Failed { .. }) {
@@ -862,13 +888,15 @@ impl Session {
                 }
                 if current {
                     let record = self.store.player(player).ok().flatten();
+                    let profile = crate::specs::from_store(
+                        record.as_ref().and_then(|r| r.profile_json.as_deref()),
+                        &self.store,
+                        player,
+                    );
                     if let Some(slot) = self.slot_mut(player) {
                         slot.failures = 0;
                         slot.fetch = FetchState::Idle;
-                        slot.profile = record
-                            .as_ref()
-                            .and_then(|r| r.profile_json.as_deref())
-                            .and_then(ProfileSummary::from_json);
+                        slot.profile = profile;
                         slot.record = record;
                     }
                 }
@@ -914,6 +942,23 @@ impl Session {
             archive.last_archived = event.archived;
         }
         archive.seq += 1;
+        if event.archived.is_some() {
+            for slot in &mut self.slots {
+                if let Some(profile) = &mut slot.profile {
+                    crate::specs::enrich(profile, &self.store, slot.id);
+                }
+            }
+            for candidate in self
+                .pregame
+                .players
+                .iter_mut()
+                .flat_map(|p| &mut p.candidates)
+            {
+                if let Some(profile) = &mut candidate.profile {
+                    crate::specs::enrich(profile, &self.store, candidate.id);
+                }
+            }
+        }
         self.dirty = true;
     }
 
@@ -1160,10 +1205,11 @@ impl Session {
             tracing::warn!(error = %err, "读取玩家记录失败");
             None
         });
-        let profile = record
-            .as_ref()
-            .and_then(|r| r.profile_json.as_deref())
-            .and_then(ProfileSummary::from_json);
+        let profile = crate::specs::from_store(
+            record.as_ref().and_then(|r| r.profile_json.as_deref()),
+            &self.store,
+            id,
+        );
         let current = self.tracker.current().map(|m| m.match_id);
         let encounters = self.store.encounters(id, current).unwrap_or_else(|err| {
             tracing::warn!(error = %err, "统计相遇次数失败");

@@ -2,6 +2,8 @@
 
 ## Broken Arrow 单位图标
 
+`public/spec-icons/` 原样复制自本地 BA-DeckEditor 的专精图标；ID 与单位可用性映射来自 BA-Units 1.2.2.1 的 Specializations / SpecializationAvailabilities 表。图标权利归游戏原权利人，不属于 MIT 许可范围。
+
 `public/unit-icons/` 的单位缩略图来自用户本地 BA-DeckEditor 项目已提取的游戏资源；`src/main/unit-icons.json` 的名称与 ID 映射由 BA-Units 的 Units 表生成。导入脚本为 `scripts/import-unit-icons.mjs`，未复制这两个项目的实现代码。
 
 这些游戏美术资源的权利归原权利人所有，不属于 BAX 的 MIT 许可范围。图标按目录 ID 和名称核对，缺失或无法确认的名称使用兵种类别标记。
