@@ -1,6 +1,6 @@
 # GitHub 发布与应用更新
 
-状态：生效 · 更新：2026-11-19
+状态：生效 · 更新：2026-11-20
 
 ## 使用者
 
@@ -10,7 +10,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 
 ## 首次准备
 
-首个公开版本使用 0.2.0 版本号。发布前检查[验证记录](../validation/player-specs-updater.md)中的实机项目；尚未覆盖的场景需在 Release 说明中准确列明。
+首个公开版本 [v0.2.0](https://github.com/JohnJinHM/BAX/releases/tag/v0.2.0) 已于 2026-11-20 发布并设为 Latest，结果见[首版发布验收](../validation/release-0.2.0.md)。后续发布前检查[验证记录](../validation/player-specs-updater.md)中的剩余项目；尚未覆盖的场景需在 Release 说明中准确列明。
 
 公钥已写入 `src-tauri/tauri.conf.json`。对应私钥在维护者本机仓库外的 `$HOME/.tauri/bax-updater.key`，不要提交到 Git。备份该文件；后续发布必须使用同一私钥，否则已有安装无法验证更新。
 
