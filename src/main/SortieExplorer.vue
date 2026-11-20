@@ -249,7 +249,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       <button v-for="item in ([['players', '按玩家'], ['life', '存续时间'], ['teams', '双方合并']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
     </div>
     <div class="filters">
-      <label>队伍<select v-model="team"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
+      <label>队伍<select v-model="team" class="dropdown-trigger"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
       <CheckFilter v-model="selectedPlayers" label="玩家" :options="playerOptions" />
       <CheckFilter v-model="selectedKinds" label="兵种" :options="kindOptions" />
       <label class="search">单位<input v-model="query" type="search" placeholder="搜索单位名称" /></label>
@@ -264,7 +264,6 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <label v-if="mode === 'players'">批次<select v-model.number="batch"><option :value="0">自动密度</option><option :value="5">5 秒</option><option :value="15">15 秒</option><option :value="30">30 秒</option></select></label>
         <label v-if="mode === 'teams'">统计<select v-model="metric"><option value="count">出兵数量</option><option value="value">净估算价值</option></select></label>
       </div>
-    </div>
       <div class="navigator">
         <svg class="overview" viewBox="0 0 800 40" preserveAspectRatio="none" aria-label="全局出兵密度，拖动选择时间范围" @pointerdown="beginDrag" @pointermove="drag" @pointerup="finishDrag" @pointercancel="dragAnchor = null">
           <rect v-for="(b, i) in overview" :key="i" :x="i * 10" :y="38 - b.entries.length / overviewMax * 32" width="8" :height="Math.max(1, b.entries.length / overviewMax * 32)" fill="var(--bax-muted)" />
@@ -273,9 +272,10 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <div class="ranges"><label>从 {{ time(start) }}<input aria-label="区间开始" type="range" min="0" :max="fullEnd" :value="start" @input="setRange(Math.min(Number(($event.target as HTMLInputElement).value), end), end)" /></label><label>至 {{ time(end) }}<input aria-label="区间结束" type="range" min="0" :max="fullEnd" :value="end" @input="setRange(start, Math.max(Number(($event.target as HTMLInputElement).value), start))" /></label></div>
       </div>
 
-    <p v-if="mode === 'life'" class="selection-help muted">空白处拖动框选；Shift + 点击增减选择，Shift + 框选追加。Esc 取消框选。</p>
+      <p v-if="mode === 'life'" class="selection-help muted">空白处拖动框选；Shift + 点击增减选择，Shift + 框选追加。Esc 取消框选。</p>
+      <div class="axis" :style="{ width: `${plotWidth + 164}px` }"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
+    </div>
     <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }" @scroll="moveSelection()">
-        <div class="axis"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
         <Transition name="analysis-view" mode="out-in"><div :key="mode" ref="selectionSurface" class="plot-content" :class="{ selecting: box }" :tabindex="mode === 'life' ? 0 : undefined" :aria-label="mode === 'life' ? '存续时间单位选择' : undefined" @pointerdown="beginSelection" @pointermove="moveSelection" @pointerup="finishSelection" @pointercancel="closeSelection(true)" @lostpointercapture="closeSelection(true)" @keydown="escapeSelection">
         <template v-if="mode === 'teams'">
           <div v-for="t in teamBins.filter((t) => !team || team === t.team)" :key="t.team" class="timeline-row team-row">
@@ -371,7 +371,7 @@ select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px s
 .resize-handle:hover span, .resize-handle:focus-visible span { background: var(--bax-accent); }
 .resize-handle:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .axis, .timeline-row { display: grid; grid-template-columns: 152px minmax(150px, 1fr); gap: 12px; }
-.axis { position: sticky; top: 0; z-index: 2; background: var(--bax-surface); padding: 8px 0; color: #a2abb7; font-size: 11px; }
+.axis { max-width: 100%; padding: 8px 0; color: #a2abb7; font-size: 11px; }
 .axis > div { display: flex; justify-content: space-between; }.timeline-row { border-top: 1px solid var(--bax-border); }
 .owner { text-align: left; border: 0; border-radius: 0; background: transparent; padding: 6px 0; overflow-wrap: anywhere; min-width: 0; align-self: start; }.owner small { display: block; font-size: 11px; margin-top: 2px; }
 .lane { position: relative; min-width: 150px; }.gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bax-border); pointer-events: none; }

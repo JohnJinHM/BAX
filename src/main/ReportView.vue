@@ -250,6 +250,10 @@ const compositionMetrics = {
 const compositionMetric = ref<keyof typeof compositionMetrics>("value");
 const compositionOptions = Object.entries(compositionMetrics).map(([value, metric]) => ({ value, label: metric.name }));
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+function toggleComposition(key: string) {
+  visibleComposition.value = visibleComposition.value.includes(key)
+    ? visibleComposition.value.filter(value => value !== key) : [...visibleComposition.value, key];
+}
 function selectComposition(key: string) {
   if (compositionGroups.some(g => g.key === key)) visibleComposition.value = [key];
 }
@@ -361,10 +365,11 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
 
-      <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
-      <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击柱条只看该类型。</p>
+      <div class="row composition-head"><h3>兵种构成</h3><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
+      <div class="row composition-stat"><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label></div>
+      <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击类型排除或恢复，点击柱条只看该类型。</p>
       <ul class="composition-legend" aria-label="兵种类别，按条形图从左到右排列">
-        <li v-for="group in compositionGroups" :key="group.key"><label><input v-model="visibleComposition" type="checkbox" :value="group.key" /><i :style="{ background: group.color }" />{{ group.name }}</label></li>
+        <li v-for="group in compositionGroups" :key="group.key"><button :aria-pressed="visibleComposition.includes(group.key)" @click="toggleComposition(group.key)"><i :style="{ background: group.color }" />{{ group.name }}</button></li>
       </ul>
       <EChart v-if="compositionOption" animated-updates :option="compositionOption" :height="compositionHeight" :label="`每名玩家各兵种的${compositionMetrics[compositionMetric].name}`" @select="selectComposition" />
 
@@ -387,9 +392,8 @@ function pendingText(row: HistoryRow | null | undefined): string {
         </thead>
         <tbody>
           <template v-for="p in players" :key="p.id">
-            <tr class="player" :class="{ self: p.id === view.selfId, open: expanded === p.id }" @click="expanded = expanded === p.id ? null : p.id">
+            <tr class="player" tabindex="0" :aria-expanded="expanded === p.id" :aria-controls="`player-units-${p.id}`" :class="{ self: p.id === view.selfId, open: expanded === p.id }" @click="expanded = expanded === p.id ? null : p.id" @keydown.enter.self="expanded = expanded === p.id ? null : p.id" @keydown.space.self.prevent="expanded = expanded === p.id ? null : p.id">
               <td class="left">
-                <button class="row-disclosure" :aria-expanded="expanded === p.id" :aria-controls="`player-units-${p.id}`" :aria-label="`${expanded === p.id ? '收起' : '展开'} ${name(p)} 的单位明细`" @click.stop="expanded = expanded === p.id ? null : p.id"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>
                 <span class="swatch" :style="{ background: teamColor(p.team) }" />
                 <a href="#" class="name" title="打开玩家档案" @click.prevent.stop="openPlayer(p.id)">{{ name(p) }}</a>
                 <span v-if="p.deserter" class="flag" title="游戏记录的离场">离场</span>
@@ -462,16 +466,22 @@ function pendingText(row: HistoryRow | null | undefined): string {
 </template>
 
 <style scoped>
-.composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-muted); font-size: 12px; }
+.composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-fg); font-size: 12px; }
+.report h3 { color: var(--bax-fg); font-size: 14px; }
 .composition-head { margin-top: 20px; font-size: 12px; }
 .composition-head h3 { margin: 0 auto 0 0; }
-.composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
-.composition-legend label { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; cursor: pointer; }
+.composition-stat { justify-content: flex-end; margin-top: 8px; font-size: 12px; }
+.composition-stat label { display: flex; align-items: center; gap: 8px; }
+.composition-stat select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
+.composition-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.composition-legend button[aria-pressed="false"] { color: var(--bax-muted); text-decoration: line-through; }
+.composition-legend button[aria-pressed="false"] i { opacity: .3; }
+.composition-legend button:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 3px; }
 .composition-legend i { width: 10px; height: 10px; flex: none; border-radius: 2px; }
 .report {
   min-width: 0;
 }
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow-x: auto; scrollbar-color: var(--bax-faint) var(--bax-surface); }
 @media (max-width: 650px) {
   .report { padding: 12px; }
   .teams { grid-template-columns: 1fr !important; }
@@ -567,12 +577,7 @@ tr.player {
 tr.player.open {
   background: var(--bax-surface-2);
 }
-.row-disclosure { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 4px; padding: 4px; border: 0; background: transparent; vertical-align: middle; color: var(--bax-muted); }
-.row-disclosure svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms ease-out; }
-.row-disclosure[aria-expanded="true"] svg { transform: rotate(90deg); }
-.row-disclosure:hover { color: var(--bax-accent); }
-.row-disclosure:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 1px; }
-@media (prefers-reduced-motion: reduce) { .row-disclosure svg { transition: none; } }
+tr.player:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: -2px; }
 
 tr.self .name {
   font-weight: 600;

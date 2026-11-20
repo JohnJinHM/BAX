@@ -20,7 +20,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", close));
 
 <template>
   <details ref="root" class="check-filter" @keydown="escape">
-    <summary>{{ label }} <span>{{ count === options.length ? '全部' : `${count}/${options.length}` }}</span></summary>
+    <summary class="dropdown-trigger">{{ label }} <span>{{ count === options.length ? '全部' : `${count}/${options.length}` }}</span></summary>
     <div class="check-options" :aria-label="label">
       <div class="actions"><button type="button" @click="setAll(true)">全选</button><button type="button" @click="setAll(false)">清空</button></div>
       <label v-for="option in options" :key="option.value"><input v-model="selected" type="checkbox" :value="option.value" />{{ option.label }}</label>
@@ -31,7 +31,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", close));
 
 <style scoped>
 .check-filter { position: relative; font-size: 12px; color: var(--bax-fg); }
-summary { cursor: pointer; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bax-faint); border-radius: 4px; background: var(--bax-surface-2); }
+summary { display: flex; align-items: center; list-style: none; cursor: pointer; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bax-faint); border-radius: 4px; background: var(--bax-surface-2); }
+summary::-webkit-details-marker { display: none; }
 summary span { color: var(--bax-muted); margin-left: 8px; }
 summary:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .check-options { position: absolute; top: calc(100% + 4px); left: 0; z-index: 8; min-width: 220px; max-width: min(320px, 75vw); max-height: 280px; overflow: auto; padding: 8px; border: 1px solid var(--bax-faint); border-radius: 4px; background: var(--bax-surface-2); }
