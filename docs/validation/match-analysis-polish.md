@@ -2,7 +2,7 @@
 
 状态：生效 · 更新：2026-11-20
 
-本轮为 0.2.0 后的本地待验收改动，验证与构建只使用 Full。发布在实机验收后进行。
+本轮改动纳入 0.2.1。维护者于 2026-11-20 同意发布，本机验收使用 Full，正式发布沿用 Full／Lite 两版。
 
 ## 原始战报与日志回放
 
@@ -14,8 +14,8 @@
 
 ## 自动检查
 
-- `cargo test --workspace --features bax-app/ocr`：通过，覆盖 AI 解析、PvE 取消与拒收迟到 OCR 候选、下一场恢复、少人队伍、旁观者分离和回收价值。
-- `cargo clippy --workspace --all-targets --features bax-app/ocr -- -D warnings`：通过。
+- `cargo test --workspace --features bax-app/ocr,bax-app/installed-updater`：232 项通过（含文档测试），覆盖 AI 解析、PvE 取消与拒收迟到 OCR 候选、下一场恢复、少人队伍、旁观者分离和回收价值。
+- `cargo clippy --workspace --all-targets --locked --features bax-app/ocr,bax-app/installed-updater -- -D warnings`：通过。
 - `npm run test:ui`：30 项通过，覆盖阶段专精、跨比赛战报隔离、名单人数、出兵布局、刷新保持、框选相交边界与 Shift 选择。
 - `npm run build`：类型检查与生产前端构建通过。
 - impeccable 检测：本次修改的 6 个界面组件无发现。
@@ -23,10 +23,10 @@
 ## Full 构建与启动
 
 - `scripts/build.ps1 -Mode Portable -Edition Full -SkipOcrBuild -SkipNpmInstall`：通过，使用已构建的原生 OCR runtime。
-- 产物位于 `target/release/bax-app.exe`、`target/release/ocr-runtime/` 与 `target/release/bundle/portable/BAX-Full_0.2.0_x64-portable.zip`。
+- 产物位于 `target/release/bax-app.exe`、`target/release/ocr-runtime/` 与 `target/release/bundle/portable/BAX-Full_0.2.1_x64-portable.zip`。
 - 发布目录中的 OCR runtime 自检返回 `ready: true`、协议版本 1。
 - 使用独立数据副本与空日志目录执行 Full `--hidden` 启动，确认引擎、战后归档、WebView2 与快捷键初始化，诊断日志无错误；随后退出该进程。
-- 版本仍为 0.2.0，未创建标签或发布 Release。
+- 发布版本为 0.2.1；安装包签名与双版本更新清单由发布工作流生成。
 
 ## 界面检查
 
@@ -53,7 +53,7 @@
 - 兵种构成恢复类型排除按钮，移除复选框；统计选择与标题、全选／清空同一行。玩家展开箭头移除，整行展开保留键盘操作。
 - 主页面与时间线分别滚动后，时间刻度仍固定于分区顶栏；刻度和单位泳道左右边界一致。
 
-## 待实机验收
+## 后续实机场景
 
 使用 `target/release/bax-app.exe` 与同目录 `ocr-runtime/`，核对一场选图／选卡 → 加载 → 部署 → 结束的专精切换；进入少人自定义并带旁观者，确认实际名单和 OCR 版式；进入 PvE，再回到 PvP，确认本局暂停与下一局恢复。
 

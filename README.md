@@ -2,7 +2,7 @@
 
 《Broken Arrow／断箭》的对局辅助工具。通过本机游戏日志识别对局，从 BATrace 获取玩家与比赛资料，并保存为本地长期记录。
 
-**当前版本：0.2.0。** 首个公开版本包含对局悬浮窗、主窗口、托盘、计时提醒、玩家档案和战后分析。从 [GitHub Releases](https://github.com/JohnJinHM/BAX/releases/latest) 下载 Windows x64 的 Full 或 Lite 安装包、便携版；验收范围与限制见发布说明。
+**当前版本：0.2.1。** 包含对局悬浮窗、主窗口、托盘、计时提醒、玩家档案和战后分析。从 [GitHub Releases](https://github.com/JohnJinHM/BAX/releases/latest) 下载 Windows x64 的 Full 或 Lite 安装包、便携版；验收范围见发布说明。
 
 ## 功能
 

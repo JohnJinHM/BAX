@@ -10,10 +10,8 @@
 
 ## 0.2 实机验收中顺带确认
 
-- 0.2.0 后本地改动等待验收：专精按阶段隐藏与赛后切换、自定义少人与旁观者、PvE 暂停 OCR、出兵多选与置顶工具栏。Full 产物在默认 `target`，见[本轮验证](../validation/match-analysis-polish.md)。验收后再发布。
-
 - 上场专精已接入 OCR 候选与正式名单，后台每局最多补取 5 份敌方最近战报；赛后读取本局组合，个人页统计已有战报场次。验收图标可读性与到达时机，见[口径](../reference/player-specializations.md)。
-- GitHub 签名更新已实现；首次发布前配置 Actions 签名 Secret，验收 Full / Lite 跨版本安装与数据保留，再公开草稿 Release。见[发布指南](../guides/releases.md)。
+- 补充 Full / Lite 跨版本覆盖安装与数据保留的端到端检查，见[发布指南](../guides/releases.md)。
 
 - 锁定后悬浮窗保持可见、背景半透明不变黑（锁定改为直接设置 Win32 样式，见[架构](../architecture/overview.md)），在窗口化、无边框全屏和独占全屏下各看一次。
 
