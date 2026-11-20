@@ -116,6 +116,18 @@ async function refresh() {
         <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
       </div>
 
+      <h3>常用专精 <span class="hint">试运行</span></h3>
+      <p class="hint">按累计经验推测，显示前三项及经验占比；不代表使用场次或本场选择。</p>
+      <div v-if="detail.profile?.favoriteSpecs.length" class="preferences">
+        <span v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids.join('_')">
+          {{ spec.name }} <span class="hint num">{{ percent(spec.experienceShare) }}</span>
+        </span>
+      </div>
+      <p v-else class="hint">暂无专精经验数据。</p>
+      <p v-if="detail.profile?.favoriteSpecPairs.length" class="hint">
+        常用组合：{{ detail.profile.favoriteSpecPairs.map(s => `${s.name}（${percent(s.experienceShare)}）`).join('；') }}
+      </p>
+
       <h3>备注</h3>
       <textarea
         v-model="noteDraft"
@@ -171,6 +183,8 @@ async function refresh() {
 .head h2 {
   margin: 0;
 }
+
+.preferences { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 
 .tag {
   padding: 1px 8px;

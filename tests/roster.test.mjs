@@ -28,3 +28,11 @@ test('ambiguous candidates do not acquire authoritative profile statistics', () 
   const p = { ...candidate(false,'right'), ambiguous: true };
   assert.equal(rosterGroups({ ...match, pregame: { players: [p] } })[0].players[0].profile,null);
 });
+
+test('OCR candidate specialization analysis is reused without exposing provisional IDs', () => {
+  const p = candidate(false, 'left');
+  p.candidates[0].profile.favoriteSpecs = [{ ids: [5], name: '空降部队', experienceShare: .7 }];
+  const row = rosterGroups({ ...match, pregame: { players: [p] } })[0].players[0];
+  assert.deepEqual(row.profile.favoriteSpecs, p.candidates[0].profile.favoriteSpecs);
+  assert.equal(row.id, null);
+});

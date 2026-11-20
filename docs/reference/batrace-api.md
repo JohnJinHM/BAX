@@ -79,6 +79,8 @@
 
 `last_fights_data`：近期比赛 ID 的字符串数组。
 
+`specExp` / `combinedSpecsExp` 已用于[常用专精试运行](player-specializations.md)，按累计经验排序，不转换为使用场次或本场选择。
+
 ## 战报
 
 `matchInfo` 包含地图、开始与结束时间、时长、胜方、`TeamMatchPoints`（双方得分），以及 `Data`：玩家 ID → 该玩家的战报。

@@ -334,6 +334,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="name">
               <a v-if="p.id != null" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
               <template v-else>{{ p.name }}</template><span v-if="p.note" class="note"> · {{ p.note }}</span>
+              <span v-if="p.profile?.favoriteSpecs[0]" class="spec-hint" :title="`常用专精（试运行）：按累计经验推测，不代表本场选择。${p.profile.favoriteSpecs.map(s => `${s.name} ${percent(s.experienceShare)}`).join('；')}`">{{ p.profile.favoriteSpecs[0].name }} · 试</span>
             </span>
             <span
               v-if="p.fetch.state !== 'idle'"
@@ -358,6 +359,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
 </template>
 
 <style scoped>
+.spec-hint { display: block; color: var(--bax-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 .panel {
   --reveal-duration: 240ms;
   --reveal-easing: cubic-bezier(.16, 1, .3, 1);

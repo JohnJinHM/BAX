@@ -47,6 +47,8 @@ function player(
               averageMinutes: 24 + (id % 11),
             },
             statsUpdatedAt: null,
+            favoriteSpecs: [{ ids: [5], name: "美国空降部队", experience: 240000, experienceShare: 0.67 }, { ids: [3], name: "美国海军陆战队", experience: 81000, experienceShare: 0.23 }],
+            favoriteSpecPairs: [{ ids: [3, 5], name: "美国海军陆战队 + 美国空降部队", experience: 120000, experienceShare: 0.65 }],
           },
     profileFetchedAt: rating == null ? null : now - 30_000,
     profileCurrent: rating != null,
