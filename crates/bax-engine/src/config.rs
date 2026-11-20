@@ -68,7 +68,10 @@ impl EngineConfig {
             rate_limit_pause: Duration::from_secs(30),
             reminder_grace_ms: bax_core::reminder::DEFAULT_GRACE_MS,
             // 验证 3：战报几乎实时收录，结束后 2 分钟内都已取到；后面的时间点覆盖站点偶尔的延迟或宕机
-            report_schedule: minutes(&[1, 3, 10, 30, 60, 180, 720, 1440]),
+            report_schedule: [Duration::from_secs(3), Duration::from_secs(10)]
+                .into_iter()
+                .chain(minutes(&[1, 3, 10, 30, 60, 180, 720, 1440]))
+                .collect(),
             report_schedule_unplayed: minutes(&[1, 5, 15]),
             report_poll_interval: Duration::from_secs(30),
             report_spacing: Duration::from_millis(1500),

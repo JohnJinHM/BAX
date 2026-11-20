@@ -93,8 +93,8 @@ export const commands = {
     invoke<void>("report_ui_error", { kind, message, stack }),
   /** 长期库里没有这名玩家时为 null。 */
   playerDetail: (id: number) => invoke<PlayerDetail | null>("player_detail", { id }),
-  /** 查询为空时列出最近见过的玩家。 */
-  searchPlayers: (query: string, limit = 50) => invoke<PlayerHit[]>("search_players", { query, limit }),
+  /** 默认本机优先，然后按同场次数排序；筛选在分页前执行。 */
+  searchPlayers: (query: string, limit = 50, sort = "default", filter = "all", offset = 0) => invoke<PlayerHit[]>("search_players", { query, limit, sort, filter, offset }),
   /** 内容为空时删除备注。 */
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
   refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),

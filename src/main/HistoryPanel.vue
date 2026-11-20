@@ -64,7 +64,6 @@ function reportText(row: HistoryRow): string {
   <div class="layout">
     <section class="card list">
       <div class="row">
-        <h2>比赛记录</h2>
         <span v-if="pending" class="hint">{{ pending }} 场在等战报</span>
       </div>
       <p v-if="failure" class="error">{{ failure }}</p>
@@ -76,7 +75,7 @@ function reportText(row: HistoryRow): string {
           @click="selectedMatch = row.matchId"
         >
           <div class="row-top">
-            <span v-if="row.report.state === 'cancelled'" class="result cancelled">取消</span>
+            <span v-if="row.report.state === 'cancelled'" class="result cancelled">弃</span>
             <span v-else-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
             <span class="map">{{ row.map ?? "地图未知" }}</span>
             <span class="when num">{{ date(row.at) }}</span>
@@ -106,6 +105,8 @@ function reportText(row: HistoryRow): string {
   gap: 16px;
   align-items: start;
 }
+
+.list { position: sticky; top: 0; max-height: calc(100vh - 40px); overflow-y: auto; }
 
 .list h2 {
   margin: 0;
@@ -199,8 +200,7 @@ li.active {
 }
 
 @media (max-width: 1180px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
-  .list ul { display: flex; overflow-x: auto; gap: 8px; max-height: 95px; }
-  .list li { flex: 0 0 245px; }
+  .layout { grid-template-columns: 240px minmax(380px, 1fr); }
+  .list { padding: 10px; }
 }
 </style>

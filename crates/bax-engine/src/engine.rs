@@ -216,10 +216,25 @@ impl Engine {
         query: impl Into<String>,
         limit: u32,
     ) -> Result<Vec<PlayerHit>, CommandError> {
+        self.search_players_filtered(query, limit, 0, "default".into(), "all".into())
+            .await
+    }
+
+    pub async fn search_players_filtered(
+        &self,
+        query: impl Into<String>,
+        limit: u32,
+        offset: u32,
+        sort: String,
+        filter: String,
+    ) -> Result<Vec<PlayerHit>, CommandError> {
         let (done, wait) = oneshot::channel();
         self.send(Command::SearchPlayers {
             query: query.into(),
             limit,
+            offset,
+            sort,
+            filter,
             done,
         })
         .await?;

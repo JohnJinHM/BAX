@@ -8,6 +8,9 @@ import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine
 import { fetchText, mmss, percent, phaseNames, rating } from "../shared/format";
 import { saveSetting, useSetting } from "../shared/settings";
 import { useNow } from "../shared/useNow";
+import type { MatchReportView } from "../shared/bindings/MatchReportView";
+import AnimatedNumber from "../shared/AnimatedNumber.vue";
+import { OverlayAutomation } from "../shared/overlay-automation";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
@@ -17,6 +20,36 @@ const now = useNow(250);
 const current = computed(() => snapshot.value?.current ?? null);
 const locked = computed(() => status.value?.overlayLocked ?? false);
 const failure = ref<string | null>(null);
+const expanded = ref(appearance.value.expanded);
+const automation = new OverlayAutomation();
+const result = ref<MatchReportView | null>(null);
+let reportTicket = 0;
+watch(() => [current.value?.matchId, current.value?.phase, snapshot.value?.archive.seq], async () => {
+  const ticket = ++reportTicket;
+  const match = current.value;
+  if (result.value?.analysis.matchId !== match?.matchId) result.value = null;
+  if (!match || match.phase !== "ended") return;
+  try {
+    const report = await commands.matchReport(match.matchId);
+    if (ticket === reportTicket) result.value = report;
+  } catch (error) { if (ticket === reportTicket) failure.value = errorText(error); }
+}, { immediate: true });
+const ratingResults = computed(() => new Map(result.value?.analysis.players.map(p => [p.id, p]) ?? []));
+const selfResult = computed(() => ratingResults.value.get(result.value?.selfId ?? snapshot.value?.selfId ?? -1));
+const selfDelta = computed(() => {
+  const p = selfResult.value;
+  return p?.newRating != null && p.oldRating != null ? p.newRating - p.oldRating : null;
+});
+function deltaFor(id: number | null) {
+  const p = id == null ? null : ratingResults.value.get(id);
+  return p?.newRating != null && p.oldRating != null ? p.newRating - p.oldRating : null;
+}
+const hasResult = computed(() => !!result.value && result.value.analysis.players.some(p => p.oldRating != null && p.newRating != null));
+watch(() => appearance.value.expanded, value => { expanded.value = value; });
+watch([current, appearance, now, hasResult], () => {
+  const next = automation.update(current.value, appearance.value, now.value, hasResult.value);
+  if (next != null) expanded.value = next;
+}, { immediate: true });
 
 // ---------------------------------------------------------------- 计时
 
@@ -52,8 +85,14 @@ const activeAlert = computed(() => {
 
 // ---------------------------------------------------------------- 队伍
 
+function beforeRating(p: RosterRow): number | null {
+  return (p.id != null ? ratingResults.value.get(p.id)?.oldRating : null) ?? p.profile?.rating ?? null;
+}
 const teams = computed(() => rosterGroups(current.value).filter(g => g.key !== "spectators")
-  .map(g => ({ ...g, average: rating(g.averageValue) })));
+  .map(g => {
+    const values = g.players.flatMap(p => beforeRating(p) != null ? [beforeRating(p)!] : []);
+    return { ...g, rated: values.length, averageValue: values.length ? values.reduce((a, b) => a + b, 0) / values.length : null };
+  }));
 
 /**
  * 收起时的双色计量条：按 ELO 的期望得分公式，由两队均分差算出左边一队的胜率，
@@ -94,6 +133,8 @@ function playerTitle(p: RosterRow): string {
   if (p.profile && !p.profileCurrent) parts.push("资料不是这场比赛取得的");
   const state = fetchText(p.fetch);
   if (state) parts.push(state);
+  const result = p.id != null ? ratingResults.value.get(p.id) : null;
+  if (result?.oldRating != null && result.newRating != null) parts.push(`赛前 ELO ${rating(result.oldRating)} → 赛后 ${rating(result.newRating)}`);
   return parts.join("\n");
 }
 
@@ -108,8 +149,11 @@ async function run(action: () => Promise<void>) {
   }
 }
 
-const toggleExpanded = () =>
-  run(() => saveSetting(appearance.value, "ui.overlay", { expanded: !appearance.value.expanded }));
+const toggleExpanded = () => {
+  automation.manual();
+  expanded.value = !expanded.value;
+  return run(() => saveSetting(appearance.value, "ui.overlay", { expanded: expanded.value }));
+};
 
 // ---------------------------------------------------------------- 锁定后锁按钮仍可点
 
@@ -144,6 +188,7 @@ watch(locked, async () => {
 const panel = ref<HTMLElement | null>(null);
 let observer: ResizeObserver | null = null;
 let lastSize = "";
+let layoutFrame = 0;
 
 function fitWindow() {
   const el = panel.value;
@@ -154,7 +199,7 @@ function fitWindow() {
   const key = `${width}x${height}`;
   if (key === lastSize || width === 0 || height === 0) return;
   lastSize = key;
-  void getCurrentWindow().setSize(new LogicalSize(width, height));
+  void getCurrentWindow().setSize(new LogicalSize(width, height)).catch(() => { lastSize = ""; });
 }
 
 function relayout() {
@@ -165,7 +210,7 @@ function relayout() {
 let unlistenHover: (() => void) | null = null;
 
 onMounted(async () => {
-  observer = new ResizeObserver(relayout);
+  observer = new ResizeObserver(() => { cancelAnimationFrame(layoutFrame); layoutFrame = requestAnimationFrame(relayout); });
   if (panel.value) observer.observe(panel.value);
   // 换到缩放比例不同的显示器时 devicePixelRatio 会变
   window.addEventListener("resize", reportHotspot);
@@ -175,6 +220,8 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   observer?.disconnect();
+  cancelAnimationFrame(layoutFrame);
+  ++reportTicket;
   window.removeEventListener("resize", reportHotspot);
   unlistenHover?.();
 });
@@ -185,7 +232,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
   <div
     ref="panel"
     class="panel"
-    :class="{ unlocked: !locked, alerting: activeAlert }"
+    :class="{ unlocked: !locked, alerting: activeAlert, 'no-motion': !appearance.animations }"
     :style="{ '--bax-opacity': appearance.opacity, zoom: appearance.scale }"
   >
     <header :data-tauri-drag-region="locked ? undefined : ''">
@@ -196,9 +243,9 @@ watch(appearance, () => requestAnimationFrame(relayout));
       <span class="timer num" :class="{ countdown: (elapsed ?? 0) < 0 }">{{ timer }}</span>
       <span class="tools">
         <template v-if="!locked">
-          <button :title="appearance.expanded ? '收起' : '展开'" @click="toggleExpanded">
+          <button :title="expanded ? '收起' : '展开'" :aria-expanded="expanded" @click="toggleExpanded">
             <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path :d="appearance.expanded ? 'M3.5 10L8 5.5l4.5 4.5' : 'M3.5 6L8 10.5L12.5 6'" />
+              <path class="expand-chevron" :class="{ expanded }" d="M3.5 6L8 10.5L12.5 6" />
             </svg>
           </button>
           <button title="打开主窗口" @click="run(commands.openMainWindow)">
@@ -228,11 +275,11 @@ watch(appearance, () => requestAnimationFrame(relayout));
     </div>
 
     <template v-if="current">
-      <section v-if="!appearance.expanded && meter" class="meter" :title="meter.title">
+      <section v-if="!expanded && meter" class="meter" :title="meter.title">
         <div class="meter-head">
           <span class="side" :class="meter.left.tone">
             <span class="side-title">{{ meter.left.title }}</span>
-            <span class="side-avg num">{{ meter.left.average }}</span>
+            <AnimatedNumber class="side-avg" :value="meter.left.averageValue" :enabled="appearance.animations" />
           </span>
           <span v-if="meter.known" class="odds num">
             <span :class="meter.left.tone">{{ percent(meter.share) }}</span>
@@ -241,7 +288,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
           </span>
           <span v-else class="odds odds-label">等待资料</span>
           <span class="side" :class="meter.right.tone">
-            <span class="side-avg num">{{ meter.right.average }}</span>
+            <AnimatedNumber class="side-avg" :value="meter.right.averageValue" :enabled="appearance.animations" />
             <span class="side-title">{{ meter.right.title }}</span>
           </span>
         </div>
@@ -250,15 +297,20 @@ watch(appearance, () => requestAnimationFrame(relayout));
           <span class="fill" :class="meter.right.tone" />
         </div>
       </section>
+      <div class="roster-reveal" :class="{ expanded }" :aria-hidden="!expanded" :inert="!expanded"><div class="roster-content">
+      <div v-if="current.phase === 'ended'" class="result-summary" role="status">
+        <template v-if="selfDelta != null"><span>本场 ELO</span><AnimatedNumber :key="current.matchId" class="result-delta" :class="{ gain: selfDelta > 0, loss: selfDelta < 0 }" :value="selfDelta" signed :enabled="appearance.animations" /><span class="result-total">{{ rating(selfResult?.oldRating) }} → {{ rating(selfResult?.newRating) }}</span></template>
+        <span v-else class="next">{{ result ? '本场没有 ELO 变化数据' : '比赛已结束 · 等待加分数据' }}</span>
+      </div>
       <section
-        v-for="block in appearance.expanded ? teams : []"
+        v-for="block in teams"
         :key="block.key"
         class="team"
         :class="block.tone"
       >
         <div class="team-head">
           <span class="team-title">{{ block.title }}</span>
-          <span class="team-avg num">均分 {{ block.average }}</span>
+          <span class="team-avg num">{{ current.phase === 'ended' ? '赛前均分' : '均分' }} <AnimatedNumber :value="block.averageValue" :enabled="appearance.animations" /></span>
           <span class="team-count num">{{ block.rated }}/{{ block.count }}</span>
         </div>
         <ul>
@@ -268,8 +320,9 @@ watch(appearance, () => requestAnimationFrame(relayout));
             :class="{ self: p.isSelf, stale: p.profile && !p.profileCurrent }"
             :title="playerTitle(p)"
           >
-            <span class="elo num">{{ rating(p.profile?.rating) }}</span>
-            <span class="lv num">{{ p.displayLevel != null ? `Lv${p.displayLevel}` : "" }}</span>
+            <span class="elo num">{{ rating(beforeRating(p)) }}</span>
+            <AnimatedNumber v-if="deltaFor(p.id) != null" class="rating-delta" :class="{ gain: deltaFor(p.id)! > 0, loss: deltaFor(p.id)! < 0 }" :value="deltaFor(p.id)" signed :enabled="appearance.animations" />
+            <span v-else class="lv num">{{ p.displayLevel != null ? `Lv${p.displayLevel}` : "" }}</span>
             <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
             <span class="name">
@@ -286,9 +339,10 @@ watch(appearance, () => requestAnimationFrame(relayout));
           </li>
         </ul>
       </section>
-      <p v-if="current && !current.rosterKnown && appearance.expanded" class="next" role="status">
+      <p v-if="current && !current.rosterKnown" class="next" role="status">
         {{ current.pregame.players.length ? `OCR 识别可能不准确 · ${current.pregame.status}` : '等待玩家名单' }}
       </p>
+      </div></div>
     </template>
     <div v-else class="empty">{{ emptyText }}</div>
 
@@ -306,6 +360,20 @@ watch(appearance, () => requestAnimationFrame(relayout));
   font-size: 13px;
   line-height: 1.35;
 }
+.roster-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 240ms cubic-bezier(.16, 1, .3, 1), opacity 180ms ease-out; }
+.roster-reveal.expanded { grid-template-rows: 1fr; opacity: 1; }
+.roster-content { min-height: 0; overflow: hidden; }
+.expand-chevron { transform-origin: center; transition: transform 180ms ease-out; }
+.expand-chevron.expanded { transform: rotate(180deg); }
+.result-summary { display: flex; align-items: baseline; gap: 10px; padding-top: 8px; }
+.result-delta { font-size: 23px; font-weight: 600; animation: result-arrive 450ms cubic-bezier(.16, 1, .3, 1); }
+.result-total { font-size: 11px; color: var(--bax-muted); }
+.gain { color: var(--bax-good); }
+.loss { color: var(--bax-bad); }
+.rating-delta { text-align: right; font-size: 11px; font-weight: 600; }
+@keyframes result-arrive { from { transform: translateY(5px); opacity: .4; } to { transform: translateY(0); opacity: 1; } }
+.no-motion *, .no-motion { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .panel, .panel * { animation: none !important; transition-duration: 0s !important; } }
 
 .panel.unlocked {
   border: 1px dashed rgb(76 194 255 / 0.6);

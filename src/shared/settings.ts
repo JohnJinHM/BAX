@@ -14,6 +14,10 @@ export interface OverlayAppearance {
   scale: number;
   /** 展开玩家列表；收起时只显示计时与两队均分 */
   expanded: boolean;
+  autoExpand: boolean;
+  collapseBeforeBattleSecs: number;
+  resultDisplaySecs: number;
+  animations: boolean;
 }
 
 export interface AlertSettings {
@@ -34,6 +38,7 @@ export interface DiagSettings {
 }
 
 interface Settings {
+  "ui.sortie": { height: number };
   "ui.ocr": { enabled: boolean };
   "ui.overlay": OverlayAppearance;
   "ui.alerts": AlertSettings;
@@ -42,8 +47,9 @@ interface Settings {
 }
 
 export const defaults: Settings = {
+  "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },
-  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true },
+  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, resultDisplaySecs: 10, animations: true },
   "ui.alerts": { sound: true, showOverlay: true },
   "ui.hotkeys": { toggleOverlay: "Ctrl+Alt+B", toggleLock: "Ctrl+Alt+L" },
   "ui.diag": { level: "standard" },

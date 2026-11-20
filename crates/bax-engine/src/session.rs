@@ -96,6 +96,9 @@ pub(crate) enum Command {
     SearchPlayers {
         query: String,
         limit: u32,
+        offset: u32,
+        sort: String,
+        filter: String,
         done: oneshot::Sender<Result<Vec<PlayerHit>, String>>,
     },
     /// 保存备注；内容为空时删除。
@@ -422,10 +425,24 @@ impl Session {
             Command::PlayerDetail { id, done } => {
                 let _ = done.send(self.player_detail(id).map_err(|e| e.to_string()));
             }
-            Command::SearchPlayers { query, limit, done } => {
+            Command::SearchPlayers {
+                query,
+                limit,
+                offset,
+                sort,
+                filter,
+                done,
+            } => {
                 let _ = done.send(
                     self.store
-                        .search_players(&query, limit.min(500))
+                        .search_players_filtered(
+                            &query,
+                            limit.min(500),
+                            offset,
+                            &sort,
+                            &filter,
+                            self.self_hint,
+                        )
                         .map_err(|e| e.to_string()),
                 );
             }

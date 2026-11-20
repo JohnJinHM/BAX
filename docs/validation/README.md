@@ -26,6 +26,8 @@ Full / Lite 构建验证：[同一主线的两个安装包](full-lite-builds.md)
 
 统一构建入口验证：[Dev / Portable / Installer 六种组合](build-modes.md)。
 
+2026-11-19 修复验证：[旧 OCR 资源、名单补齐、页面布局与悬浮窗自动展开](ocr-overlay-polish.md)。
+
 ## 记录方式
 
 安装与分发验证：[OCR 安装包与 v5 数据库](ocr-packaging.md)（离线运行时、实际安装、文件体积、数据库保留检查）。

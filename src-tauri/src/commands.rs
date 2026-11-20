@@ -129,10 +129,19 @@ pub async fn search_players(
     state: State<'_, AppState>,
     query: String,
     limit: Option<u32>,
+    offset: Option<u32>,
+    sort: Option<String>,
+    filter: Option<String>,
 ) -> Result<Vec<PlayerHit>, String> {
     state
         .engine
-        .search_players(query, limit.unwrap_or(50))
+        .search_players_filtered(
+            query,
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+            sort.unwrap_or_else(|| "default".into()),
+            filter.unwrap_or_else(|| "all".into()),
+        )
         .await
         .map_err(rejected("search_players"))
 }

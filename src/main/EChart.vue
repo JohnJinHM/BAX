@@ -14,12 +14,13 @@ const props = defineProps<{ option: EChartsCoreOption; height: number; label: st
 const el = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
 let observer: ResizeObserver | null = null;
+let resizeFrame = 0;
 
 onMounted(() => {
   if (!el.value) return;
   chart = echarts.init(el.value, null, { renderer: "svg" });
   chart.setOption(props.option);
-  observer = new ResizeObserver(() => chart?.resize());
+  observer = new ResizeObserver(() => { cancelAnimationFrame(resizeFrame); resizeFrame = requestAnimationFrame(() => chart?.resize()); });
   observer.observe(el.value);
 });
 
@@ -35,6 +36,7 @@ watch(
 
 onBeforeUnmount(() => {
   observer?.disconnect();
+  cancelAnimationFrame(resizeFrame);
   chart?.dispose();
   chart = null;
 });

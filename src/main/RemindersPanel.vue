@@ -115,7 +115,7 @@ async function calibrate() {
 
 <template>
   <section class="card">
-    <h2>计时提醒（可选）</h2>
+    <h2>计时提醒</h2>
     <p class="hint">默认不设提醒。需要时添加一条：时间从正式开局（准备阶段结束）算起，到点时响铃并在悬浮窗上闪烁；对局中途才打开 BAX 时，已经过去的提醒不会补发。</p>
     <p v-if="!drafts.length" class="hint">还没有提醒。</p>
     <table v-else>

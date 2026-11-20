@@ -133,33 +133,70 @@ impl Store {
     /// 名字同时在接口资料与日志里的名字中查找，不区分英文大小写。完全匹配 ID 的排在最前，
     /// 其余按最近一次见到的时间排序。
     pub fn search_players(&self, query: &str, limit: u32) -> Result<Vec<PlayerHit>> {
+        self.search_players_filtered(query, limit, 0, "recent", "all", None)
+    }
+
+    /// 筛选和排序在 LIMIT 之前执行，分页不会漏掉常见玩家。
+    pub fn search_players_filtered(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        sort: &str,
+        filter: &str,
+        self_id: Option<PlayerId>,
+    ) -> Result<Vec<PlayerHit>> {
         let query = query.trim();
         let exact_id = query.parse::<u64>().ok().map(id_to_db);
         let pattern = like_pattern(query);
-        let sql = "SELECT p.id, p.name, p.last_log_name, p.rating, p.level, p.last_seen_at,
+        let ordering = match sort {
+            "recent" => "last_seen_at DESC",
+            "ratingDesc" => "rating IS NULL, rating DESC",
+            "ratingAsc" => "rating IS NULL, rating ASC",
+            "name" => "COALESCE(name, last_log_name, '') COLLATE NOCASE",
+            _ => "(id = ?5) DESC, encounters DESC, last_seen_at DESC",
+        };
+        let condition = match filter {
+            "noted" => "has_note = 1",
+            "encountered" => "encounters > 0",
+            "rated" => "rating IS NOT NULL",
+            _ => "1 = 1",
+        };
+        let sql = format!("WITH hits AS (SELECT p.id, p.name, p.last_log_name, p.rating, p.level, p.last_seen_at,
                     (SELECT COUNT(*) FROM match_players mp JOIN matches m ON m.id = mp.match_id
-                      WHERE mp.player_id = p.id AND (m.self_id IS NULL OR m.self_id <> mp.player_id)),
-                    EXISTS (SELECT 1 FROM notes n WHERE n.player_id = p.id)
+                      WHERE mp.player_id = p.id AND (m.self_id IS NULL OR m.self_id <> mp.player_id)) AS encounters,
+                    EXISTS (SELECT 1 FROM notes n WHERE n.player_id = p.id) AS has_note
              FROM players p
              WHERE ?1 = ''
                 OR p.id = ?2
                 OR p.name LIKE ?3 ESCAPE '\\'
                 OR p.last_log_name LIKE ?3 ESCAPE '\\'
-             ORDER BY (p.id = ?2) DESC, p.last_seen_at IS NULL, p.last_seen_at DESC, p.id
-             LIMIT ?4";
-        let mut stmt = self.conn.prepare_cached(sql)?;
-        let rows = stmt.query_map(params![query, exact_id, pattern, limit], |row| {
-            Ok(PlayerHit {
-                id: PlayerId(id_from_db(row.get(0)?)),
-                name: row.get(1)?,
-                log_name: row.get(2)?,
-                rating: row.get(3)?,
-                level: row.get(4)?,
-                last_seen_at: row.get::<_, Option<i64>>(5)?.map(Timestamp::from_millis),
-                encounters: row.get(6)?,
-                has_note: row.get(7)?,
-            })
-        })?;
+             ) SELECT * FROM hits WHERE {condition}
+             ORDER BY (id = ?2) DESC, {ordering}, id
+             LIMIT ?4 OFFSET ?6");
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(
+            params![
+                query,
+                exact_id,
+                pattern,
+                limit,
+                self_id.map(|id| id_to_db(id.get())),
+                offset
+            ],
+            |row| {
+                Ok(PlayerHit {
+                    id: PlayerId(id_from_db(row.get(0)?)),
+                    name: row.get(1)?,
+                    log_name: row.get(2)?,
+                    rating: row.get(3)?,
+                    level: row.get(4)?,
+                    last_seen_at: row.get::<_, Option<i64>>(5)?.map(Timestamp::from_millis),
+                    encounters: row.get(6)?,
+                    has_note: row.get(7)?,
+                })
+            },
+        )?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -407,6 +444,28 @@ mod tests {
         assert_eq!(ash.rating, Some(2100.0));
         assert_eq!(ash.encounters, 2);
         assert!(!ash.has_note);
+    }
+
+    #[test]
+    fn filters_and_default_order_apply_before_pagination() {
+        let mut store = sample();
+        store.set_note(PlayerId(201), "备注", t(1)).expect("备注");
+        let ids = |sort, filter, offset, limit| -> Vec<u64> {
+            store
+                .search_players_filtered("", limit, offset, sort, filter, Some(PlayerId(500)))
+                .expect("查询")
+                .into_iter()
+                .map(|p| p.id.get())
+                .collect()
+        };
+        assert_eq!(ids("default", "all", 0, 2), vec![500, 101]);
+        assert_eq!(ids("default", "all", 2, 2), vec![301, 201]);
+        assert_eq!(ids("default", "noted", 0, 1), vec![201]);
+        assert_eq!(ids("ratingDesc", "rated", 0, 1), vec![101]);
+        assert_eq!(ids("ratingAsc", "all", 0, 1), vec![101]);
+        assert_eq!(ids("default", "encountered", 0, 10), vec![101, 301, 201]);
+        assert_eq!(ids("name", "all", 0, 2), vec![301, 101]);
+        assert!(ids("default", "all", 99, 1).is_empty());
     }
 
     #[test]
