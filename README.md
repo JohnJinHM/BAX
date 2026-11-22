@@ -62,24 +62,6 @@ cargo build --release -p bax-cli
 
 数据保存在 `%LOCALAPPDATA%\BAX`。
 
-## 文档
-
-| 文档 | 内容 |
-|---|---|
-| [项目规划](docs/planning/project-plan.md) | 范围、数据来源、技术方案与推进顺序 |
-| [总体架构](docs/architecture/overview.md) | 模块、数据流、仓库结构 |
-| [架构决策记录](docs/adr/README.md) | 关键决定及其理由 |
-| [可行性验证](docs/validation/README.md) | 五项验证的进度与记录 |
-| [开发指南](docs/guides/development.md) | 环境、构建、测试与命令行工具 |
-| [文档索引与约定](docs/README.md) | 文档放在哪里、怎么写、何时更新 |
-| [协作约定](CONTRIBUTING.md) | 分支、提交与版本 |
-
-## 来源与许可
-
-BAX 采用 MIT 许可，见 [LICENSE](LICENSE)。
-
-BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型同样采用 MIT 许可，来源与许可声明见 [NOTICE.md](NOTICE.md)。
-
 ## Full 与 Lite
 
 Full 的“赛前玩家识别”默认启用；Lite 不提供 OCR，继续从日志获取正式名单。先按画面昵称与等级匹配本地账号，必要时查询在线候选；正式日志 ID 到达后更新。候选不会写成比赛参与记录。首版支持双侧卡片布局，只采集前台游戏客户区，不保存或上传截图。
@@ -97,3 +79,27 @@ pwsh -File scripts/build.ps1 -Mode Installer -Edition Full # 安装包
 ```
 
 构建依赖、产物位置和增量构建方法见 [打包指南](docs/guides/packaging.md)。CLI 不自动采集画面；游戏内验收范围见 [赛前验证](docs/validation/pregame-roster.md)。
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| [项目规划](docs/planning/project-plan.md) | 范围、数据来源、技术方案与推进顺序 |
+| [总体架构](docs/architecture/overview.md) | 模块、数据流、仓库结构 |
+| [架构决策记录](docs/adr/README.md) | 关键决定及其理由 |
+| [可行性验证](docs/validation/README.md) | 五项验证的进度与记录 |
+| [开发指南](docs/guides/development.md) | 环境、构建、测试与命令行工具 |
+| [文档索引与约定](docs/README.md) | 文档放在哪里、怎么写、何时更新 |
+| [协作约定](CONTRIBUTING.md) | 分支、提交与版本 |
+
+## 致谢
+
+- BA-ELO-Overlay 作者 [零壹ZERONE](https://space.bilibili.com/501523106)（哔哩哔哩）：BAX 以 BA-ELO-Overlay 为基础重新实现，日志识别、玩家查询和悬浮窗都从它起步。
+- [BATrace](https://bot.batrace.top/) 数据站：提供玩家资料、战报和单位目录，BAX 的早期验证和补充数据都依靠它。
+- [VRCX](https://github.com/vrcx-team/VRCX)：灵感来源，玩家档案、备注与历史记录的组织方式受它启发。
+
+## 来源与许可
+
+BAX 采用 MIT 许可，见 [LICENSE](LICENSE)。
+
+BAX 以 BA-ELO-Overlay 原型为基础重新实现，已取得原作者同意。原型同样采用 MIT 许可。原型、游戏素材、字体与 OCR 运行时的来源与许可声明见 [NOTICE.md](NOTICE.md)。

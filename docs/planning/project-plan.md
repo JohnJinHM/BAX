@@ -1,14 +1,13 @@
 # BAX 断箭辅助工具项目规划
 
 日期：2026-11-16（America/Los_Angeles）  
-阶段：需求整理与可行性验证  
-项目位置：`C:\Projects\BAX`
+阶段：需求整理与可行性验证
 
 BAX 面向《Broken Arrow／断箭》，提供对局悬浮窗、计时提醒、玩家档案与备注、历史风格统计和战后单位分析。数据链路采用本机游戏日志识别对局，优先通过游戏数据源获取玩家基础资料与战报，由 BATrace 补充和回退，并保存为本地长期记录。数据源方案于 2026-11-21 更新，见 [ADR-0015](../adr/0015-primary-source-with-batrace-fallback.md)。
 
 ## 已确定事项
 
-- 单独建立项目，原型源码位于 `C:\Projects\ba-elo-overlay`，已取得作者同意，可以复用。
+- 单独建立项目，以 BA-ELO-Overlay 原型为基础，已取得作者同意，可以复用其源码。
 - 桌面技术暂定 Tauri＋Rust；前端框架和具体依赖在可行性验证后确定。
 - 当前先完成规划和必要验证，项目开发另行启动。
 - 首阶段排除反作弊、疑似作弊、小号及异常行为判定，以及相关标签、告警和检测详情页。
@@ -171,7 +170,7 @@ Rust 向前端发送当前比赛、玩家摘要、查询进度和提醒事件。
 
 ## 参考资料
 
-- 原型：[项目说明](../../../ba-elo-overlay/README.md)、[主程序](../../../ba-elo-overlay/src/ba_elo_overlay.py)、[原检测模块](../../../ba-elo-overlay/src/elo_cheat_check.py)、[MIT 许可](../../../ba-elo-overlay/LICENSE)。
+- 原型 BA-ELO-Overlay：主程序 `src/ba_elo_overlay.py`、检测模块 `src/elo_cheat_check.py`，MIT 许可；许可声明与移植登记见 [NOTICE.md](../../NOTICE.md)。
 - [BATrace](https://bot.batrace.top/)：玩家资料、比赛详情与单位目录。
 - [VRCX](https://github.com/vrcx-team/VRCX)：玩家档案、备注、历史与主题组织方式的参考。
 - [Tauri 窗口 API](https://v2.tauri.app/reference/javascript/api/namespacewindow/) 与 [Tauri 架构](https://v2.tauri.app/concept/architecture/)：窗口能力及运行结构。

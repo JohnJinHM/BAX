@@ -20,7 +20,7 @@
 | [reference/player-specializations.md](reference/player-specializations.md) | 常用专精试运行口径 | 专精倾向如何计算 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 分支、提交、版本与发布约定 | 怎么提交改动 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 变更日志 | 每个版本变了什么 |
-| [../NOTICE.md](../NOTICE.md) | 原型来源与许可声明 | 复用了谁的代码 |
+| [../NOTICE.md](../NOTICE.md) | 原型、素材、字体与 OCR 运行时的来源与许可声明 | 复用了谁的代码和素材 |
 
 `reference/` 之后还会加入统计口径；`guides/` 之后还会加入构建发布与实机验收清单。`assets/`（文档引用的图片）在有内容时创建。
 

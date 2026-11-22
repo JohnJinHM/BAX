@@ -35,17 +35,6 @@ BAX 自身采用 MIT 许可（见 [LICENSE](LICENSE)）。BAX 中移植自原型
 
 “断箭”皮肤的英文字体 Inter 来自 npm 包 `@fontsource-variable/inter`（5.3.0），woff2 文件随前端打包进应用。字体采用 SIL Open Font License 1.1，版权声明为 `Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)`；许可全文见该包的 `LICENSE`，也可在 https://openfontlicense.org 查阅。字体不属于 BAX 的 MIT 许可范围。
 
-## ba-dragon
-
-战后归档与战报统计参考了 [ba-dragon](https://github.com/AlexanderHYu/ba-dragon)（MIT 许可，`Copyright (c) 2026 AlexanderHYu`）的做法，没有复制代码。参考的内容：
-
-| BAX 文件 | 参考的做法 |
-|---|---|
-| `crates/bax-core/src/report.rs` | 单位成本按目录基础价格加总后，等比例缩放到玩家官方的“出兵价值 − 回收价值”；`WasRefunded` 是回收（全额退款），每条记录算一次出兵 |
-| `crates/bax-engine/src/reports.rs`、`config.rs` | 按比赛 ID 取 `/api/match`、比赛结束后按一串时间点重试；请求串行并留间隔 |
-
-ba-dragon 的玩家水平评分、称号与挂机判断属于对玩家的判定，不在 BAX 的范围内（ADR-0002），没有参考。
-
 ### 许可全文
 
 ```text

@@ -40,5 +40,3 @@ pwsh -File scripts/build.ps1 -Mode Dev -Edition Lite # 独立 Debug EXE；另有
 - 提交信息用 Conventional Commits 格式，摘要用中文。
 - 移植原型代码时在文件头注明来源，并在 `NOTICE.md` 登记。
 - 本机工具链是 Rust 1.88：`rusqlite` 固定在 0.40，`tauri` 与 `@tauri-apps/*` 停在 2.11；全局的 `CC` 环境变量由 `.cargo/config.toml` 置空。
-
-原型源码在 `C:\Projects\ba-elo-overlay`，只作参考，不要修改。

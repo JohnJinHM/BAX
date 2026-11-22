@@ -113,8 +113,8 @@ BAX 现在优先查询 `https://api.brokenarrowgame.tech/user/{id}` 获取基础
 
 ## 收录时间与列表接口
 
-- `/api/match` 不是比赛一结束就有：还没收录时返回 404 或空壳。ba-dragon 的经验是一两分钟，偶尔要好几分钟；本机观察疑似约 10 分钟刷新一次。测量见[验证 3](../validation/03-data-delay.md)。
-- ba-dragon 记录过 `/api/players/matches` 列表停止更新（2026-09 实测最新一条停在 9 月中旬），按比赛 ID 取 `/api/match` 更可靠。
+- `/api/match` 不是比赛一结束就有：还没收录时返回 404 或空壳。实测正常结束的比赛在结束后 1 分钟以内就能取到，取到即完整；没打起来就结束的比赛站点通常不收录。测量见[验证 3](../validation/03-data-delay.md)。
+- 战后归档按比赛 ID 取 `/api/match`，不依赖 `/api/players/matches` 列表是否及时更新。
 - `WasRefunded`：单位被回收（飞机返航、卡车开回、开局卖掉），官方全额退款。它照样上过场，所以算一次出兵，只是不计入花费。
 
 ## 单位分类
