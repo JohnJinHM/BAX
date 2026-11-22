@@ -25,6 +25,9 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
   const params = new URLSearchParams(location.search);
   const saved = localStorage.getItem("bax.dev.ui");
   if (saved) fixtureSnapshot.ui = { ...fixtureSnapshot.ui, ...JSON.parse(saved) };
+  // ?skin=broken-arrow 直接用某个皮肤预览
+  const skin = params.get("skin");
+  if (skin) fixtureSnapshot.ui["ui.skin"] = { id: skin };
   if (options.collapsed) fixtureSnapshot.ui["ui.overlay"] = { opacity: .88, scale: 1, expanded: false, autoExpand: false };
   if (params.has("ended") && fixtureSnapshot.current) {
     fixtureSnapshot.current.matchId = 8999927;

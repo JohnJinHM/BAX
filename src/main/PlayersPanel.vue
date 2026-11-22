@@ -117,7 +117,7 @@ function title(hit: PlayerHit): string {
 }
 .list-controls { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; margin-top: 10px; }
 .list-controls label { display: grid; gap: 4px; color: var(--bax-muted); font-size: 12px; min-width: 0; }
-.list-controls select { width: 100%; padding: 6px 3px; border: 1px solid var(--bax-border); border-radius: 4px; background: var(--bax-surface-2); color: var(--bax-fg); }
+.list-controls select { width: 100%; padding: 6px 3px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); color: var(--bax-fg); }
 .self-mark { color: var(--bax-accent); font-size: 11px; }
 .more { width: 100%; }
 li:focus-visible, select:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
@@ -130,7 +130,7 @@ ul {
 
 li {
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
 
@@ -139,7 +139,8 @@ li:hover {
 }
 
 li.active {
-  background: rgb(76 194 255 / 0.12);
+  background: var(--bax-selected-bg);
+  box-shadow: inset 2px 0 0 var(--bax-selected-edge);
 }
 
 .row-top {

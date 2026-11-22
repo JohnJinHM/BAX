@@ -1,0 +1,7 @@
+/* 内置皮肤。要在 theme.css 之后引入：皮肤覆盖组件变量时，同等优先级的规则以后出现的为准。 */
+
+/* 断箭皮肤的英文字体 Inter，随应用打包（SIL OFL 1.1，见 NOTICE.md）。只有页面用到这个字体时才加载，
+   按文字所属的字符集分块，中文不在其中 */
+@import "@fontsource-variable/inter";
+
+@import "./broken-arrow.css";

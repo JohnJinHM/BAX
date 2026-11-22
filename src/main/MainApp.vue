@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import { useAppStatus, useSnapshot } from "../shared/engine";
 import { errorNames } from "../shared/format";
+import { useSkin } from "../shared/skin";
 import HistoryPanel from "./HistoryPanel.vue";
 import MatchPanel from "./MatchPanel.vue";
 import { currentTab as tab } from "./navigation";
@@ -12,6 +13,7 @@ import SettingsPanel from "./SettingsPanel.vue";
 
 const snapshot = useSnapshot();
 const appStatus = useAppStatus();
+useSkin(snapshot);
 
 const logLine = computed(() => {
   const s = snapshot.value;
@@ -69,7 +71,7 @@ nav {
   flex-direction: column;
   gap: 4px;
   padding: 16px 10px;
-  background: var(--bax-surface);
+  background: var(--bax-nav-bg);
   border-right: 1px solid var(--bax-border);
 }
 
@@ -78,7 +80,7 @@ nav {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--bax-accent);
+  color: var(--bax-brand);
 }
 
 nav button {
@@ -89,7 +91,8 @@ nav button {
 }
 
 nav button.active {
-  background: var(--bax-surface-2);
+  background: var(--bax-nav-active-bg);
+  box-shadow: inset 2px 0 0 var(--bax-nav-active-edge);
   color: var(--bax-fg);
 }
 
@@ -110,6 +113,7 @@ main {
   nav { flex-direction: row; align-items: center; flex-wrap: wrap; padding: 8px; border-right: 0; border-bottom: 1px solid var(--bax-border); }
   .brand { padding: 0 8px; font-size: 16px; }
   nav button { padding: 5px 7px; font-size: 12px; }
+  nav button.active { box-shadow: inset 0 -2px 0 var(--bax-nav-active-edge); }
   .status { display: none; }
   main { padding: 12px; }
 }

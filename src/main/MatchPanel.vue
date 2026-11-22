@@ -156,7 +156,7 @@ async function refresh() {
 
 .tag {
   padding: 1px 8px;
-  border-radius: 4px;
+  border-radius: var(--bax-radius-xs);
   background: var(--bax-surface-2);
   font-size: 12px;
 }
@@ -233,7 +233,11 @@ td.left {
 }
 
 tr.self {
-  background: rgb(76 194 255 / 0.08);
+  background: var(--bax-self-bg);
+}
+
+tr.self > td:first-child {
+  box-shadow: inset 2px 0 0 var(--bax-self-edge);
 }
 
 .strong {

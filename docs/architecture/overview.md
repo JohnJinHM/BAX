@@ -92,6 +92,7 @@ BAX/
 │   ├── overlay/            悬浮窗页面，入口 overlay.html
 │   ├── main/               主窗口页面，入口 index.html
 │   └── shared/             快照订阅与命令、格式化、界面设置、主题变量
+│       ├── skins/          内置皮肤，每个皮肤一组 CSS 变量（ADR-0014）
 │       └── bindings/       由 Rust 类型生成的 TypeScript 类型，不手改
 ├── package.json、vite.config.ts、index.html、overlay.html
 ├── fixtures/               虚构的日志与接口样本，按原始字节保存
@@ -239,7 +240,7 @@ stateDiagram-v2
 
 玩家档案与战后分析是按需读取的大块数据，不放进快照。快照里每名玩家只带备注的正文，悬浮窗据此显示；战后归档只在快照里放 `archive`（待获取的比赛数、本次运行里最近归档的比赛、变化序号），界面看到序号变了再重新读取。
 
-界面设置由界面自己定义，引擎只保存和分发：`ui.overlay`（悬浮窗的不透明度、缩放、展开）、`ui.alerts`（响铃、提醒时显示悬浮窗）、`ui.hotkeys`（两个快捷键）、`ui.diag`（诊断档位）、`ui.overlay.window`（悬浮窗的位置与锁定状态，只由外壳写）。`ui.alerts`、`ui.hotkeys` 与 `ui.diag` 外壳也要读，前端与 Rust 一侧各有一份默认值，需要保持一致。
+界面设置由界面自己定义，引擎只保存和分发：`ui.skin`（皮肤，见 [ADR-0014](../adr/0014-skins.md)）、`ui.overlay`（悬浮窗的不透明度、缩放、展开）、`ui.alerts`（响铃、提醒时显示悬浮窗）、`ui.hotkeys`（两个快捷键）、`ui.diag`（诊断档位）、`ui.overlay.window`（悬浮窗的位置与锁定状态，只由外壳写）。`ui.alerts`、`ui.hotkeys` 与 `ui.diag` 外壳也要读，前端与 Rust 一侧各有一份默认值，需要保持一致。
 
 ## 存储
 

@@ -31,11 +31,11 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", close));
 
 <style scoped>
 .check-filter { position: relative; font-size: 12px; color: var(--bax-fg); }
-summary { display: flex; align-items: center; list-style: none; cursor: pointer; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bax-faint); border-radius: 4px; background: var(--bax-surface-2); }
+summary { display: flex; align-items: center; list-style: none; cursor: pointer; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bax-faint); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); }
 summary::-webkit-details-marker { display: none; }
 summary span { color: var(--bax-muted); margin-left: 8px; }
 summary:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
-.check-options { position: absolute; top: calc(100% + 4px); left: 0; z-index: 8; min-width: 220px; max-width: min(320px, 75vw); max-height: 280px; overflow: auto; padding: 8px; border: 1px solid var(--bax-faint); border-radius: 4px; background: var(--bax-surface-2); }
+.check-options { position: absolute; top: calc(100% + 4px); left: 0; z-index: 8; min-width: 220px; max-width: min(320px, 75vw); max-height: 280px; overflow: auto; padding: 8px; border: 1px solid var(--bax-faint); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); }
 .check-options label { display: flex; align-items: center; gap: 8px; padding: 6px 4px; overflow-wrap: anywhere; cursor: pointer; }
 .check-options label:hover { background: var(--bax-surface); }
 input { flex: none; }

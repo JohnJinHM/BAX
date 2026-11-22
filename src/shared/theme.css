@@ -1,20 +1,29 @@
-/* 颜色、字号与间距都通过变量控制，之后的皮肤功能只需要换一组变量（规划·自定义皮肤）。 */
+/*
+ * 默认皮肤。界面的颜色、字体与圆角都通过这些变量控制，其他皮肤（src/shared/skins/）只覆盖变量，
+ * 不写选择器规则（ADR-0014）。变量写在 [data-skin] 上而不只是 :root，设置页的皮肤预览块
+ * 可以就地套用任一皮肤。变量的用途见 docs/reference/skins.md。
+ */
 
-:root {
+/* ---------------------------------------------------------------- 基础变量 */
+
+:root,
+[data-skin="default"] {
   --bax-font: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
   --bax-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
 
-  /* 底色用 RGB 三元组，方便和不透明度组合 */
+  /* 底色用 RGB 三元组，方便和不透明度组合（悬浮窗） */
   --bax-bg-rgb: 14 17 22;
   --bax-surface: #161b22;
   --bax-surface-2: #1d232c;
   --bax-fg: #e6e9ee;
+  --bax-soft: #a2abb7;
   --bax-muted: #8b949e;
   --bax-faint: #5b636d;
   --bax-border: rgb(255 255 255 / 0.09);
+  --bax-divider: rgb(255 255 255 / 0.05);
 
   --bax-accent: #4cc2ff;
-  --bax-row-hover: color-mix(in srgb, var(--bax-accent) 8%, transparent);
+  --bax-on-accent: #06121a;
   --bax-alpha: #5ea8ff;
   --bax-bravo: #ff8f6b;
   /* 知道本机在哪一队时按敌我着色，不再按 Alpha/Bravo */
@@ -24,9 +33,47 @@
   --bax-warn: #f2c14e;
   --bax-bad: #f0616d;
 
+  /* 面板、控件与列表行、标签与小块 */
   --bax-radius: 8px;
+  --bax-radius-sm: 6px;
+  --bax-radius-xs: 4px;
   --bax-space: 8px;
   --bax-scale: 1;
+
+  --bax-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a2abb7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------- 组件变量：默认由基础变量推出，皮肤可以单独覆盖 */
+
+:root,
+[data-skin] {
+  /* 主窗口背景；吸顶区域需要不透明的面板色 */
+  --bax-app-bg: rgb(var(--bax-bg-rgb));
+  --bax-surface-solid: var(--bax-surface);
+  --bax-row-hover: color-mix(in srgb, var(--bax-accent) 8%, transparent);
+  /* 列表里选中的一项 */
+  --bax-selected-bg: color-mix(in srgb, var(--bax-accent) 12%, transparent);
+  --bax-selected-edge: transparent;
+  /* 名单里的本机玩家 */
+  --bax-self-bg: color-mix(in srgb, var(--bax-accent) 10%, transparent);
+  --bax-self-edge: transparent;
+  /* 计时、均分、ELO 这类最重要的数值 */
+  --bax-value: var(--bax-fg);
+  /* 悬浮窗里的计时与对局状态、两队均分；默认同上 */
+  --bax-overlay-value: var(--bax-value);
+  --bax-brand: var(--bax-accent);
+  --bax-nav-bg: var(--bax-surface);
+  --bax-nav-active-bg: var(--bax-surface-2);
+  --bax-nav-active-edge: transparent;
+  /* 分区标题前的短竖线，宽度为 0 时不显示 */
+  --bax-heading-mark: 0px;
+  --bax-heading-mark-color: var(--bax-accent);
+  /* 悬浮窗背景左侧的渐变：左边缘的不透明度 = 设置的不透明度 × 系数，到渐变宽度处恢复设置的不透明度。
+     默认系数 1、宽度 0%，即纯色 */
+  --bax-overlay-fade-alpha: 1;
+  --bax-overlay-fade-width: 0%;
+  --bax-overlay-border: 1px solid var(--bax-border);
+  --bax-overlay-unlocked-border: 1px dashed color-mix(in srgb, var(--bax-accent) 60%, transparent);
 }
 
 *,

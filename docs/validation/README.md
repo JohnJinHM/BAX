@@ -30,6 +30,8 @@ Full / Lite 构建验证：[同一主线的两个安装包](full-lite-builds.md)
 
 2026-11-19 修复验证：[旧 OCR 资源、名单补齐、页面布局与悬浮窗自动展开](ocr-overlay-polish.md)。
 
+皮肤：[默认皮肤保持不变、断箭皮肤与对比度](skins.md)（预览页截图，桌面应用内切换待确认）。
+
 ## 记录方式
 
 新增功能验证：[常用专精与 GitHub 签名更新](player-specs-updater.md)。

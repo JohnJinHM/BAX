@@ -197,7 +197,7 @@ td {
 select {
   padding: 5px 8px;
   border: 1px solid var(--bax-border);
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   background: var(--bax-surface-2);
 }
 

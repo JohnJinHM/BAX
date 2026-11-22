@@ -8,6 +8,7 @@ import type { MatchReportView } from "../shared/bindings/MatchReportView";
 import type { PlayerReport } from "../shared/bindings/PlayerReport";
 import type { Team } from "../shared/bindings/Team";
 import { commands, errorText, useSnapshot } from "../shared/engine";
+import { activeSkin } from "../shared/skin";
 import {
   compositionGroups,
   count,
@@ -84,18 +85,22 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-const colors = computed(() => ({
-  fg: cssVar("--bax-fg"),
-  muted: cssVar("--bax-muted"),
-  faint: cssVar("--bax-faint"),
-  grid: cssVar("--bax-border"),
-  surface: cssVar("--bax-surface"),
-  surface2: cssVar("--bax-surface-2"),
-  friend: cssVar("--bax-friend"),
-  foe: cssVar("--bax-foe"),
-  alpha: cssVar("--bax-alpha"),
-  bravo: cssVar("--bax-bravo"),
-}));
+const colors = computed(() => {
+  // 依赖当前皮肤：换皮肤后重新取色，图表跟着换
+  void activeSkin.value;
+  return {
+    fg: cssVar("--bax-fg"),
+    muted: cssVar("--bax-muted"),
+    faint: cssVar("--bax-faint"),
+    grid: cssVar("--bax-border"),
+    surface: cssVar("--bax-surface"),
+    surface2: cssVar("--bax-surface-2"),
+    friend: cssVar("--bax-friend"),
+    foe: cssVar("--bax-foe"),
+    alpha: cssVar("--bax-alpha"),
+    bravo: cssVar("--bax-bravo"),
+  };
+});
 
 const selfTeam = computed<Team | null>(() => {
   const v = view.value;
@@ -470,12 +475,12 @@ function pendingText(row: HistoryRow | null | undefined): string {
 .composition-head { margin-top: 20px; font-size: 12px; }
 .composition-head h3 { margin: 0 auto 0 0; }
 .composition-head label { display: flex; align-items: center; gap: 8px; }
-.composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: 4px; }
+.composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: var(--bax-radius-xs); }
 .composition-legend button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; }
 .composition-legend button[aria-pressed="false"] { color: var(--bax-muted); text-decoration: line-through; }
 .composition-legend button[aria-pressed="false"] i { opacity: .3; }
 .composition-legend button:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 3px; }
-.composition-legend i { width: 10px; height: 10px; flex: none; border-radius: 2px; }
+.composition-legend i { width: 10px; height: 10px; flex: none; border-radius: min(2px, var(--bax-radius-xs)); }
 .report {
   min-width: 0;
 }
@@ -491,18 +496,18 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
 .result {
   padding: 1px 10px;
-  border-radius: 4px;
+  border-radius: var(--bax-radius-xs);
   font-weight: 600;
   font-size: 13px;
 }
 
 .result.win {
-  background: rgb(95 211 141 / 0.15);
+  background: color-mix(in srgb, var(--bax-good) 15%, transparent);
   color: var(--bax-good);
 }
 
 .result.loss {
-  background: rgb(240 97 109 / 0.15);
+  background: color-mix(in srgb, var(--bax-bad) 15%, transparent);
   color: var(--bax-bad);
 }
 
@@ -517,7 +522,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
   padding: 10px 12px;
   border: 1px solid var(--bax-border);
   border-top: 2px solid;
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   background: var(--bax-surface-2);
 }
 
@@ -525,6 +530,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
   margin-left: auto;
   font-size: 18px;
   font-weight: 600;
+  color: var(--bax-value);
 }
 
 .figures {
@@ -603,7 +609,7 @@ tr.self .name {
 .flag {
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--bax-radius-xs));
   font-size: 11px;
   background: var(--bax-surface-2);
   color: var(--bax-muted);
@@ -633,7 +639,7 @@ tr.self .name {
 
 .units th,
 .units td {
-  border-bottom-color: rgb(255 255 255 / 0.05);
+  border-bottom-color: var(--bax-divider);
 }
 
 .foot {

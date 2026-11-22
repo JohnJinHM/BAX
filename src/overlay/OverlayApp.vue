@@ -7,6 +7,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
 import { fetchText, mmss, percent, phaseNames, rating } from "../shared/format";
 import { saveSetting, useSetting } from "../shared/settings";
+import { useSkin } from "../shared/skin";
 import { useNow } from "../shared/useNow";
 import { useCurrentReport } from "../shared/useCurrentReport";
 import { matchSpecs, rosterSummary, showOverlaySpecs } from "../shared/match-presentation";
@@ -16,6 +17,7 @@ import { OverlayAutomation } from "../shared/overlay-automation";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
+useSkin(snapshot);
 const appearance = useSetting(snapshot, "ui.overlay");
 const now = useNow(250);
 
@@ -365,8 +367,11 @@ watch(appearance, () => requestAnimationFrame(relayout));
   width: 340px;
   padding: 8px 10px 10px;
   border-radius: var(--bax-radius);
-  background: rgb(var(--bax-bg-rgb) / var(--bax-opacity));
-  border: 1px solid var(--bax-border);
+  /* 不透明度来自设置；皮肤可以让左侧一段从更透明渐变过来（--bax-overlay-fade-*），默认是纯色 */
+  background: linear-gradient(to right, rgb(var(--bax-bg-rgb) / calc(var(--bax-opacity) * var(--bax-overlay-fade-alpha))), rgb(var(--bax-bg-rgb) / var(--bax-opacity)) var(--bax-overlay-fade-width));
+  /* 渐变铺满边框所在的一圈；默认从内边距开始，透明边框下会平铺出另一端的颜色 */
+  background-origin: border-box;
+  border: var(--bax-overlay-border);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -387,7 +392,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
 @media (prefers-reduced-motion: reduce) { .panel, .panel * { animation: none !important; transition-duration: 0s !important; } }
 
 .panel.unlocked {
-  border: 1px dashed rgb(76 194 255 / 0.6);
+  border: var(--bax-overlay-unlocked-border);
 }
 
 .panel.alerting {
@@ -410,7 +415,7 @@ header {
 .phase {
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--bax-radius-xs);
   background: var(--bax-surface-2);
   color: var(--bax-muted);
   white-space: nowrap;
@@ -436,6 +441,7 @@ header {
 .timer {
   font-size: 18px;
   font-weight: 600;
+  color: var(--bax-overlay-value);
 }
 
 .timer.countdown {
@@ -455,7 +461,7 @@ header {
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--bax-radius-xs);
   background: transparent;
   color: var(--bax-muted);
   cursor: pointer;
@@ -523,6 +529,7 @@ header {
 .side-avg {
   font-size: 15px;
   font-weight: 600;
+  color: var(--bax-overlay-value);
 }
 
 .odds {
@@ -553,7 +560,7 @@ header {
 }
 
 .bar .fill {
-  border-radius: 3px;
+  border-radius: min(3px, var(--bax-radius-xs));
   background: var(--tone);
   transition: width 420ms var(--reveal-easing);
 }
@@ -569,8 +576,8 @@ header {
 .alert {
   margin-top: 6px;
   padding: 4px 8px;
-  border-radius: 4px;
-  background: rgb(242 193 78 / 0.18);
+  border-radius: var(--bax-radius-xs);
+  background: color-mix(in srgb, var(--bax-warn) 18%, transparent);
   color: var(--bax-warn);
   font-weight: 600;
 }
@@ -620,11 +627,12 @@ li {
   align-items: center;
   gap: 4px;
   padding: 1px 2px;
-  border-radius: 4px;
+  border-radius: var(--bax-radius-xs);
 }
 
 li.self {
-  background: rgb(76 194 255 / 0.1);
+  background: var(--bax-self-bg);
+  box-shadow: inset 2px 0 0 var(--bax-self-edge);
 }
 .panel.unlocked li:hover, .panel.unlocked li:focus-within { background: var(--bax-row-hover); }
 
@@ -662,7 +670,7 @@ li.stale .elo {
 
 .name a { color: inherit; text-decoration: underline; text-decoration-color: var(--bax-faint); text-underline-offset: 3px; }
 .name a:hover { color: var(--bax-accent); text-decoration-color: currentColor; }
-.name a:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; border-radius: 2px; }
+.name a:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; border-radius: min(2px, var(--bax-radius-xs)); }
 
 .fetch {
   color: var(--bax-faint);

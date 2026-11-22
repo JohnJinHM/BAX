@@ -5,10 +5,26 @@ body {
   line-height: 1.5;
 }
 
+body {
+  min-height: 100vh;
+  background: var(--bax-app-bg);
+}
+
 h2 {
   margin: 0 0 12px;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* 皮肤可以在分区标题前加一道短竖线（--bax-heading-mark），默认宽度为 0 */
+h2::before {
+  content: "";
+  display: inline-block;
+  width: var(--bax-heading-mark);
+  height: 0.8em;
+  margin-right: calc(var(--bax-heading-mark) * 2.5);
+  background: var(--bax-heading-mark-color);
+  vertical-align: -0.05em;
 }
 
 h3 {
@@ -55,7 +71,7 @@ input[type="checkbox"] {
 input[type="text"] {
   padding: 5px 8px;
   border: 1px solid var(--bax-border);
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   background: var(--bax-surface-2);
   outline: none;
 }
@@ -67,7 +83,7 @@ input[type="text"]:focus {
 button {
   padding: 5px 12px;
   border: 1px solid var(--bax-border);
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   background: var(--bax-surface-2);
   cursor: pointer;
 }
@@ -85,7 +101,7 @@ button:disabled {
 .filters summary.dropdown-trigger {
   appearance: none;
   padding-right: 28px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a2abb7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--bax-select-chevron);
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 14px 14px;
@@ -100,6 +116,6 @@ tbody > tr:not(.units-row):focus-within > td,
 button.primary {
   background: var(--bax-accent);
   border-color: var(--bax-accent);
-  color: #06121a;
+  color: var(--bax-on-accent);
   font-weight: 600;
 }

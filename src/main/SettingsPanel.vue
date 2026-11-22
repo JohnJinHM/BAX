@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
+import { normalizeSkin, type SkinId, skins } from "../shared/skins";
 
 const snapshot = useSnapshot();
 const status = useAppStatus();
@@ -18,6 +19,8 @@ const ocr = useSetting(snapshot, "ui.ocr");
 const appearance = useSetting(snapshot, "ui.overlay");
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
+const skin = useSetting(snapshot, "ui.skin");
+const currentSkin = computed(() => normalizeSkin(skin.value.id));
 const message = ref<{ ok: boolean; text: string } | null>(null);
 
 async function run(action: () => Promise<void>, done = "已保存") {
@@ -28,6 +31,10 @@ async function run(action: () => Promise<void>, done = "已保存") {
     message.value = { ok: false, text: errorText(error) };
   }
 }
+
+// ---------------------------------------------------------------- 皮肤
+
+const chooseSkin = (id: SkinId) => run(() => saveSetting(skin.value, "ui.skin", { id }), "已切换皮肤");
 
 // ---------------------------------------------------------------- 日志目录
 
@@ -134,6 +141,32 @@ async function exportDiag() {
       <button class="primary" @click="saveLogDir">使用这个目录</button>
       <button @click="autoLogDir">自动定位</button>
     </div>
+  </section>
+
+  <section class="card">
+    <h2 id="skin-heading">外观</h2>
+    <div class="skins" role="radiogroup" aria-labelledby="skin-heading">
+      <!-- 每个选项带自己的 data-skin，按那个皮肤的变量渲染，当作预览 -->
+      <label v-for="option in skins" :key="option.id" class="skin-option" :data-skin="option.id">
+        <span class="skin-preview" aria-hidden="true">
+          <span class="sp-nav"><i /><i class="on" /><i /></span>
+          <span class="sp-main">
+            <span class="sp-card">
+              <span class="sp-head"><i class="sp-title" /><b class="sp-value num">12:34</b></span>
+              <span class="sp-row self"><i class="sp-friend" /><i class="sp-line" /></span>
+              <span class="sp-row"><i class="sp-foe" /><i class="sp-line" /></span>
+            </span>
+            <span class="sp-button">保存</span>
+          </span>
+        </span>
+        <span class="skin-name">
+          <input type="radio" name="skin" :value="option.id" :checked="currentSkin === option.id" @change="chooseSkin(option.id)" />
+          {{ option.name }}
+        </span>
+        <span class="skin-description">{{ option.description }}</span>
+      </label>
+    </div>
+    <p class="hint">主窗口与悬浮窗同时切换。</p>
   </section>
 
   <section class="card">
@@ -280,8 +313,32 @@ async function exportDiag() {
 </template>
 
 <style scoped>
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.skin-option { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius); background: var(--bax-app-bg); color: var(--bax-fg); font-family: var(--bax-font); cursor: pointer; }
+.skin-option:hover { border-color: color-mix(in srgb, var(--bax-accent) 50%, var(--bax-border)); }
+.skin-option:has(input:checked) { border-color: var(--bax-accent); box-shadow: inset 0 0 0 1px var(--bax-accent); }
+.skin-option:has(input:focus-visible) { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
+.skin-option input { margin: 0; accent-color: var(--bax-accent); }
+.skin-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.skin-description { color: var(--bax-muted); font-size: 12px; }
+.skin-preview { display: grid; grid-template-columns: 28% minmax(0, 1fr); height: 96px; margin-bottom: 4px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-sm); overflow: hidden; }
+.skin-preview i { display: block; }
+.sp-nav { display: flex; flex-direction: column; gap: 6px; padding: 10px 6px; background: var(--bax-nav-bg); border-right: 1px solid var(--bax-border); }
+.sp-nav i { height: 6px; border-radius: min(2px, var(--bax-radius-xs)); background: var(--bax-faint); }
+.sp-nav i.on { background: var(--bax-muted); box-shadow: -3px 0 0 var(--bax-nav-active-edge); }
+.sp-main { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.sp-card { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface); }
+.sp-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.sp-title { width: 40%; height: 5px; background: var(--bax-muted); box-shadow: calc(-1 * var(--bax-heading-mark)) 0 0 var(--bax-heading-mark-color); }
+.sp-value { color: var(--bax-value); font-size: 13px; line-height: 1; }
+.sp-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; background: transparent; }
+.sp-row.self { background: var(--bax-self-bg); box-shadow: inset 2px 0 0 var(--bax-self-edge); }
+.sp-friend, .sp-foe { width: 18px; height: 5px; border-radius: min(2px, var(--bax-radius-xs)); background: var(--bax-friend); }
+.sp-foe { background: var(--bax-foe); }
+.sp-line { flex: 1; height: 4px; background: var(--bax-faint); }
+.sp-button { align-self: flex-end; padding: 1px 8px; border-radius: var(--bax-radius-xs); background: var(--bax-accent); color: var(--bax-on-accent); font-size: 10px; font-weight: 600; }
 .release-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
-input[type="number"] { width: 72px; padding: 5px 8px; border: 1px solid var(--bax-border); border-radius: 6px; background: var(--bax-surface-2); color: var(--bax-fg); }
+input[type="number"] { width: 72px; padding: 5px 8px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-sm); background: var(--bax-surface-2); color: var(--bax-fg); }
 input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .card + .card {
   margin-top: 16px;

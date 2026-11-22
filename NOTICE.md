@@ -30,6 +30,10 @@ BAX 自身采用 MIT 许可（见 [LICENSE](LICENSE)）。BAX 中移植自原型
 | `crates/bax-batrace/src/client.rs` | `fetch_json` | 接口路径、请求头、默认不走代理、检查返回的是 JSON |
 | `crates/bax-engine/src/session.rs`、`config.rs` | `EloService`、`_warm`、`_fill_levels`，常量 `WORKERS`、`INFO_TIMEOUT` | 5 路并发、单人请求 8 秒超时、旧资料兜底、换局后丢弃旧结果、12 秒与 24 秒后重试 |
 
+## Inter 字体
+
+“断箭”皮肤的英文字体 Inter 来自 npm 包 `@fontsource-variable/inter`（5.3.0），woff2 文件随前端打包进应用。字体采用 SIL Open Font License 1.1，版权声明为 `Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)`；许可全文见该包的 `LICENSE`，也可在 https://openfontlicense.org 查阅。字体不属于 BAX 的 MIT 许可范围。
+
 ## ba-dragon
 
 战后归档与战报统计参考了 [ba-dragon](https://github.com/AlexanderHYu/ba-dragon)（MIT 许可，`Copyright (c) 2026 AlexanderHYu`）的做法，没有复制代码。参考的内容：

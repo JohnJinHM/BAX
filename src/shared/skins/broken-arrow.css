@@ -1,0 +1,62 @@
+/*
+ * 断箭皮肤：参照游戏战场 HUD 与图鉴界面。近黑底色 #0f0f0f 加局部提亮，#21221f 直角面板与细分隔线，
+ * 浅色文字。黄色 #f4d42a 只给选中的导航、选中对象的边、主要操作和最重要的数值；
+ * 暖橙 #d98c4c 是第二强调色，用于提醒、备注和表格行悬停。取值依据见 docs/reference/skins.md。
+ * 皮肤文件只覆盖 theme.css 里已有的变量（ADR-0014）。
+ */
+
+[data-skin="broken-arrow"] {
+  /* 英文与数字用随应用打包的 Inter，中文与默认皮肤一样用微软雅黑 */
+  --bax-font: "Inter Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+
+  --bax-bg-rgb: 15 15 15;
+  --bax-app-bg: radial-gradient(90% 70% at 80% -10%, rgba(33, 34, 31, 0.7), transparent 70%), #0f0f0f;
+  --bax-surface: #21221f;
+  /* 再亮就会让对方红 #ff4949 低于 4.5:1 */
+  --bax-surface-2: #262723;
+  --bax-surface-solid: #21221f;
+  --bax-fg: #e7f8e5;
+  --bax-soft: #b6bdb8;
+  --bax-muted: #8f9692;
+  --bax-faint: #5f6663;
+  --bax-border: rgba(231, 248, 229, 0.1);
+  --bax-divider: rgba(231, 248, 229, 0.05);
+
+  --bax-accent: #f4d42a;
+  --bax-on-accent: #0f0f0f;
+  --bax-alpha: #62a8e5;
+  --bax-bravo: #ff4949;
+  --bax-friend: #62a8e5;
+  --bax-foe: #ff4949;
+  --bax-good: #8fd17e;
+  --bax-warn: #d98c4c;
+  --bax-bad: #f26b5f;
+
+  --bax-radius: 2px;
+  --bax-radius-sm: 2px;
+  --bax-radius-xs: 1px;
+
+  --bax-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23b6bdb8' stroke-width='1.5' stroke-linecap='square'/%3E%3C/svg%3E");
+
+  /* 表格行悬停用 25% 的第二强调色；选中与本机玩家用中性提亮加黄色窄边，不铺黄色底 */
+  --bax-row-hover: color-mix(in srgb, var(--bax-warn) 25%, transparent);
+  --bax-selected-bg: rgba(231, 248, 229, 0.07);
+  --bax-selected-edge: #f4d42a;
+  --bax-self-bg: rgba(231, 248, 229, 0.06);
+  --bax-self-edge: #f4d42a;
+  --bax-value: #f4d42a;
+  /* 悬浮窗叠在游戏画面上，计时、对局状态与均分用浅色文字，不用黄色 */
+  --bax-overlay-value: #e7f8e5;
+  --bax-brand: #e7f8e5;
+  --bax-nav-bg: rgba(33, 34, 31, 0.5);
+  --bax-nav-active-bg: rgba(231, 248, 229, 0.05);
+  --bax-nav-active-edge: #f4d42a;
+  --bax-heading-mark: 3px;
+  --bax-heading-mark-color: #5f6663;
+
+  /* 悬浮窗：按设置的不透明度，左边缘从透明开始，到一半宽度处恢复；不画边框，解锁时也不画虚线 */
+  --bax-overlay-fade-alpha: 0;
+  --bax-overlay-fade-width: 50%;
+  --bax-overlay-border: 1px solid transparent;
+  --bax-overlay-unlocked-border: 1px solid transparent;
+}

@@ -120,7 +120,7 @@ ul {
 
 li {
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
 
@@ -129,7 +129,8 @@ li:hover {
 }
 
 li.active {
-  background: rgb(76 194 255 / 0.12);
+  background: var(--bax-selected-bg);
+  box-shadow: inset 2px 0 0 var(--bax-selected-edge);
 }
 
 .row-top {
@@ -157,18 +158,18 @@ li.active {
 
 .result {
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--bax-radius-xs));
   font-size: 12px;
   font-weight: 600;
 }
 
 .result.win {
-  background: rgb(95 211 141 / 0.15);
+  background: color-mix(in srgb, var(--bax-good) 15%, transparent);
   color: var(--bax-good);
 }
 
 .result.loss {
-  background: rgb(240 97 109 / 0.15);
+  background: color-mix(in srgb, var(--bax-bad) 15%, transparent);
   color: var(--bax-bad);
 }
 

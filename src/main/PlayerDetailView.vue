@@ -203,14 +203,14 @@ async function refresh() {
 .spec-chart { list-style: none; padding: 0; margin: 12px 0 24px; max-width: 760px; }
 .spec-chart li { display: grid; grid-template-columns: 28px minmax(100px, 1fr) minmax(60px, 2fr) 44px; align-items: center; gap: 10px; margin: 8px 0; }
 .spec-name { overflow-wrap: anywhere; font-size: 13px; }
-.spec-track { display: block; height: 8px; border-radius: 3px; background: var(--bax-surface-2); }
+.spec-track { display: block; height: 8px; border-radius: min(3px, var(--bax-radius-xs)); background: var(--bax-surface-2); }
 .spec-track > span { display: block; height: 100%; border-radius: inherit; background: var(--bax-accent); }
 .spec-count { text-align: right; font-size: 12px; }
 
 .tag {
   padding: 1px 8px;
-  border-radius: 4px;
-  background: rgb(76 194 255 / 0.15);
+  border-radius: var(--bax-radius-xs);
+  background: color-mix(in srgb, var(--bax-accent) 15%, transparent);
   color: var(--bax-accent);
   font-size: 12px;
 }
@@ -240,13 +240,14 @@ async function refresh() {
 .big {
   font-size: 20px;
   font-weight: 600;
+  color: var(--bax-value);
 }
 
 textarea {
   width: 100%;
   padding: 8px;
   border: 1px solid var(--bax-border);
-  border-radius: 6px;
+  border-radius: var(--bax-radius-sm);
   background: var(--bax-surface-2);
   color: inherit;
   font: inherit;
