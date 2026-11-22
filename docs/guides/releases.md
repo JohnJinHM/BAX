@@ -1,6 +1,6 @@
 # GitHub 发布与应用更新
 
-状态：生效 · 更新：2026-11-20
+状态：生效 · 更新：2026-11-21
 
 ## 使用者
 
@@ -10,7 +10,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 
 ## 签名配置
 
-当前 Latest 为 [v0.2.1](https://github.com/JohnJinHM/BAX/releases/tag/v0.2.1)，结果见[本次发布验收](../validation/release-0.2.1.md)；首版记录见[0.2.0 发布验收](../validation/release-0.2.0.md)。后续发布前查看最新验收记录，Release 说明列明本次覆盖的范围与剩余项目。
+当前 Latest 为 [v0.2.2](https://github.com/JohnJinHM/BAX/releases/tag/v0.2.2)，结果见[本次发布验收](../validation/release-0.2.2.md)；历史记录见 [0.2.1](../validation/release-0.2.1.md) 与 [0.2.0](../validation/release-0.2.0.md)。后续发布前查看最新验收记录，Release 说明列明本次覆盖的范围与剩余项目。
 
 公钥已写入 `src-tauri/tauri.conf.json`。对应私钥在维护者本机仓库外的 `$HOME/.tauri/bax-updater.key`，不要提交到 Git。备份该文件；后续发布必须使用同一私钥，否则已有安装无法验证更新。
 

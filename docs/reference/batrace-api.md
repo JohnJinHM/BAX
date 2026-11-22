@@ -51,7 +51,7 @@ BAX 现在优先查询 `https://api.brokenarrowgame.tech/user/{id}` 获取基础
 |---|---|---|
 | 超时 | 超时 | 是 |
 | 连接失败、读到一半断开 | 网络 | 是 |
-| HTTP 429 | 限流，读取 `Retry-After` 的秒数 | 是，并暂停全部请求 |
+| HTTP 429 | 限流，读取 `Retry-After` 的秒数 | 是，并暂停对应来源的请求 |
 | HTTP 5xx | 站点出错 | 是 |
 | HTTP 404，或空结果 | 没有收录 | 否 |
 | HTTP 401、403 等其他 4xx | 被拒绝 | 否 |
