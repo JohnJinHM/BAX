@@ -181,7 +181,8 @@ export function fixtureHits(query: string): PlayerHit[] {
 }
 // ------------------------------------------------------------ 比赛记录与战后分析
 
-const maps = ["Airport", "Central Village", "Suwalki", "Baltiisk", "Coast"];
+// 最后一个是虚构的长地图名，用来检查比赛记录列表的省略
+const maps = ["Airport", "Central Village", "Suwalki", "Baltiisk", "Coast", "Northern Industrial Harbor District"];
 
 export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) => {
   const matchId = 9000001 - i * 37;

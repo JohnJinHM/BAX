@@ -44,10 +44,11 @@ function date(at: number): string {
   return new Date(at).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+// 列表行右侧的状态只放四个字以内，保持每行等高；需要更完整的说明时放进 title
 function reportText(row: HistoryRow): string {
   switch (row.report.state) {
     case "cancelled":
-      return "准备阶段取消";
+      return "取消";
     case "ready":
       return "有战报";
     case "pending":
@@ -57,6 +58,10 @@ function reportText(row: HistoryRow): string {
     case "none":
       return row.phase === "ended" ? "" : phaseNames[row.phase];
   }
+}
+
+function reportTitle(row: HistoryRow): string | undefined {
+  return row.report.state === "cancelled" ? "准备阶段取消，不获取战报" : undefined;
 }
 </script>
 
@@ -85,7 +90,7 @@ function reportText(row: HistoryRow): string {
             <span class="num">{{ row.matchId }}</span>
             <span v-if="row.durationMs != null" class="num">{{ mmss(row.durationMs) }}</span>
             <span>{{ row.players }} 人</span>
-            <span class="state" :class="row.report.state">{{ reportText(row) }}</span>
+            <span class="state" :class="row.report.state" :title="reportTitle(row)">{{ reportText(row) }}</span>
           </div>
         </li>
       </ul>
@@ -134,6 +139,7 @@ li.active {
   box-shadow: inset 2px 0 0 var(--bax-selected-edge);
 }
 
+/* 每行固定一行高：地图名过长时只省略地图名，日期、标签与状态不换行 */
 .row-top {
   display: flex;
   align-items: center;
@@ -141,23 +147,33 @@ li.active {
 }
 
 .map {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .when {
+  flex-shrink: 0;
   margin-left: auto;
   font-size: 12px;
   color: var(--bax-muted);
+  white-space: nowrap;
 }
 
 .row-sub {
   display: flex;
   gap: 8px;
+  white-space: nowrap;
+}
+
+.row-sub > span {
+  flex-shrink: 0;
 }
 
 .result {
+  flex-shrink: 0;
   padding: 0 5px;
   border-radius: min(3px, var(--bax-radius-xs));
   font-size: 12px;
