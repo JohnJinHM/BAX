@@ -1,6 +1,6 @@
 # 开发指南
 
-状态：生效 · 更新：2026-11-17
+状态：生效 · 更新：2026-11-21
 
 本文说明如何在本机构建、测试和运行 BAX。分支与提交约定见 [CONTRIBUTING.md](../../CONTRIBUTING.md)。
 
@@ -60,6 +60,8 @@ npm run bindings                  # Rust 一侧改了快照类型之后，重新
 
 `bax-app.exe --hidden` 启动时不显示悬浮窗，只有托盘图标。数据目录与命令行工具相同，也可以用 `BAX_DATA_DIR` 指定。
 
+提供给用户直接运行的 Debug 版必须通过 `scripts/build.ps1 -Mode Dev` 构建。直接 `cargo build -p bax-app` 会生成依赖 `localhost:1420` 的开发程序；前端资源和独立启动要求见[打包指南](packaging.md#热更新开发)。
+
 ### 诊断日志
 
 桌面应用把运行过程写进 `%LOCALAPPDATA%\BAX\diag\`，每次启动一个文件，开发版同时输出到终端。格式、档位和隐私规则见 [ADR-0007](../adr/0007-diagnostic-logging.md)。
@@ -100,7 +102,8 @@ npx vite                          # 然后打开下面的地址
 | `bax logs pregame [文件] [--all]` | 对照加载前玩家线索、跟踪器接收结果与正式名单，定位缺人来自日志还是状态合并 |
 | `bax logs import [--recent N]` | 把历史日志里的比赛导入长期库，用于统计以前同场的次数 |
 | `bax run [--json]` | 无界面运行引擎，打印每次状态变化（Ctrl+C 结束） |
-| `bax api player <ID>` / `match <ID>` / `units` | 访问 BATrace，`--raw` 输出响应原文 |
+| `bax api player <ID>` / `match <ID>` / `units` | 通过主源与 BATrace 查询，`--raw` 输出兼容响应（主源会进行字段转换） |
+| `bax api sources` | 查询主源玩家资料、战报及 BATrace 补充接口的状态 |
 | `bax api check-cache <原型缓存>` | 用原型 `elo_cache.sqlite` 里的真实响应检查数据模型，不联网 |
 | `bax reports [--limit N]` | 最近比赛的战报获取情况：比赛结束后多久取到、试了几次、还在等的下一次时刻（验证 3）；只读，不升级长期库 |
 | `bax diag path` | 显示诊断日志目录和其中的文件 |

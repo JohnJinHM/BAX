@@ -1,6 +1,6 @@
 # Windows Full / Lite 编译与打包
 
-状态：生效 · 更新：2026-11-20
+状态：生效 · 更新：2026-11-21
 
 ## 版本与主线
 
@@ -67,6 +67,8 @@ ZIP 内有一层版本目录，包含 `bax-app.exe`、`start.cmd`、使用说明
 
 Dev 构建是独立 Debug EXE；需要前端热更新时仍使用 Tauri 开发服务器：
 
+交付可直接双击的 Debug 版必须使用 `scripts/build.ps1 -Mode Dev`，它通过 `tauri build --debug` 构建前端并启用内置资源协议。直接执行 `cargo build -p bax-app` 生成的程序仍使用 `devUrl`（`http://localhost:1420`），关闭 Vite 后就会连接失败；即使此前执行过 `npm run build`，也不能据此作为独立版本交付。同一输出目录里的 `cargo build` / `tauri dev` 会覆盖独立 Debug EXE，交付前应重新运行统一脚本。
+
 ```powershell
 $env:CARGO_TARGET_DIR = "$PWD/target/editions/lite"
 npx tauri dev
@@ -84,7 +86,7 @@ npx tauri dev --features ocr --config src-tauri/tauri.ocr.conf.json
 
 OCR 仅在前台为 Broken Arrow、日志显示赛前连接正常且正式名单未知时采集。布局是约 16:9 的双侧五行卡片；不覆盖其他等候大厅布局或超宽屏。最低接受 1280×720，低分辨率可能只识别部分卡片；不确定的名字或等级会被拒绝，日志 ID 到达后替换候选。字体中的缺字方框、同形异码字符无法仅凭截图确定账号。
 
-OCR 无网络请求和模型下载路径。BATrace 查询仍需联网。安装器若发现 WebView2 缺失，会联网补装。
+OCR 无网络请求和模型下载路径。玩家资料与战报的数据源查询仍需联网。安装器若发现 WebView2 缺失，会联网补装。
 
 ## 验证
 

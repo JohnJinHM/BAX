@@ -537,6 +537,7 @@ mod tests {
             .mount(&server)
             .await;
         let client = BatraceClient::new(bax_batrace::ClientConfig {
+            upstream: None,
             base_url: server.uri(),
             ..Default::default()
         })
@@ -598,6 +599,7 @@ mod tests {
     async fn friendly_and_unknown_sides_never_query_the_api() {
         let server = MockServer::start().await;
         let client = BatraceClient::new(bax_batrace::ClientConfig {
+            upstream: None,
             base_url: server.uri(),
             ..Default::default()
         })

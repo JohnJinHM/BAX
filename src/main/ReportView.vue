@@ -318,7 +318,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
     case "cancelled":
       return "这场比赛在准备阶段取消，不获取战报。";
     case "pending":
-      return `正在等 BATrace 收录战报：已经试了 ${r.attempts} 次，${date(r.nextAt)} 再试。`;
+      return `正在等数据源收录战报：已经试了 ${r.attempts} 次，${date(r.nextAt)} 再试。`;
     case "gaveUp":
       return `试了 ${r.attempts} 次都没有取到战报${r.lastError ? `（${r.lastError}）` : ""}，不再自动尝试。`;
     default:
@@ -453,7 +453,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
       </table></div>
 
       <p class="hint foot">
-        数据来自 BATrace 战报。队伍与玩家的合计是官方数据；单位与兵种的价值按单位目录的基础价格估算，
+        数据来自已归档战报。队伍与玩家的合计使用战报原始统计；单位与兵种的价值按单位目录的基础价格估算，
         并按每人官方的出兵价值等比例缩放，不含改装选项的差别。点玩家一行展开他的单位明细。
       </p>
       <p v-if="!view.analysis.catalogComplete" class="error">

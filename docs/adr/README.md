@@ -20,6 +20,7 @@
 | [0012](0012-signed-github-updates.md) | GitHub Release 签名更新与双版本发布 | 已采纳 | 2026-11-19 |
 | [0013](0013-last-match-specializations.md) | 通过最近战报补充敌方上次专精 | 已采纳 | 2026-11-19 |
 | [0014](0014-skins.md) | 皮肤是内置的 CSS 变量组 | 提议 | 2026-11-21 |
+| [0015](0015-primary-source-with-batrace-fallback.md) | 游戏数据源优先，BATrace 补充与回退 | 已采纳 | 2026-11-21 |
 
 ## 什么时候写
 

@@ -98,6 +98,7 @@ impl Fixture {
         let mut config = EngineConfig::new(self.dir.path());
         config.log_dir = Some(self.logs.clone());
         config.api = ClientConfig {
+            upstream: None,
             base_url: self.server.uri(),
             timeout: Duration::from_secs(3),
             player_info_timeout: Duration::from_secs(3),

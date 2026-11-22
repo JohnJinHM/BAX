@@ -10,7 +10,7 @@
 | [adr/](adr/README.md) | 架构决策记录 | 为什么这样定 |
 | [validation/](validation/README.md) | 可行性验证的进度与记录 | 实测结果如何，影响了哪些设计 |
 | [reference/gamelog.md](reference/gamelog.md) | 游戏日志：文件、记录格式、事件与取值 | 日志里写了什么，怎么读 |
-| [reference/batrace-api.md](reference/batrace-api.md) | BATrace 接口：路径、错误分类、字段含义与特殊取值 | 接口返回什么，哪些值要特殊对待 |
+| [reference/batrace-api.md](reference/batrace-api.md) | 主源与 BATrace：路径、字段转换、缓存、回退及状态检查 | 数据从哪里来，哪些功能仍需补充源 |
 | [reference/sortie-explorer.md](reference/sortie-explorer.md) | 出兵分析：时间筛选、批次、价值、存续与单位图标 | 图表如何呈现与计算 |
 | [reference/match-modes.md](reference/match-modes.md) | 自定义人数、旁观者、PvE 与 OCR | 特殊对局如何显示与识别 |
 | [reference/skins.md](reference/skins.md) | 皮肤变量、内置皮肤的取值依据、新增皮肤 | 皮肤能改什么，怎么加一个 |

@@ -147,6 +147,7 @@ async fn diagnostics_keep_names_out_and_ids_in_their_fields() {
     let mut engine_config = EngineConfig::new(dir.path());
     engine_config.log_dir = Some(logs.clone());
     engine_config.api = ClientConfig {
+        upstream: None,
         base_url: server.uri(),
         timeout: Duration::from_secs(3),
         player_info_timeout: Duration::from_secs(3),

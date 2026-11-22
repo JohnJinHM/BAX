@@ -14,6 +14,7 @@ const UNITS: &str = include_str!("../../../../fixtures/batrace/units.json");
 
 fn client(server: &MockServer) -> BatraceClient {
     BatraceClient::new(ClientConfig {
+        upstream: None,
         base_url: server.uri(),
         timeout: Duration::from_millis(600),
         player_info_timeout: Duration::from_millis(300),
@@ -436,6 +437,7 @@ async fn an_unreachable_server_is_a_network_error() {
 
     // Windows 对本机已关闭的端口会重试约两秒才报告连接被拒，超时要留得比这更长
     let client = BatraceClient::new(ClientConfig {
+        upstream: None,
         base_url: format!("http://{addr}"),
         timeout: Duration::from_secs(20),
         ..ClientConfig::default()
@@ -454,6 +456,7 @@ async fn an_unreachable_server_is_a_network_error() {
 fn invalid_base_url_is_rejected_up_front() {
     for base in ["", "bot.batrace.top", "ftp://example.invalid"] {
         let err = BatraceClient::new(ClientConfig {
+            upstream: None,
             base_url: base.to_owned(),
             ..ClientConfig::default()
         })
@@ -463,6 +466,7 @@ fn invalid_base_url_is_rejected_up_front() {
     // 末尾的斜杠不影响拼接
     assert!(
         BatraceClient::new(ClientConfig {
+            upstream: None,
             base_url: "https://example.invalid/".to_owned(),
             ..ClientConfig::default()
         })

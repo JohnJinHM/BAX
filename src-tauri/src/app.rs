@@ -89,6 +89,7 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            commands::check_data_sources,
             commands::get_snapshot,
             crate::updater::check_update,
             crate::updater::install_update,

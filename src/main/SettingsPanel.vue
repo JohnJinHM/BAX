@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
-import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
+import { commands, errorText, useAppStatus, useSnapshot, type SourceCheck } from "../shared/engine";
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 import { normalizeSkin, type SkinId, skins } from "../shared/skins";
 
+const sourceChecks = ref<SourceCheck[] | null>(null);
+const sourcesBusy = ref(false);
+const sourcesError = ref("");
+async function checkSources() {
+  if (sourcesBusy.value) return;
+  sourcesBusy.value = true;
+  sourcesError.value = "";
+  try { sourceChecks.value = await commands.checkDataSources(); }
+  catch (error) { sourcesError.value = errorText(error); }
+  finally { sourcesBusy.value = false; }
+}
 const snapshot = useSnapshot();
 const status = useAppStatus();
 const update = computed(() => status.value?.update);
@@ -107,6 +118,23 @@ async function exportDiag() {
 </script>
 
 <template>
+  <section class="card" aria-labelledby="sources-heading" :aria-busy="sourcesBusy">
+    <h2 id="sources-heading">数据源</h2>
+    <p>玩家基础资料与战报优先使用主源；BATrace 补充昵称搜索、完整统计和单位目录，主源失败时自动回退。</p>
+    <p class="hint">优先复用缓存。服务异常时暂停重试，已保存的资料与战报仍可查看。</p>
+    <button :disabled="sourcesBusy" @click="checkSources">{{ sourcesBusy ? "正在查询…" : "查询数据源状态" }}</button>
+    <p v-if="!sourceChecks && !sourcesBusy" class="hint">尚未查询。手动检查会请求少量公开样本，结果保留 30 秒。</p>
+    <p v-if="sourcesBusy" role="status">正在分别检查各接口，通常需要几秒钟…</p>
+    <p v-if="sourcesError" class="error" role="alert">{{ sourcesError }}</p>
+    <div v-if="sourceChecks" class="source-results" aria-live="polite">
+      <div v-for="source in sourceChecks" :key="source.name" class="source-result">
+        <strong>{{ source.name }}</strong>
+        <span :class="source.available ? 'hint' : 'error'">{{ source.available ? "可用" : "未通过" }} · {{ source.message }}</span>
+        <span class="hint num">{{ source.latencyMs }} ms · {{ new Date(source.checkedAt * 1000).toLocaleTimeString() }}</span>
+      </div>
+      <p class="hint">结果仅代表本机此次样本请求。战报样本可能过期；一个接口可用不代表所有功能正常。</p>
+    </div>
+  </section>
   <section v-if="update" class="card">
     <h2>应用更新</h2>
     <p>BAX {{ update.edition }} · {{ update.currentVersion }}</p>
@@ -315,6 +343,14 @@ async function exportDiag() {
 </template>
 
 <style scoped>
+.source-results { margin-top: 1rem; }
+.source-result { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(0, 2fr); gap: .35rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--bax-border); overflow-wrap: anywhere; }
+.source-result > :last-child { grid-column: 2; }
+@media (max-width: 640px) {
+  .source-result { grid-template-columns: minmax(0, 1fr); }
+  .source-result > :last-child { grid-column: 1; }
+}
+
 .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .skin-option { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius); background: var(--bax-app-bg); color: var(--bax-fg); font-family: var(--bax-font); cursor: pointer; }
 .skin-option:hover { border-color: color-mix(in srgb, var(--bax-accent) 50%, var(--bax-border)); }

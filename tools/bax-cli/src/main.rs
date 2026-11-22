@@ -127,6 +127,8 @@ enum LogsCommand {
 
 #[derive(Debug, Subcommand)]
 enum ApiCommand {
+    /// 查询各数据源的公开样本可用性
+    Sources,
     /// 查询一名玩家的资料
     Player {
         id: u64,

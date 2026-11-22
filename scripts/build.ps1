@@ -47,6 +47,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw '前端依赖安装失败；已有依赖且开发服务器占用文件时，可使用 -SkipNpmInstall' }
     }
     if (-not (Test-Path -LiteralPath 'node_modules/@tauri-apps/cli/tauri.js')) { throw '缺少前端依赖，请先运行 npm ci' }
+    # Dev 也必须走 tauri build：打包前端并启用 custom-protocol，不能改成 cargo build。
     $buildArgs = @('build')
     if ($Mode -eq 'Installer') { $buildArgs += @('--bundles', 'nsis') } else { $buildArgs += '--no-bundle' }
     if ($Mode -eq 'Dev') { $buildArgs += '--debug' }
@@ -84,7 +85,7 @@ try {
         if ($protocol.protocolVersion -ne 1 -or $protocol.runtime -ne 'native') { throw '输出目录 OCR 协议不匹配' }
     }
     if ($Mode -eq 'Dev') {
-        Write-Output "Debug 程序：$exe"
+        Write-Output "独立 Debug 程序（已内置前端，无需 localhost 开发服务器）：$exe"
         if ($Edition -eq 'Full') { Write-Output "配套资源：$(Join-Path $output 'ocr-runtime')" }
     } else {
         $version = (Get-Content 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json).version

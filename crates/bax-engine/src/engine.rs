@@ -74,6 +74,10 @@ pub struct Engine {
 }
 
 impl Engine {
+    pub async fn check_data_sources(&self) -> Vec<bax_batrace::client::SourceCheck> {
+        self.client.check_sources().await
+    }
+
     /// 打开长期库并启动引擎。必须在 tokio 运行时里调用。
     pub fn start(config: EngineConfig, clock: Arc<dyn Clock>) -> Result<Engine, EngineError> {
         let started = Instant::now();

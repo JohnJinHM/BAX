@@ -13,16 +13,21 @@ use reqwest::{Response, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::DEFAULT_BASE_URL;
+
+mod upstream;
 use crate::error::ApiError;
 use crate::model::{
     MatchInfo, MatchReportResponse, PlayerInfoResponse, PlayerMatchesResponse, UnitsResponse,
 };
+pub use upstream::{SourceCheck, UpstreamConfig};
 
 /// 客户端配置。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientConfig {
     /// 站点地址，不带末尾的斜杠。
     pub base_url: String,
+    /// 主源；设为 None 时仅使用 BATrace。
+    pub upstream: Option<UpstreamConfig>,
     /// 应用标识，同时用作 `User-Agent` 的产品名和 `X-Client` 的值。
     ///
     /// 原型发现不带清晰标识的请求会被站点以 403 拒绝，所以每个请求都带上它。
@@ -41,6 +46,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         ClientConfig {
             base_url: DEFAULT_BASE_URL.to_owned(),
+            upstream: Some(UpstreamConfig::default()),
             client_name: "BAX".to_owned(),
             client_version: env!("CARGO_PKG_VERSION").to_owned(),
             timeout: Duration::from_secs(15),
@@ -62,7 +68,8 @@ pub struct Fetched<T> {
 #[derive(Debug, Default)]
 struct SharedRequests {
     ocr_profiles: HashMap<PlayerId, (Instant, Fetched<PlayerInfoResponse>)>,
-    cooldown: Option<Instant>,
+    cooldowns: HashMap<String, (Instant, ApiError)>,
+    cache: HashMap<String, upstream::CacheSlot>,
 }
 
 /// BATrace 客户端。克隆的代价很低，内部共用同一个连接池。
@@ -72,10 +79,16 @@ pub struct BatraceClient {
     shared: Arc<Mutex<SharedRequests>>,
     base_url: String,
     player_info_timeout: Duration,
+    upstream: Option<UpstreamConfig>,
+    timeout: Duration,
+    checks: upstream::CheckCache,
 }
 
 impl BatraceClient {
     pub fn new(config: ClientConfig) -> Result<Self, ApiError> {
+        if let Some(upstream) = &config.upstream {
+            upstream.validate()?;
+        }
         let base_url = config.base_url.trim_end_matches('/').to_owned();
         if !(base_url.starts_with("https://") || base_url.starts_with("http://")) {
             return Err(ApiError::Config(format!("地址不合法：{base_url}")));
@@ -106,6 +119,9 @@ impl BatraceClient {
             shared: Arc::new(Mutex::new(SharedRequests::default())),
             base_url,
             player_info_timeout: config.player_info_timeout,
+            upstream: config.upstream,
+            timeout: config.timeout,
+            checks: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
 
@@ -123,6 +139,9 @@ impl BatraceClient {
         {
             tracing::debug!(endpoint = "players.info", "复用 OCR 已获取资料");
             return Ok(fetched);
+        }
+        if self.upstream.is_some() {
+            return self.combined_player(id).await;
         }
         let fetched: Fetched<PlayerInfoResponse> = self
             .get(
@@ -187,6 +206,9 @@ impl BatraceClient {
 
     /// 完整战报。比赛尚未收录、或者战报还是空壳时返回 [`ApiError::NotFound`]。
     pub async fn match_report(&self, id: MatchId) -> Result<Fetched<MatchInfo>, ApiError> {
+        if self.upstream.is_some() {
+            return self.combined_report(id).await;
+        }
         let fetched: Fetched<MatchReportResponse> = self
             .get("match", &format!("/api/match?matchid={id}"), None)
             .await?;
@@ -217,43 +239,8 @@ impl BatraceClient {
         path: &str,
         timeout: Option<Duration>,
     ) -> Result<Fetched<T>, ApiError> {
-        let cooldown = self.shared.lock().expect("request state").cooldown;
-        if let Some(until) = cooldown
-            && until > Instant::now()
-        {
-            return Err(ApiError::RateLimited {
-                retry_after: Some(until.saturating_duration_since(Instant::now())),
-            });
-        }
-        tracing::debug!(endpoint, "API 请求开始");
-        let mut request = self.http.get(format!("{}{path}", self.base_url));
-        if let Some(timeout) = timeout {
-            request = request.timeout(timeout);
-        }
-        let response = request.send().await.map_err(transport_error)?;
-        let status = response.status();
-        if !status.is_success() {
-            let err = status_error(status, &response);
-            if let ApiError::RateLimited { retry_after } = &err {
-                let delay = retry_after
-                    .unwrap_or(Duration::from_secs(30))
-                    .max(Duration::from_secs(30));
-                self.shared.lock().expect("request state").cooldown = Some(Instant::now() + delay);
-            }
-            tracing::debug!(%status, endpoint = %endpoint, "请求失败");
-            return Err(err);
-        }
-        let is_json = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.to_ascii_lowercase().contains("json"));
-        let raw = response.text().await.map_err(transport_error)?;
-        if !is_json {
-            return Err(ApiError::Challenge);
-        }
-        let data = serde_json::from_str(&raw).map_err(|err| ApiError::Decode(err.to_string()))?;
-        Ok(Fetched { data, raw })
+        self.fetch_at("batrace", &self.base_url, endpoint, path, timeout)
+            .await
     }
 }
 

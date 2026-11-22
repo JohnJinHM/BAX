@@ -77,7 +77,16 @@ export function useAppStatus(): ShallowRef<AppStatus | null> {
   return appStatus;
 }
 
+export interface SourceCheck {
+  name: string;
+  available: boolean;
+  message: string;
+  latencyMs: number;
+  checkedAt: number;
+}
+
 export const commands = {
+  checkDataSources: () => invoke<SourceCheck[]>("check_data_sources"),
   checkUpdate: () => invoke<void>("check_update"),
   installUpdate: () => invoke<void>("install_update"),
   openReleases: () => invoke<void>("open_releases"),

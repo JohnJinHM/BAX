@@ -24,6 +24,12 @@ pub fn api(command: ApiCommand) -> Result<()> {
     runtime.block_on(async move {
         let client = BatraceClient::new(ClientConfig::default())?;
         match command {
+            ApiCommand::Sources => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&client.check_sources().await)?
+                );
+            }
             ApiCommand::Player { id, raw } => {
                 let fetched = client.player_info(PlayerId(id)).await?;
                 if raw {

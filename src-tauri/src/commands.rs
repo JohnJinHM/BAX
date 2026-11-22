@@ -15,6 +15,11 @@ use tauri::{AppHandle, State, Window};
 use crate::app::{AppState, AppStatus, reveal_in_explorer, show_main_window};
 use crate::overlay;
 
+#[tauri::command]
+pub async fn check_data_sources(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    serde_json::to_value(state.engine.check_data_sources().await).map_err(|e| e.to_string())
+}
+
 type CommandResult = Result<(), String>;
 
 /// 命令被拒绝或失败时记一条诊断日志，再把原因交给前端。

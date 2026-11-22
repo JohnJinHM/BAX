@@ -65,6 +65,12 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
   }
   mockIPC((cmd, args) => {
     switch (cmd) {
+      case "check_data_sources":
+        return new Promise(resolve => setTimeout(() => resolve([
+          { name: "主源 · 玩家资料", available: true, message: "预览样本：查询成功", latencyMs: 180, checkedAt: Math.floor(Date.now() / 1000) },
+          { name: "主源 · 战报样本", available: true, message: "预览样本：查询成功", latencyMs: 240, checkedAt: Math.floor(Date.now() / 1000) },
+          ...["玩家补充", "昵称搜索", "单位目录"].map(name => ({ name: `BATrace · ${name}`, available: false, message: "预览样本：HTTP 404", latencyMs: 120, checkedAt: Math.floor(Date.now() / 1000) })),
+        ]), 900));
       case "get_snapshot":
         return structuredClone(fixtureSnapshot);
       case "set_ui_setting": {
