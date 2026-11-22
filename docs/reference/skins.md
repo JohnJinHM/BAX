@@ -1,8 +1,8 @@
 # 皮肤变量
 
-状态：生效 · 更新：2026-11-21
+状态：生效 · 更新：2026-11-22
 
-皮肤机制见 [ADR-0014](../adr/0014-skins.md)。本文列出皮肤可以覆盖的变量、内置皮肤的取值依据，以及新增皮肤的步骤。变量的默认值以 [`theme.css`](../../src/shared/theme.css) 为准，“断箭”的取值以 [`broken-arrow.css`](../../src/shared/skins/broken-arrow.css) 为准，这里只说明用途。
+皮肤机制见 [ADR-0014](../adr/0014-skins.md)。本文列出皮肤可以覆盖的变量、个人调整、内置皮肤的取值依据，以及新增皮肤的步骤。变量的默认值以 [`theme.css`](../../src/shared/theme.css) 为准，“断箭”的取值以 [`broken-arrow.css`](../../src/shared/skins/broken-arrow.css) 为准，这里只说明用途。
 
 ## 基础变量
 
@@ -41,6 +41,30 @@
 | `--bax-overlay-fade-alpha`、`--bax-overlay-fade-width` | 悬浮窗背景左侧的渐变：左边缘不透明度 = 设置的不透明度 × 系数，到这个宽度处恢复设置的不透明度 | 1；0%（纯色） |
 | `--bax-overlay-border`、`--bax-overlay-unlocked-border` | 悬浮窗锁定时、解锁时的边框 | 细实线；强调色虚线 |
 
+## 个人调整
+
+设置页“外观”在所选皮肤之上叠加个人调整，和皮肤一样只改变量，不接受任意 CSS。设置保存在界面设置 `ui.skin`，字段、取值范围与整理规则见 [`appearance.ts`](../../src/shared/appearance.ts)；[`skin.ts`](../../src/shared/skin.ts) 把结果写在 `<html>` 的行内样式上，两个窗口随快照一起更新。`localStorage` 里记一份整理后的外观，只用于快照到达前的第一帧。
+
+| 调整 | 变量 | 生效范围 |
+|---|---|---|
+| 强调色 | `--bax-accent`；改了以后主按钮文字 `--bax-on-accent` 按新颜色取黑或白，至少 4.58:1 | 主窗口与悬浮窗 |
+| 本方 / Alpha | `--bax-friend`、`--bax-alpha` | 主窗口与悬浮窗 |
+| 对方 / Bravo | `--bax-foe`、`--bax-bravo` | 主窗口与悬浮窗 |
+| 胜利、失败 | `--bax-good`、`--bax-bad` | 主窗口与悬浮窗 |
+| 字号 | `--bax-font-scale`，85%～130%，步长 5% | 主窗口 |
+| 间距 | `--bax-density`：紧凑 0.75、标准 1、宽松 1.25 | 主窗口 |
+
+- 颜色按皮肤分别保存，只存改过的；换皮肤时各自保留。设置页的皮肤预览块叠加各自改过的颜色。
+- 改过的颜色作为文字放在底色、面板或面板 2 上低于 4.5:1 时，设置页给出提示，不阻止保存。
+- 字号与间距只调整主窗口。悬浮窗另有缩放，不引用这两个变量。
+- 皮肤里应当跟随强调色的组件变量写成 `var(--bax-accent)`，不写色值，否则个人改了强调色时它们不变。“断箭”的选中窄边、本机玩家窄边、导航标记与重要数值就是这样写的。
+
+主窗口的样式这样引用这两个变量：
+
+- 字号写成 `calc(12px * var(--bax-font-scale))`。固定尺寸框里的文字（出兵时间线的标记、单位图标、设置页的皮肤缩略图）保持像素值，并在规则里注明“字号不缩放”；`tests/appearance.test.mjs` 检查其余字号都随设置缩放。放文字的固定列宽与左侧栏宽度也乘以 `--bax-font-scale`。
+- 面板内边距、面板之间、分区标题、列表行与表格行的空白写成 `calc(16px * var(--bax-density))`。按钮与输入框的大小不随间距变化。
+- 战后图表的文字大小在 `ReportView.vue` 里按 `--bax-font-scale` 计算，外观一变就重新生成配置。
+
 ## 内置皮肤
 
 | ID | 名称 | 说明 |
@@ -63,4 +87,4 @@
 2. 新建 `src/shared/skins/<id>.css`，只写一个 `[data-skin="<id>"]` 块，覆盖需要的变量；在同目录的 `index.css` 里 `@import`。
 3. 需要表达现有变量做不到的差异时，先在 `theme.css` 的组件变量里加一个默认不改变现状的变量，组件改用它，再在皮肤里覆盖，并补进本文的表格。
 4. 运行 `npm run test:ui`：检查目录与文件一一对应、皮肤只声明已有变量，以及每个皮肤的文字色在底色、面板、面板 2 上达到 4.5:1，主按钮文字在强调色上达到 4.5:1。
-5. 用预览页 `/dev/main.html?skin=<id>&tab=…` 与 `/dev/overlay.html?skin=<id>` 逐页查看，悬浮窗还要看 `?ended`、`?pregame` 和收起状态。
+5. 用预览页 `/dev/main.html?skin=<id>&tab=…` 与 `/dev/overlay.html?skin=<id>` 逐页查看，悬浮窗还要看 `?ended`、`?pregame` 和收起状态。个人调整可以用 `&appearance=` 加一段 JSON 预览，例如 `{"fontScale":1.3,"density":"compact"}`。

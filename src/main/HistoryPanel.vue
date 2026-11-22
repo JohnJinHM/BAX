@@ -107,12 +107,12 @@ function reportTitle(row: HistoryRow): string | undefined {
 <style scoped>
 .layout {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: calc(280px * var(--bax-font-scale)) minmax(0, 1fr);
+  gap: calc(16px * var(--bax-density));
   align-items: start;
 }
 
-.list { position: sticky; top: 0; max-height: calc(100vh - 40px); overflow-y: auto; }
+.list { position: sticky; top: 0; max-height: calc(100vh - 40px * var(--bax-density)); overflow-y: auto; }
 
 .list h2 {
   margin: 0;
@@ -120,12 +120,12 @@ function reportTitle(row: HistoryRow): string | undefined {
 
 ul {
   list-style: none;
-  margin: 8px 0 0;
+  margin: calc(8px * var(--bax-density)) 0 0;
   padding: 0;
 }
 
 li {
-  padding: 6px 8px;
+  padding: calc(6px * var(--bax-density)) 8px;
   border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
@@ -157,7 +157,7 @@ li.active {
 .when {
   flex-shrink: 0;
   margin-left: auto;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
   white-space: nowrap;
 }
@@ -176,7 +176,7 @@ li.active {
   flex-shrink: 0;
   padding: 0 5px;
   border-radius: min(3px, var(--bax-radius-xs));
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   font-weight: 600;
 }
 
@@ -219,7 +219,7 @@ li.active {
 }
 
 @media (max-width: 1180px) {
-  .layout { grid-template-columns: 240px minmax(380px, 1fr); }
-  .list { padding: 10px; }
+  .layout { grid-template-columns: calc(240px * var(--bax-font-scale)) minmax(380px, 1fr); }
+  .list { padding: calc(10px * var(--bax-density)); }
 }
 </style>

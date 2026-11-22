@@ -3,10 +3,10 @@
 
 import { computed, type ComputedRef, type ShallowRef } from "vue";
 
+import { type Appearance, defaultAppearance } from "./appearance";
 import type { JsonValue } from "./bindings/serde_json/JsonValue";
 import type { Snapshot } from "./bindings/Snapshot";
 import { commands } from "./engine";
-import type { SkinId } from "./skins";
 
 export interface OverlayAppearance {
   /** 背景不透明度，0.3～1 */
@@ -39,10 +39,8 @@ export interface DiagSettings {
   level: "standard" | "verbose";
 }
 
-export interface SkinSettings {
-  /** 皮肤 ID，见 skins.ts；不认识的值按默认皮肤处理 */
-  id: SkinId;
-}
+/** 皮肤与个人调整，字段见 appearance.ts；读出来以后先用 normalizeAppearance 整理 */
+export type SkinSettings = Appearance;
 
 interface Settings {
   "ui.skin": SkinSettings;
@@ -55,7 +53,7 @@ interface Settings {
 }
 
 export const defaults: Settings = {
-  "ui.skin": { id: "default" },
+  "ui.skin": defaultAppearance,
   "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },
   "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true, snapEdges: true },

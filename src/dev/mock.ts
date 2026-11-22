@@ -27,7 +27,16 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
   if (saved) fixtureSnapshot.ui = { ...fixtureSnapshot.ui, ...JSON.parse(saved) };
   // ?skin=broken-arrow 直接用某个皮肤预览
   const skin = params.get("skin");
-  if (skin) fixtureSnapshot.ui["ui.skin"] = { id: skin };
+  // ?appearance={"fontScale":1.2,"density":"compact"} 叠加个人调整，字段见 src/shared/appearance.ts
+  const look = params.get("appearance");
+  if (skin || look) {
+    const saved = fixtureSnapshot.ui["ui.skin"];
+    fixtureSnapshot.ui["ui.skin"] = {
+      ...(saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {}),
+      ...(look ? JSON.parse(look) : {}),
+      ...(skin ? { id: skin } : {}),
+    };
+  }
   if (options.collapsed) fixtureSnapshot.ui["ui.overlay"] = { opacity: .88, scale: 1, expanded: false, autoExpand: false };
   if (params.has("ended") && fixtureSnapshot.current) {
     fixtureSnapshot.current.matchId = 8999927;

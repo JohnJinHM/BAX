@@ -62,22 +62,22 @@ const apiLine = computed(() => {
 <style scoped>
 .shell {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
+  grid-template-columns: calc(168px * var(--bax-font-scale)) minmax(0, 1fr);
   height: 100vh;
 }
 
 nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 16px 10px;
+  gap: calc(4px * var(--bax-density));
+  padding: calc(16px * var(--bax-density)) 10px;
   background: var(--bax-nav-bg);
   border-right: 1px solid var(--bax-border);
 }
 
 .brand {
   padding: 0 8px 12px;
-  font-size: 18px;
+  font-size: calc(18px * var(--bax-font-scale));
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--bax-brand);
@@ -99,22 +99,22 @@ nav button.active {
 .status {
   margin-top: auto;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 
 main {
   overflow: auto;
-  padding: 20px 24px;
+  padding: calc(20px * var(--bax-density)) calc(24px * var(--bax-density));
 }
 
 @media (max-width: 650px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   nav { flex-direction: row; align-items: center; flex-wrap: wrap; padding: 8px; border-right: 0; border-bottom: 1px solid var(--bax-border); }
-  .brand { padding: 0 8px; font-size: 16px; }
-  nav button { padding: 5px 7px; font-size: 12px; }
+  .brand { padding: 0 8px; font-size: calc(16px * var(--bax-font-scale)); }
+  nav button { padding: 5px 7px; font-size: calc(12px * var(--bax-font-scale)); }
   nav button.active { box-shadow: inset 0 -2px 0 var(--bax-nav-active-edge); }
   .status { display: none; }
-  main { padding: 12px; }
+  main { padding: calc(12px * var(--bax-density)); }
 }
 </style>

@@ -37,10 +37,19 @@
   --bax-radius: 8px;
   --bax-radius-sm: 6px;
   --bax-radius-xs: 4px;
-  --bax-space: 8px;
-  --bax-scale: 1;
 
   --bax-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23a2abb7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------------- 个人调整
+
+   字号倍数与间距系数来自设置（src/shared/appearance.ts），由 skin.ts 写在 <html> 的行内样式上，
+   主窗口的样式用 calc(12px * var(--bax-font-scale)) 和 calc(16px * var(--bax-density)) 这样的写法引用。
+   只写在 :root 上：皮肤预览块带着自己的 data-skin，也要沿用当前的字号。悬浮窗另有缩放，不引用这两个变量。 */
+
+:root {
+  --bax-font-scale: 1;
+  --bax-density: 1;
 }
 
 /* ---------------------------------------------------------------- 组件变量：默认由基础变量推出，皮肤可以单独覆盖 */

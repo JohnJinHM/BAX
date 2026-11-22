@@ -100,15 +100,15 @@ function title(hit: PlayerHit): string {
 <style scoped>
 .layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: calc(300px * var(--bax-font-scale)) minmax(0, 1fr);
+  gap: calc(16px * var(--bax-density));
   align-items: start;
 }
 
 .list {
   position: sticky;
   top: 0;
-  max-height: calc(100vh - 40px);
+  max-height: calc(100vh - 40px * var(--bax-density));
   overflow: auto;
 }
 
@@ -116,9 +116,9 @@ function title(hit: PlayerHit): string {
   width: 100%;
 }
 .list-controls { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; margin-top: 10px; }
-.list-controls label { display: grid; gap: 4px; color: var(--bax-muted); font-size: 12px; min-width: 0; }
+.list-controls label { display: grid; gap: 4px; color: var(--bax-muted); font-size: calc(12px * var(--bax-font-scale)); min-width: 0; }
 .list-controls select { width: 100%; padding: 6px 3px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); color: var(--bax-fg); }
-.self-mark { color: var(--bax-accent); font-size: 11px; }
+.self-mark { color: var(--bax-accent); font-size: calc(11px * var(--bax-font-scale)); }
 .more { width: 100%; }
 li:focus-visible, select:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 
@@ -129,7 +129,7 @@ ul {
 }
 
 li {
-  padding: 6px 8px;
+  padding: calc(6px * var(--bax-density)) 8px;
   border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
@@ -159,7 +159,7 @@ li.active {
 
 .note-mark {
   color: var(--bax-warn);
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
 }
 
 .elo {

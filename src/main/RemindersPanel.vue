@@ -166,7 +166,7 @@ async function calibrate() {
 
 <style scoped>
 .card + .card {
-  margin-top: 16px;
+  margin-top: calc(16px * var(--bax-density));
 }
 
 table {
@@ -177,21 +177,21 @@ table {
 th {
   text-align: left;
   font-weight: 500;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
-  padding: 4px 8px 4px 0;
+  padding: calc(4px * var(--bax-density)) 8px calc(4px * var(--bax-density)) 0;
 }
 
 td {
-  padding: 4px 8px 4px 0;
+  padding: calc(4px * var(--bax-density)) 8px calc(4px * var(--bax-density)) 0;
 }
 
 .time {
-  width: 80px;
+  width: calc(80px * var(--bax-font-scale));
 }
 
 .label {
-  width: 220px;
+  width: calc(220px * var(--bax-font-scale));
 }
 
 select {

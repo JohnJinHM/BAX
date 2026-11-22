@@ -149,7 +149,7 @@ async function refresh() {
   margin: 0;
 }
 .roster-table { overflow-x: auto; scrollbar-color: var(--bax-faint) var(--bax-surface); }
-.roster-table table { min-width: 1160px; }
+.roster-table table { min-width: calc(1160px * var(--bax-font-scale)); }
 .c-specs { width: 82px; }
 .specs { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .hint a { color: var(--bax-accent); text-underline-offset: 3px; }
@@ -158,7 +158,7 @@ async function refresh() {
   padding: 1px 8px;
   border-radius: var(--bax-radius-xs);
   background: var(--bax-surface-2);
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
 }
 
 .tag.warn {
@@ -174,7 +174,7 @@ table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: calc(13px * var(--bax-font-scale));
 }
 
 .c-name {
@@ -182,11 +182,11 @@ table {
 }
 
 .c-met {
-  width: 150px;
+  width: calc(150px * var(--bax-font-scale));
 }
 
 .c-fetched {
-  width: 130px;
+  width: calc(130px * var(--bax-font-scale));
 }
 
 td.left .name {
@@ -203,7 +203,7 @@ td.left .name:hover {
 }
 
 .note {
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-warn);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,7 +212,7 @@ td.left .name:hover {
 
 th,
 td {
-  padding: 5px 8px;
+  padding: calc(5px * var(--bax-density)) 8px;
   text-align: right;
   white-space: nowrap;
   border-bottom: 1px solid var(--bax-border);
@@ -221,7 +221,7 @@ td {
 th {
   font-weight: 500;
   color: var(--bax-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
 }
 
 .left {

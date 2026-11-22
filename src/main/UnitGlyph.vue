@@ -15,5 +15,5 @@ const baseUrl = `${import.meta.env.BASE_URL}ui-icons/types/`;
 .game-symbol { display: block; width: 24px; height: 24px; background: currentColor; mask-size: contain; mask-position: center; mask-repeat: no-repeat; flex-shrink: 0; }
 .tagged { width: 48px; gap: 2px; border-bottom: 2px solid var(--type-color); }
 .tagged .game-symbol { width: 20px; height: 20px; }
-.type-tag { white-space: nowrap; color: var(--type-color); font-size: 11px; line-height: 1; }
+.type-tag { white-space: nowrap; color: var(--type-color); font-size: 11px; line-height: 1; /* 固定尺寸框，字号不缩放 */ }
 </style>

@@ -47,7 +47,7 @@ svg {
 
 .range {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 </style>

@@ -18,5 +18,5 @@ watch(file, () => { failed.value = false; });
 <style scoped>
 .unit-icon { width: 48px; height: 26px; object-fit: contain; flex-shrink: 0; }
 .white { filter: brightness(0) invert(1); }
-.missing-unit { display: block; width: 44px; color: white; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missing-unit { display: block; width: 44px; color: white; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; /* 固定尺寸框，字号不缩放 */ }
 </style>

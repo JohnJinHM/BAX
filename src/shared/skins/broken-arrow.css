@@ -38,19 +38,20 @@
 
   --bax-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23b6bdb8' stroke-width='1.5' stroke-linecap='square'/%3E%3C/svg%3E");
 
-  /* 表格行悬停用 25% 的第二强调色；选中与本机玩家用中性提亮加黄色窄边，不铺黄色底 */
+  /* 表格行悬停用 25% 的第二强调色；选中与本机玩家用中性提亮加黄色窄边，不铺黄色底。
+     黄色的窄边、导航标记与重要数值引用强调色，个人改了强调色时跟着变 */
   --bax-row-hover: color-mix(in srgb, var(--bax-warn) 25%, transparent);
   --bax-selected-bg: rgba(231, 248, 229, 0.07);
-  --bax-selected-edge: #f4d42a;
+  --bax-selected-edge: var(--bax-accent);
   --bax-self-bg: rgba(231, 248, 229, 0.06);
-  --bax-self-edge: #f4d42a;
-  --bax-value: #f4d42a;
+  --bax-self-edge: var(--bax-accent);
+  --bax-value: var(--bax-accent);
   /* 悬浮窗叠在游戏画面上，计时、对局状态与均分用浅色文字，不用黄色 */
   --bax-overlay-value: #e7f8e5;
   --bax-brand: #e7f8e5;
   --bax-nav-bg: rgba(33, 34, 31, 0.5);
   --bax-nav-active-bg: rgba(231, 248, 229, 0.05);
-  --bax-nav-active-edge: #f4d42a;
+  --bax-nav-active-edge: var(--bax-accent);
   --bax-heading-mark: 3px;
   --bax-heading-mark-color: #5f6663;
 

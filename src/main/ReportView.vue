@@ -8,7 +8,7 @@ import type { MatchReportView } from "../shared/bindings/MatchReportView";
 import type { PlayerReport } from "../shared/bindings/PlayerReport";
 import type { Team } from "../shared/bindings/Team";
 import { commands, errorText, useSnapshot } from "../shared/engine";
-import { activeSkin } from "../shared/skin";
+import { appearanceRevision } from "../shared/skin";
 import {
   compositionGroups,
   count,
@@ -86,9 +86,12 @@ function cssVar(name: string): string {
 }
 
 const colors = computed(() => {
-  // 依赖当前皮肤：换皮肤后重新取色，图表跟着换
-  void activeSkin.value;
+  // 依赖外观：换皮肤或改了个人颜色、字号后重新取值，图表跟着换
+  void appearanceRevision.value;
+  const scale = Number(cssVar("--bax-font-scale"));
   return {
+    /** 图表文字按主窗口字号缩放 */
+    fontScale: Number.isFinite(scale) && scale > 0 ? scale : 1,
     fg: cssVar("--bax-fg"),
     muted: cssVar("--bax-muted"),
     faint: cssVar("--bax-faint"),
@@ -166,14 +169,14 @@ function eloDelta(p: PlayerReport): string {
 const axisCommon = computed(() => ({
   axisLine: { lineStyle: { color: colors.value.faint } },
   axisTick: { show: false },
-  axisLabel: { color: colors.value.muted, fontSize: 11 },
+  axisLabel: { color: colors.value.muted, fontSize: 11 * colors.value.fontScale },
   splitLine: { lineStyle: { color: colors.value.grid } },
 }));
 
 const tooltipCommon = computed(() => ({
   backgroundColor: colors.value.surface2,
   borderColor: colors.value.grid,
-  textStyle: { color: colors.value.fg, fontSize: 12 },
+  textStyle: { color: colors.value.fg, fontSize: 12 * colors.value.fontScale },
   confine: true,
 }));
 
@@ -182,7 +185,7 @@ function playerAxisLabel(rows: PlayerReport[]) {
   const c = colors.value;
   return {
     color: c.fg,
-    fontSize: 11,
+    fontSize: 11 * c.fontScale,
     formatter: (_value: string, i: number) => {
       const value = name(rows[i]);
       const short = value.length > 14 ? `${value.slice(0, 13)}…` : value;
@@ -214,7 +217,7 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
       showSymbol: false,
       lineStyle: { width: 2 },
       color: teamColor(team),
-      endLabel: { show: true, color: colors.value.muted, fontSize: 11, formatter: (p: { seriesName: string }) => p.seriesName },
+      endLabel: { show: true, color: colors.value.muted, fontSize: 11 * colors.value.fontScale, formatter: (p: { seriesName: string }) => p.seriesName },
       emphasis: { focus: "series" },
       markArea: selectedRange.value ? {
         silent: true,
@@ -226,7 +229,7 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
   return {
     animation: false,
     grid: { left: 56, right: 120, top: 32, bottom: 28 },
-    legend: { top: 0, left: 0, textStyle: { color: colors.value.muted }, itemWidth: 16, itemHeight: 2, icon: "rect" },
+    legend: { top: 0, left: 0, textStyle: { color: colors.value.muted, fontSize: 12 * colors.value.fontScale }, itemWidth: 16, itemHeight: 2, icon: "rect" },
     tooltip: {
       ...tooltipCommon.value,
       trigger: "axis",
@@ -470,9 +473,9 @@ function pendingText(row: HistoryRow | null | undefined): string {
 </template>
 
 <style scoped>
-.composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-fg); font-size: 12px; }
-.report h3 { color: var(--bax-fg); font-size: 14px; }
-.composition-head { margin-top: 20px; font-size: 12px; }
+.composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-fg); font-size: calc(12px * var(--bax-font-scale)); }
+.report h3 { color: var(--bax-fg); font-size: calc(14px * var(--bax-font-scale)); }
+.composition-head { margin-top: 20px; font-size: calc(12px * var(--bax-font-scale)); }
 .composition-head h3 { margin: 0 auto 0 0; }
 .composition-head label { display: flex; align-items: center; gap: 8px; }
 .composition-head select { background: var(--bax-surface-2); color: var(--bax-fg); border: 1px solid var(--bax-faint); padding: 4px; border-radius: var(--bax-radius-xs); }
@@ -498,7 +501,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
   padding: 1px 10px;
   border-radius: var(--bax-radius-xs);
   font-weight: 600;
-  font-size: 13px;
+  font-size: calc(13px * var(--bax-font-scale));
 }
 
 .result.win {
@@ -514,12 +517,12 @@ function pendingText(row: HistoryRow | null | undefined): string {
 .teams {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: calc(12px * var(--bax-density));
+  margin-top: calc(16px * var(--bax-density));
 }
 
 .team {
-  padding: 10px 12px;
+  padding: calc(10px * var(--bax-density)) calc(12px * var(--bax-density));
   border: 1px solid var(--bax-border);
   border-top: 2px solid;
   border-radius: var(--bax-radius-sm);
@@ -528,7 +531,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
 
 .points {
   margin-left: auto;
-  font-size: 18px;
+  font-size: calc(18px * var(--bax-font-scale));
   font-weight: 600;
   color: var(--bax-value);
 }
@@ -541,7 +544,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
 }
 
 .figures dt {
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 
@@ -553,12 +556,12 @@ function pendingText(row: HistoryRow | null | undefined): string {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: calc(13px * var(--bax-font-scale));
 }
 
 th,
 td {
-  padding: 4px 8px;
+  padding: calc(4px * var(--bax-density)) 8px;
   text-align: right;
   white-space: nowrap;
   border-bottom: 1px solid var(--bax-border);
@@ -566,7 +569,7 @@ td {
 
 th {
   font-weight: 500;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 
@@ -610,7 +613,7 @@ tr.self .name {
   margin-left: 6px;
   padding: 0 5px;
   border-radius: min(3px, var(--bax-radius-xs));
-  font-size: 11px;
+  font-size: calc(11px * var(--bax-font-scale));
   background: var(--bax-surface-2);
   color: var(--bax-muted);
   border: 1px solid var(--bax-border);
@@ -621,7 +624,7 @@ tr.self .name {
 }
 
 .delta {
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
 }
 
 .delta.up {
@@ -643,6 +646,6 @@ tr.self .name {
 }
 
 .foot {
-  margin-top: 16px;
+  margin-top: calc(16px * var(--bax-density));
 }
 </style>

@@ -202,17 +202,17 @@ async function refresh() {
 .last-specs > span { display: inline-flex; align-items: center; gap: 6px; }
 .spec-chart { list-style: none; padding: 0; margin: 12px 0 24px; max-width: 760px; }
 .spec-chart li { display: grid; grid-template-columns: 28px minmax(100px, 1fr) minmax(60px, 2fr) 44px; align-items: center; gap: 10px; margin: 8px 0; }
-.spec-name { overflow-wrap: anywhere; font-size: 13px; }
+.spec-name { overflow-wrap: anywhere; font-size: calc(13px * var(--bax-font-scale)); }
 .spec-track { display: block; height: 8px; border-radius: min(3px, var(--bax-radius-xs)); background: var(--bax-surface-2); }
 .spec-track > span { display: block; height: 100%; border-radius: inherit; background: var(--bax-accent); }
-.spec-count { text-align: right; font-size: 12px; }
+.spec-count { text-align: right; font-size: calc(12px * var(--bax-font-scale)); }
 
 .tag {
   padding: 1px 8px;
   border-radius: var(--bax-radius-xs);
   background: color-mix(in srgb, var(--bax-accent) 15%, transparent);
   color: var(--bax-accent);
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
 }
 
 .refresh {
@@ -222,8 +222,8 @@ async function refresh() {
 .stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: calc(12px * var(--bax-density));
+  margin-top: calc(16px * var(--bax-density));
 }
 
 .stats div {
@@ -233,12 +233,12 @@ async function refresh() {
 }
 
 .stats label {
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 
 .big {
-  font-size: 20px;
+  font-size: calc(20px * var(--bax-font-scale));
   font-weight: 600;
   color: var(--bax-value);
 }
@@ -262,12 +262,12 @@ textarea:focus {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: calc(13px * var(--bax-font-scale));
 }
 
 th,
 td {
-  padding: 4px 8px;
+  padding: calc(4px * var(--bax-density)) 8px;
   text-align: right;
   white-space: nowrap;
   border-bottom: 1px solid var(--bax-border);
@@ -275,7 +275,7 @@ td {
 
 th {
   font-weight: 500;
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   color: var(--bax-muted);
 }
 

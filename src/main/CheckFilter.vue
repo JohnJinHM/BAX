@@ -30,7 +30,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", close));
 </template>
 
 <style scoped>
-.check-filter { position: relative; font-size: 12px; color: var(--bax-fg); }
+.check-filter { position: relative; font-size: calc(12px * var(--bax-font-scale)); color: var(--bax-fg); }
 summary { display: flex; align-items: center; list-style: none; cursor: pointer; min-height: 32px; padding: 6px 10px; border: 1px solid var(--bax-faint); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); }
 summary::-webkit-details-marker { display: none; }
 summary span { color: var(--bax-muted); margin-left: 8px; }
@@ -40,5 +40,5 @@ summary:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2p
 .check-options label:hover { background: var(--bax-surface); }
 input { flex: none; }
 .actions { display: flex; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--bax-border); }
-.actions button { padding: 3px 10px; font-size: 12px; }
+.actions button { padding: 3px 10px; font-size: calc(12px * var(--bax-font-scale)); }
 </style>

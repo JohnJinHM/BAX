@@ -1,9 +1,25 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
+import {
+  type Appearance,
+  type ColorKey,
+  colorSlots,
+  colorVars,
+  densities,
+  type Density,
+  clampFontScale,
+  fontScaleRange,
+  isDefaultAppearance,
+  normalizeAppearance,
+  parseCssColor,
+  toHex,
+  worstContrast,
+} from "../shared/appearance";
 import { commands, errorText, useAppStatus, useSnapshot, type SourceCheck } from "../shared/engine";
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
-import { normalizeSkin, type SkinId, skins } from "../shared/skins";
+import { appearanceRevision } from "../shared/skin";
+import { type SkinId, skins } from "../shared/skins";
 
 const sourceChecks = ref<SourceCheck[] | null>(null);
 const sourcesBusy = ref(false);
@@ -31,7 +47,9 @@ const appearance = useSetting(snapshot, "ui.overlay");
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
 const skin = useSetting(snapshot, "ui.skin");
-const currentSkin = computed(() => normalizeSkin(skin.value.id));
+const skinSettings = computed(() => normalizeAppearance(skin.value));
+const currentSkin = computed(() => skinSettings.value.id);
+const currentSkinName = computed(() => skins.find((s) => s.id === currentSkin.value)?.name ?? "");
 const message = ref<{ ok: boolean; text: string } | null>(null);
 
 async function run(action: () => Promise<void>, done = "已保存") {
@@ -43,9 +61,49 @@ async function run(action: () => Promise<void>, done = "已保存") {
   }
 }
 
-// ---------------------------------------------------------------- 皮肤
+// ---------------------------------------------------------------- 皮肤与个人调整
 
-const chooseSkin = (id: SkinId) => run(() => saveSetting(skin.value, "ui.skin", { id }), "已切换皮肤");
+const saveAppearance = (patch: Partial<Appearance>, done = "已保存") =>
+  run(() => saveSetting(skinSettings.value, "ui.skin", patch), done);
+
+const chooseSkin = (id: SkinId) => saveAppearance({ id }, "已切换皮肤");
+
+const rootVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/** 当前皮肤上每个颜色的实际取值（改过的，或者皮肤自带的），以及作文字时对比度不足的提示。 */
+const colorRows = computed(() => {
+  // 依赖外观：皮肤或颜色变了以后重新从变量取值
+  void appearanceRevision.value;
+  const own = skinSettings.value.colors[skinSettings.value.id] ?? {};
+  const grounds = { bg: rootVar("--bax-bg-rgb"), surface: rootVar("--bax-surface"), surface2: rootVar("--bax-surface-2") };
+  return colorSlots.map((slot) => {
+    const custom = own[slot.key];
+    const parsed = parseCssColor(custom ?? rootVar(slot.vars[0]));
+    const value = parsed ? toHex(parsed) : "#000000";
+    const ratio = worstContrast(value, grounds);
+    return { key: slot.key, name: slot.name, usage: slot.usage, value, custom: custom != null, low: ratio != null && ratio < 4.5 ? ratio : null };
+  });
+});
+
+function setColor(key: ColorKey, value: string | null) {
+  const id = skinSettings.value.id;
+  const own = { ...skinSettings.value.colors[id] };
+  if (value == null) delete own[key];
+  else own[key] = value;
+  const colors = { ...skinSettings.value.colors, [id]: own };
+  if (Object.keys(own).length === 0) delete colors[id];
+  return saveAppearance({ colors }, value == null ? "已恢复皮肤颜色" : "已保存");
+}
+
+const setFontScale = (value: string) => saveAppearance({ fontScale: clampFontScale(Number(value)) });
+const setDensity = (density: Density) => saveAppearance({ density });
+
+/** 恢复当前皮肤的颜色和字号、间距；其他皮肤上改过的颜色保留。 */
+function resetAppearance() {
+  const colors = { ...skinSettings.value.colors };
+  delete colors[skinSettings.value.id];
+  return saveAppearance({ colors, fontScale: 1, density: "standard" }, "已恢复默认外观");
+}
 
 // ---------------------------------------------------------------- 日志目录
 
@@ -171,11 +229,17 @@ async function exportDiag() {
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" aria-labelledby="skin-heading">
     <h2 id="skin-heading">外观</h2>
-    <div class="skins" role="radiogroup" aria-labelledby="skin-heading">
-      <!-- 每个选项带自己的 data-skin，按那个皮肤的变量渲染，当作预览 -->
-      <label v-for="option in skins" :key="option.id" class="skin-option" :data-skin="option.id">
+    <div class="skins" role="radiogroup" aria-label="皮肤">
+      <!-- 每个选项带自己的 data-skin，按那个皮肤的变量渲染，当作预览；行内样式叠加这个皮肤上改过的颜色 -->
+      <label
+        v-for="option in skins"
+        :key="option.id"
+        class="skin-option"
+        :data-skin="option.id"
+        :style="colorVars(skinSettings.colors[option.id])"
+      >
         <span class="skin-preview" aria-hidden="true">
           <span class="sp-nav"><i /><i class="on" /><i /></span>
           <span class="sp-main">
@@ -195,6 +259,56 @@ async function exportDiag() {
       </label>
     </div>
     <p class="hint">主窗口与悬浮窗同时切换。</p>
+
+    <h3>颜色 · {{ currentSkinName }}</h3>
+    <p class="hint">只改当前皮肤，换皮肤时各自保留；主窗口与悬浮窗同时生效。</p>
+    <div class="grid">
+      <template v-for="c in colorRows" :key="c.key">
+        <label :for="`color-${c.key}`">{{ c.name }}</label>
+        <div class="row">
+          <input
+            :id="`color-${c.key}`"
+            type="color"
+            class="swatch"
+            :value="c.value"
+            @change="setColor(c.key, ($event.target as HTMLInputElement).value)"
+          />
+          <span class="code">{{ c.value }}</span>
+          <span class="hint">{{ c.usage }}</span>
+          <button v-if="c.custom" class="small" @click="setColor(c.key, null)">恢复皮肤颜色</button>
+          <span v-if="c.low" class="low-contrast">对比度只有 {{ c.low.toFixed(1) }}:1，作文字时可能看不清</span>
+        </div>
+      </template>
+    </div>
+
+    <h3>字号与间距</h3>
+    <div class="grid">
+      <label for="font-scale">字号</label>
+      <div class="row">
+        <input
+          id="font-scale"
+          type="range"
+          :min="fontScaleRange.min"
+          :max="fontScaleRange.max"
+          :step="fontScaleRange.step"
+          :value="skinSettings.fontScale"
+          @change="setFontScale(($event.target as HTMLInputElement).value)"
+        />
+        <span class="num">{{ Math.round(skinSettings.fontScale * 100) }}%</span>
+      </div>
+      <label id="density-label">间距</label>
+      <div class="row" role="radiogroup" aria-labelledby="density-label">
+        <label v-for="d in densities" :key="d.id" class="check">
+          <input type="radio" name="density" :checked="skinSettings.density === d.id" @change="setDensity(d.id)" />
+          {{ d.name }}
+        </label>
+      </div>
+    </div>
+    <p class="hint">字号与间距只调整主窗口；悬浮窗的大小用下面“悬浮窗”里的缩放。</p>
+    <div class="row actions">
+      <button :disabled="isDefaultAppearance(skinSettings)" @click="resetAppearance">恢复默认外观</button>
+      <span class="hint">恢复「{{ currentSkinName }}」的颜色和默认字号、间距</span>
+    </div>
   </section>
 
   <section class="card">
@@ -358,7 +472,7 @@ async function exportDiag() {
 .skin-option:has(input:focus-visible) { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .skin-option input { margin: 0; accent-color: var(--bax-accent); }
 .skin-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
-.skin-description { color: var(--bax-muted); font-size: 12px; }
+.skin-description { color: var(--bax-muted); font-size: calc(12px * var(--bax-font-scale)); }
 .skin-preview { display: grid; grid-template-columns: 28% minmax(0, 1fr); height: 96px; margin-bottom: 4px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-sm); overflow: hidden; }
 .skin-preview i { display: block; }
 .sp-nav { display: flex; flex-direction: column; gap: 6px; padding: 10px 6px; background: var(--bax-nav-bg); border-right: 1px solid var(--bax-border); }
@@ -368,18 +482,25 @@ async function exportDiag() {
 .sp-card { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface); }
 .sp-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .sp-title { width: 40%; height: 5px; background: var(--bax-muted); box-shadow: calc(-1 * var(--bax-heading-mark)) 0 0 var(--bax-heading-mark-color); }
-.sp-value { color: var(--bax-value); font-size: 13px; line-height: 1; }
+.sp-value { color: var(--bax-value); font-size: 13px; line-height: 1; /* 固定尺寸框，字号不缩放 */ }
 .sp-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; background: transparent; }
 .sp-row.self { background: var(--bax-self-bg); box-shadow: inset 2px 0 0 var(--bax-self-edge); }
 .sp-friend, .sp-foe { width: 18px; height: 5px; border-radius: min(2px, var(--bax-radius-xs)); background: var(--bax-friend); }
 .sp-foe { background: var(--bax-foe); }
 .sp-line { flex: 1; height: 4px; background: var(--bax-faint); }
-.sp-button { align-self: flex-end; padding: 1px 8px; border-radius: var(--bax-radius-xs); background: var(--bax-accent); color: var(--bax-on-accent); font-size: 10px; font-weight: 600; }
+.sp-button { align-self: flex-end; padding: 1px 8px; border-radius: var(--bax-radius-xs); background: var(--bax-accent); color: var(--bax-on-accent); font-size: 10px; font-weight: 600; /* 固定尺寸框，字号不缩放 */ }
+.swatch { width: 40px; height: 26px; padding: 0; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); cursor: pointer; }
+.swatch::-webkit-color-swatch-wrapper { padding: 3px; }
+.swatch::-webkit-color-swatch { border: 0; border-radius: min(2px, var(--bax-radius-xs)); }
+.swatch:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
+.code { min-width: 4.5em; font-family: var(--bax-mono); font-size: calc(12px * var(--bax-font-scale)); }
+button.small { padding: 2px 8px; font-size: calc(12px * var(--bax-font-scale)); }
+.low-contrast { flex-basis: 100%; color: var(--bax-warn); font-size: calc(12px * var(--bax-font-scale)); }
 .release-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
 input[type="number"] { width: 72px; padding: 5px 8px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-sm); background: var(--bax-surface-2); color: var(--bax-fg); }
 input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
 .card + .card {
-  margin-top: 16px;
+  margin-top: calc(16px * var(--bax-density));
 }
 
 .wide {
@@ -389,14 +510,14 @@ input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outli
 
 .grid {
   display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 10px 16px;
+  grid-template-columns: calc(150px * var(--bax-font-scale)) minmax(0, 1fr);
+  gap: calc(10px * var(--bax-density)) 16px;
   align-items: center;
 }
 
 .grid > label {
   color: var(--bax-muted);
-  font-size: 13px;
+  font-size: calc(13px * var(--bax-font-scale));
 }
 
 .check {
@@ -416,7 +537,7 @@ input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outli
 
 .path {
   font-family: var(--bax-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--bax-font-scale));
   word-break: break-all;
 }
 </style>
