@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { rosterGroups, type RosterRow } from "../shared/roster";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { commands, errorText, useAppStatus, useSnapshot } from "../shared/engine";
@@ -198,7 +197,8 @@ function fitWindow() {
   const key = `${width}x${height}`;
   if (key === lastSize || width === 0 || height === 0) return;
   lastSize = key;
-  void getCurrentWindow().setSize(new LogicalSize(width, height)).catch(() => { lastSize = ""; });
+  // 由外壳改大小：开启吸附边缘时要和位置一起算（贴着下边展开时保持贴边）
+  void commands.fitOverlay(width, height).catch(() => { lastSize = ""; });
 }
 
 function relayout() {

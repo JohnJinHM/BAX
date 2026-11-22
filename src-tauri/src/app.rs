@@ -101,6 +101,7 @@ pub fn run() {
             commands::set_ui_setting,
             commands::set_overlay_locked,
             commands::set_overlay_hotspot,
+            commands::fit_overlay,
             commands::set_overlay_visible,
             commands::open_main_window,
             commands::open_batrace_player,

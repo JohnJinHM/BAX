@@ -10,6 +10,7 @@ mod app;
 mod commands;
 mod hotkeys;
 mod overlay;
+mod snap;
 mod tray;
 mod updater;
 #[cfg(windows)]

@@ -29,6 +29,7 @@ BAX 自身采用 MIT 许可（见 [LICENSE](LICENSE)）。BAX 中移植自原型
 | `crates/bax-gamelog/src/tail.rs` | `LogWatcher.run`、`_latest` | 按偏移量增量读取最新日志；改为按字节切行并处理截断与换文件 |
 | `crates/bax-batrace/src/client.rs` | `fetch_json` | 接口路径、请求头、默认不走代理、检查返回的是 JSON |
 | `crates/bax-engine/src/session.rs`、`config.rs` | `EloService`、`_warm`、`_fill_levels`，常量 `WORKERS`、`INFO_TIMEOUT` | 5 路并发、单人请求 8 秒超时、旧资料兜底、换局后丢弃旧结果、12 秒与 24 秒后重试 |
+| `src-tauri/src/snap.rs`、`overlay.rs` | `_drag_end`、`_snap`、`_apply_dock`、`_work_area`，常量 `SNAP_PX` | 拖动松手后离工作区边缘 18 像素内贴边，改变大小时重新贴边；改为各条边分别判断，按显示器工作区与物理像素计算 |
 
 ## Inter 字体
 

@@ -4,6 +4,9 @@
 //! 锁定时鼠标穿透到下面的游戏，只有锁按钮还能点；解锁时可以拖动、点全部按钮。
 //! 显示和隐藏都不激活窗口，免得把焦点从游戏抢走（独占全屏时抢焦点会让游戏最小化）。
 //! 这些行为是否在各种显示模式下都成立，由验证 1 在实机上确认。
+//!
+//! 开启吸附边缘（界面设置 `ui.overlay` 的 `snapEdges`，默认开启）时，拖动松手后离屏幕工作区的边不远就贴过去；
+//! 页面按内容改变窗口大小时保持贴着的边，并留在工作区里。几何计算见 `snap` 模块。
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,16 +15,25 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::app::AppState;
+use crate::snap;
 
 pub const LABEL: &str = "overlay";
 /// 悬浮窗的位置与锁定状态，由外壳维护。
 pub const WINDOW_KEY: &str = "ui.overlay.window";
 const ALERTS_KEY: &str = "ui.alerts";
+/// 悬浮窗外观，由界面维护；外壳只读其中的 `snapEdges`。
+const APPEARANCE_KEY: &str = "ui.overlay";
+/// 拖动松手后离工作区边缘多近就贴过去，逻辑像素。与原型相同。
+const SNAP_DISTANCE: f64 = 18.0;
+/// 移动停下多久后看是否松手、是否贴边。
+const SNAP_DELAY: Duration = Duration::from_millis(150);
+/// 移动停下多久后保存位置。
+const SAVE_DELAY: Duration = Duration::from_millis(600);
 /// 锁定期间鼠标进入或离开锁按钮。载荷是 `bool`，悬浮窗据此显示按钮的悬停样式：
 /// 窗口恢复穿透后页面收不到鼠标离开的事件，不能靠 CSS 的 `:hover`。
 pub const LOCK_HOVER_EVENT: &str = "bax://overlay-lock-hover";
@@ -52,6 +64,19 @@ impl Default for AlertSettings {
             sound: true,
             show_overlay: true,
         }
+    }
+}
+
+/// `ui.overlay` 里外壳要读的部分。默认值与界面一侧（`src/shared/settings.ts`）保持一致。
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct Appearance {
+    snap_edges: bool,
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Appearance { snap_edges: true }
     }
 }
 
@@ -371,15 +396,105 @@ pub fn on_alert(app: &AppHandle, ui: &BTreeMap<String, serde_json::Value>) {
     }
 }
 
-/// 拖动会连续产生很多移动事件，停下 0.6 秒后再保存位置。
+fn snap_enabled(app: &AppHandle) -> bool {
+    let snapshot = app.state::<AppState>().engine.snapshot();
+    read::<Appearance>(&snapshot.ui, APPEARANCE_KEY).snap_edges
+}
+
+/// 窗口的位置大小与它所在显示器的工作区（去掉任务栏），物理像素。
+fn geometry(window: &WebviewWindow) -> Option<(snap::Rect, snap::Rect)> {
+    let position = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    let monitor = window.current_monitor().ok().flatten()?;
+    let area = monitor.work_area();
+    Some((
+        snap::Rect {
+            x: position.x,
+            y: position.y,
+            width: i32::try_from(size.width).ok()?,
+            height: i32::try_from(size.height).ok()?,
+        },
+        snap::Rect {
+            x: area.position.x,
+            y: area.position.y,
+            width: i32::try_from(area.size.width).ok()?,
+            height: i32::try_from(area.size.height).ok()?,
+        },
+    ))
+}
+
+/// 离工作区边缘不远时贴过去。位置变了返回 `true`，之后的移动事件会负责保存。
+fn snap_to_edges(app: &AppHandle) -> bool {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return false;
+    };
+    let (Some((rect, area)), Ok(scale)) = (geometry(&window), window.scale_factor()) else {
+        return false;
+    };
+    let distance = (SNAP_DISTANCE * scale).round() as i32;
+    let (x, y) = snap::snap(rect, area, distance);
+    if (x, y) == (rect.x, rect.y) {
+        return false;
+    }
+    tracing::debug!(dx = x - rect.x, dy = y - rect.y, "悬浮窗贴边");
+    window.set_position(PhysicalPosition::new(x, y)).is_ok()
+}
+
+/// 页面按内容报告的大小，逻辑像素。开启吸附边缘时，位置和大小一起算、一次改完：
+/// 贴着下边展开时窗口不会先往下长再跳回来。
+pub fn fit(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()> {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return Ok(());
+    };
+    let logical = LogicalSize::new(width, height);
+    let geometry = snap_enabled(app).then(|| geometry(&window)).flatten();
+    let Some((rect, area)) = geometry else {
+        return window.set_size(logical);
+    };
+    let size: PhysicalSize<i32> = logical.to_physical(window.scale_factor()?);
+    let (x, y) = snap::resize(rect, size.width, size.height, area);
+    #[cfg(windows)]
+    {
+        let hwnd = window.hwnd()?;
+        if !crate::win32::set_bounds(hwnd.0, x, y, size.width, size.height) {
+            tracing::warn!("调整悬浮窗大小失败");
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        window.set_size(size)?;
+        window.set_position(PhysicalPosition::new(x, y))
+    }
+}
+
+/// 拖动会连续产生很多移动事件。停下一会儿、鼠标键都松开以后按设置贴边；停下 0.6 秒后保存位置。
 fn remember_position(app: &AppHandle) {
     let overlay = app.state::<OverlayState>();
     let ticket = overlay.moves.fetch_add(1, Ordering::SeqCst) + 1;
     let moves = Arc::clone(&overlay.moves);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(600)).await;
-        if moves.load(Ordering::SeqCst) != ticket {
+        let superseded = || moves.load(Ordering::SeqCst) != ticket;
+        tokio::time::sleep(SNAP_DELAY).await;
+        if superseded() {
+            return;
+        }
+        if snap_enabled(&app) {
+            // 拖动时按住鼠标不动不会产生移动事件，等松手再贴边
+            #[cfg(windows)]
+            while crate::win32::mouse_button_down() {
+                tokio::time::sleep(POLL_INTERVAL).await;
+                if superseded() {
+                    return;
+                }
+            }
+            if snap_to_edges(&app) {
+                return;
+            }
+        }
+        tokio::time::sleep(SAVE_DELAY.saturating_sub(SNAP_DELAY)).await;
+        if superseded() {
             return;
         }
         let Some(window) = app.get_webview_window(LABEL) else {

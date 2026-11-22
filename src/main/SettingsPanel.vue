@@ -202,6 +202,8 @@ async function exportDiag() {
           {{ status?.overlayVisible ? "隐藏悬浮窗" : "显示悬浮窗" }}
         </button>
       </div>
+      <label>吸附边缘</label>
+      <label class="check"><input type="checkbox" :checked="appearance.snapEdges" @change="run(() => saveSetting(appearance, 'ui.overlay', { snapEdges: ($event.target as HTMLInputElement).checked }))" />拖动松手后靠近屏幕边缘时贴边，展开收起时保持贴边</label>
       <label>自动展开</label>
       <label class="check"><input type="checkbox" :checked="appearance.autoExpand" @change="run(() => saveSetting(appearance, 'ui.overlay', { autoExpand: ($event.target as HTMLInputElement).checked }))" />随比赛阶段展开与收起</label>
       <label for="collapse-before">准备剩余秒数</label>

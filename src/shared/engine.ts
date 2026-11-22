@@ -92,6 +92,8 @@ export const commands = {
   setOverlayHotspot: (hotspot: { x: number; y: number; width: number; height: number } | null) =>
     invoke<void>("set_overlay_hotspot", { hotspot }),
   setOverlayVisible: (visible: boolean) => invoke<void>("set_overlay_visible", { visible }),
+  /** 按内容调整悬浮窗大小，逻辑像素。开启吸附边缘时外壳保持贴着的边。 */
+  fitOverlay: (width: number, height: number) => invoke<void>("fit_overlay", { width, height }),
   openMainWindow: () => invoke<void>("open_main_window"),
   openBatracePlayer: (id: number) => invoke<void>("open_batrace_player", { id }),
   openDiagDir: () => invoke<void>("open_diag_dir"),

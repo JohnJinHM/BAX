@@ -1,5 +1,5 @@
 // 界面设置。引擎只负责保存和分发（键以 ui. 开头），内容由界面自己定义。
-// ui.hotkeys、ui.alerts 与 ui.diag 也由 Rust 外壳读取，默认值与 Rust 一侧的保持一致。
+// ui.hotkeys、ui.alerts、ui.diag 与 ui.overlay 的 snapEdges 也由 Rust 外壳读取，默认值与 Rust 一侧的保持一致。
 
 import { computed, type ComputedRef, type ShallowRef } from "vue";
 
@@ -18,6 +18,8 @@ export interface OverlayAppearance {
   autoExpand: boolean;
   collapseBeforeBattleSecs: number;
   animations: boolean;
+  /** 拖动松手后靠近屏幕边缘时贴边，改变大小时保持贴边。外壳读取，默认值与 src-tauri/src/overlay.rs 一致 */
+  snapEdges: boolean;
 }
 
 export interface AlertSettings {
@@ -56,7 +58,7 @@ export const defaults: Settings = {
   "ui.skin": { id: "default" },
   "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },
-  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true },
+  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true, snapEdges: true },
   "ui.alerts": { sound: true, showOverlay: true },
   "ui.hotkeys": { toggleOverlay: "Ctrl+Alt+B", toggleLock: "Ctrl+Alt+L" },
   "ui.diag": { level: "standard" },

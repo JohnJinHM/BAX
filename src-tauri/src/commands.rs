@@ -113,6 +113,12 @@ pub fn set_overlay_locked(app: AppHandle, locked: bool) -> CommandResult {
     overlay::set_locked(&app, locked, "界面").map_err(|e| e.to_string())
 }
 
+/// 悬浮窗按内容报告自己的大小（逻辑像素）。开启吸附边缘时保持贴着的边，并留在屏幕里。
+#[tauri::command]
+pub fn fit_overlay(app: AppHandle, width: f64, height: f64) -> CommandResult {
+    overlay::fit(&app, width, height).map_err(|e| e.to_string())
+}
+
 /// 悬浮窗报告锁按钮的位置（物理像素，相对窗口左上角），锁定后鼠标在这里时仍可点击。
 #[tauri::command]
 pub fn set_overlay_hotspot(app: AppHandle, hotspot: Option<overlay::Hotspot>) {

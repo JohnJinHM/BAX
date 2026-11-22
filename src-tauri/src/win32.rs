@@ -10,6 +10,8 @@
 //!
 //! 锁定后悬浮窗上的锁按钮仍要能点：外壳轮询鼠标位置，鼠标在按钮上时暂时去掉 `WS_EX_TRANSPARENT`，
 //! 离开后再加上（见 `overlay` 模块）。
+//!
+//! 悬浮窗贴边时要知道拖动是否结束（鼠标键是否松开），并且一次改完位置和大小。
 
 #![allow(unsafe_code)]
 
@@ -20,6 +22,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::Beep;
 use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect,
     GetWindowThreadProcessId, HWND_TOPMOST, LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE,
@@ -116,6 +119,34 @@ pub fn cursor_in_window(hwnd: *mut c_void) -> Option<(i32, i32)> {
             return None;
         }
         Some((cursor.x - rect.left, cursor.y - rect.top))
+    }
+}
+
+/// 鼠标左键或右键是否按着。看的是物理按键：左右键对调后，系统拖动窗口用的是物理右键。
+/// 只读取系统状态，可以在任何线程调用。
+pub fn mouse_button_down() -> bool {
+    // SAFETY: 只接受一个整数参数，没有指针。
+    unsafe {
+        [VK_LBUTTON, VK_RBUTTON]
+            .into_iter()
+            .any(|key| GetAsyncKeyState(i32::from(key)) as u16 & 0x8000 != 0)
+    }
+}
+
+/// 一次改窗口的位置和大小，物理像素；不激活窗口，不改层次。返回是否成功。
+/// 会给窗口发消息，要在主线程上调用。
+pub fn set_bounds(hwnd: *mut c_void, x: i32, y: i32, width: i32, height: i32) -> bool {
+    // SAFETY: 句柄来自 Tauri 窗口，窗口存活期间有效；句柄失效时函数返回失败，没有指针参数。
+    unsafe {
+        SetWindowPos(
+            hwnd as HWND,
+            std::ptr::null_mut(),
+            x,
+            y,
+            width,
+            height,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        ) != 0
     }
 }
 
