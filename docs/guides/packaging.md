@@ -24,8 +24,8 @@ pwsh -File scripts/build.ps1 -Mode Installer -Edition Full
 | 模式 | 用途 | Full 产物 |
 |---|---|---|
 | Dev | 内置前端的 Debug 版，便于本机调试 | `target/debug/bax-app.exe` |
-| Portable | 优化的 Release 便携 ZIP | `target/release/bundle/portable/BAX-Full_0.2.1_x64-portable.zip` |
-| Installer | 优化的 Release NSIS 安装器 | `target/release/bundle/nsis/BAX-Full_0.2.1_x64-setup.exe` |
+| Portable | 优化的 Release 便携 ZIP | `target/release/bundle/portable/BAX-Full_0.2.2_x64-portable.zip` |
+| Installer | 优化的 Release NSIS 安装器 | `target/release/bundle/nsis/BAX-Full_0.2.2_x64-setup.exe` |
 
 Full 使用默认 `target`；Lite 位于 `target/editions/lite`，文件名使用 `BAX-Lite`。Portable 和 Installer 共用各自版本的 Release 编译缓存。`CARGO_TARGET_DIR` 可指定输出根目录，Full 直接使用该目录，Lite 在其下追加 `editions/lite`；结束后恢复环境变量及工作目录。
 

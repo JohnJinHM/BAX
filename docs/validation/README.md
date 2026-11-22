@@ -32,6 +32,8 @@ Full / Lite 构建验证：[同一主线的两个安装包](full-lite-builds.md)
 
 皮肤：[默认皮肤保持不变、断箭皮肤、对比度与吸附边缘](skins.md)（预览页截图与单元测试，桌面应用内切换和拖动待确认）。
 
+数据源：[主源兼容性、字段转换、缓存与回退](upstream-api-compatibility.md)，包含独立 Debug 修正及维护者验收反馈；[0.2.2 发布检查](release-0.2.2.md)。
+
 ## 记录方式
 
 新增功能验证：[常用专精与 GitHub 签名更新](player-specs-updater.md)。
