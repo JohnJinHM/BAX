@@ -410,6 +410,23 @@ fn a_partial_rejoin_preserves_confirmed_encounters_in_order() {
 }
 
 #[test]
+fn a_complete_log_imported_after_a_partial_roster_restores_the_original_order() {
+    let mut store = Store::open_in_memory().expect("长期库");
+    let full = played(1, 1000, standard_roster());
+    let mut partial = state(&full).clone();
+    partial.rejoined = true;
+    partial.roster.drain(..2);
+    store.record_match(&partial).expect("先导入重连");
+    store.record_match(state(&full)).expect("后导入完整日志");
+    store.record_match(&partial).expect("再次导入重连");
+    let rows = store.match_players(MatchId(1)).expect("名单");
+    assert_eq!(
+        rows.iter().map(|r| r.player.get()).collect::<Vec<_>>(),
+        [101, 102, 201, ME]
+    );
+}
+
+#[test]
 fn early_players_are_replaced_by_the_full_roster() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let id = MatchId(9_000_001);

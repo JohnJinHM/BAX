@@ -491,18 +491,24 @@ impl Store {
                 "DELETE FROM match_players WHERE match_id = ?1 AND team IS NULL",
                 [match_id],
             )?;
-            for entry in &state.roster {
+            let confirmed = self.match_players(state.match_id)?;
+            let covers_confirmed = confirmed
+                .iter()
+                .all(|old| state.roster.iter().any(|p| p.id == old.player));
+            for (position, entry) in state.roster.iter().enumerate() {
                 tx.execute(
                     "INSERT INTO match_players(match_id, player_id, position, team, log_name)
-                     SELECT ?1, ?2, COALESCE(MAX(position) + 1, 0), ?3, ?4
+                     SELECT ?1, ?2, COALESCE(?5, MAX(position) + 1, 0), ?3, ?4
                      FROM match_players WHERE match_id = ?1
                      ON CONFLICT(match_id, player_id) DO UPDATE SET
-                         team = excluded.team, log_name = COALESCE(excluded.log_name, log_name)",
+                         team = excluded.team, log_name = COALESCE(excluded.log_name, log_name),
+                         position = COALESCE(?5, position)",
                     params![
                         match_id,
                         id_to_db(entry.id.get()),
                         team_to_db(entry.team),
-                        entry.name
+                        entry.name,
+                        covers_confirmed.then_some(position as i64),
                     ],
                 )?;
                 touch_player(&tx, entry.id, entry.name.as_deref(), seen_at)?;
