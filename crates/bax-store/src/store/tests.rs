@@ -815,6 +815,38 @@ fn a_failed_migration_leaves_the_previous_version_in_place() {
 }
 
 #[test]
+fn migration_backup_includes_commits_after_an_active_read_snapshot() {
+    let dir = tempfile::tempdir().expect("临时目录");
+    let path = dir.path().join("bax.db");
+    let v1 = "CREATE TABLE notes (body TEXT);";
+    let writer = db::open(Some(&path), &[v1], true).expect("旧库");
+    writer
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .expect("检查点");
+    let reader = Connection::open(&path).expect("读连接");
+    reader
+        .execute_batch("BEGIN; SELECT * FROM notes")
+        .expect("固定旧快照");
+    writer
+        .execute("INSERT INTO notes VALUES ('已保存')", [])
+        .expect("提交备注");
+    let upgraded = db::open(
+        Some(&path),
+        &[v1, "ALTER TABLE notes ADD COLUMN tag TEXT"],
+        true,
+    )
+    .expect("升级");
+    let backup = Connection::open(db::backup_path(&path, 1)).expect("读取备份");
+    assert_eq!(db::schema_version(&backup).expect("版本"), 1);
+    for conn in [&backup, &upgraded] {
+        let body: String = conn
+            .query_row("SELECT body FROM notes", [], |r| r.get(0))
+            .expect("备注");
+        assert_eq!(body, "已保存");
+    }
+}
+
+#[test]
 fn reminder_outcomes_are_recorded_once_per_match_and_rule() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let id = MatchId(1);

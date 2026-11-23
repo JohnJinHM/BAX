@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
 use crate::Result;
 use crate::error::StoreError;
@@ -39,30 +39,42 @@ pub(crate) fn open(
     conn.pragma_update(None, "foreign_keys", "ON")?;
 
     let supported = migrations.len() as u32;
-    let found = schema_version(&conn)?;
-    if found > supported {
-        return Err(StoreError::SchemaTooNew { found, supported });
-    }
+    let found = checked_version(&conn, supported)?;
     if found < supported {
+        // 多个进程同时打开旧库时，由拿到写锁的连接执行备份和升级。
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let found = checked_version(&tx, supported)?;
+        if found == supported {
+            tx.commit()?;
+            return Ok(conn);
+        }
         tracing::info!(from = found, to = supported, "数据库结构升级");
         if backup_before_migrating
             && found > 0
             && let Some(path) = path
         {
-            backup(&conn, path, found)?;
+            let reader = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+            reader.backup(rusqlite::MAIN_DB, backup_path(path, found), None)?;
         }
         for (index, script) in migrations.iter().enumerate().skip(found as usize) {
-            let tx = conn.transaction()?;
             tx.execute_batch(script)?;
             tx.pragma_update(None, "user_version", (index + 1) as u32)?;
-            tx.commit()?;
         }
+        tx.commit()?;
     }
     Ok(conn)
 }
 
 pub(crate) fn schema_version(conn: &Connection) -> Result<u32> {
     Ok(conn.query_row("PRAGMA user_version", [], |row| row.get(0))?)
+}
+
+fn checked_version(conn: &Connection, supported: u32) -> Result<u32> {
+    let found = schema_version(conn)?;
+    if found > supported {
+        return Err(StoreError::SchemaTooNew { found, supported });
+    }
+    Ok(found)
 }
 
 /// 迁移前的备份文件路径：`bax.db` 的第 1 版备份为 `bax.db.v1.bak`。
@@ -73,15 +85,4 @@ pub(crate) fn backup_path(path: &Path, version: u32) -> PathBuf {
         .unwrap_or_default();
     name.push(format!(".v{version}.bak"));
     path.with_file_name(name)
-}
-
-fn backup(conn: &Connection, path: &Path, version: u32) -> Result<()> {
-    let target = backup_path(path, version);
-    // 先把 WAL 里的内容并回主文件，复制出来的才是完整的库
-    conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
-    fs::copy(path, &target).map_err(|source| StoreError::Io {
-        path: target,
-        source,
-    })?;
-    Ok(())
 }
