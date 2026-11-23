@@ -381,6 +381,35 @@ fn the_end_of_a_match_is_recorded_and_kept() {
 }
 
 #[test]
+fn a_partial_rejoin_preserves_confirmed_encounters_in_order() {
+    let mut store = Store::open_in_memory().expect("长期库");
+    let original = played(1, 1000, standard_roster());
+    store.record_match(state(&original)).expect("正式名单");
+    let mut rejoin = state(&original).clone();
+    rejoin.rejoined = true;
+    rejoin.roster = vec![
+        entry(201, "", Team::Bravo),
+        entry(301, "Birch", Team::Spectators),
+    ];
+    for _ in 0..2 {
+        store.record_match(&rejoin).expect("合并重连名单");
+    }
+    let rows = store.match_players(MatchId(1)).expect("名单");
+    assert_eq!(
+        rows.iter().map(|r| r.player.get()).collect::<Vec<_>>(),
+        [101, 102, 201, ME, 301]
+    );
+    assert_eq!(rows[2].log_name.as_deref(), Some("Dune"));
+    assert_eq!(
+        store
+            .encounters(PlayerId(101), None)
+            .expect("相遇")
+            .as_opponent,
+        1
+    );
+}
+
+#[test]
 fn early_players_are_replaced_by_the_full_roster() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     let id = MatchId(9_000_001);
@@ -403,7 +432,8 @@ fn early_players_are_replaced_by_the_full_roster() {
             },
         );
     }
-    store.record_match(state(&tr)).expect("记录等待室");
+    let early = state(&tr).clone();
+    store.record_match(&early).expect("记录等待室");
     assert_eq!(
         store.match_players(id).expect("读取"),
         vec![
@@ -428,6 +458,7 @@ fn early_players_are_replaced_by_the_full_roster() {
         },
     );
     store.record_match(state(&tr)).expect("记录名单");
+    store.record_match(&early).expect("重放早到的等待室记录");
 
     let ids: Vec<u64> = store
         .match_players(id)

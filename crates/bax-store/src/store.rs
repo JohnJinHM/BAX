@@ -429,9 +429,13 @@ impl Store {
 
     /// 把一场比赛的当前状态合并进长期库，连同名单和玩家的相遇时间。
     pub fn record_match(&mut self, state: &MatchState) -> Result<()> {
+        // 导入和实时会话可能同时合并同一场比赛，读取旧状态前先取得写锁。
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         let existing = self.match_record(state.match_id)?;
         let merged = merge_match(existing, state);
-        let tx = self.conn.transaction()?;
         let match_id = id_to_db(merged.id.get());
         tx.execute(
             "INSERT INTO matches(id, discovered_at, phase, rejoined, map, scenario, deck, game_version,
@@ -467,25 +471,37 @@ impl Store {
 
         let seen_at = merged.discovered_at.as_millis();
         if !state.roster.is_empty() {
-            // 完整名单取代等待室里先到的玩家：没进名单的人已经离开了
-            tx.execute("DELETE FROM match_players WHERE match_id = ?1", [match_id])?;
-            for (position, entry) in state.roster.iter().enumerate() {
+            // 只有等待室线索是临时的。重连或分段写入的名单可能只含部分正式成员。
+            tx.execute(
+                "DELETE FROM match_players WHERE match_id = ?1 AND team IS NULL",
+                [match_id],
+            )?;
+            for entry in &state.roster {
                 tx.execute(
                     "INSERT INTO match_players(match_id, player_id, position, team, log_name)
-                     VALUES (?1, ?2, ?3, ?4, ?5)
-                     ON CONFLICT(match_id, player_id) DO NOTHING",
+                     SELECT ?1, ?2, COALESCE(MAX(position) + 1, 0), ?3, ?4
+                     FROM match_players WHERE match_id = ?1
+                     ON CONFLICT(match_id, player_id) DO UPDATE SET
+                         team = excluded.team, log_name = COALESCE(excluded.log_name, log_name)",
                     params![
                         match_id,
                         id_to_db(entry.id.get()),
-                        position as i64,
                         team_to_db(entry.team),
                         entry.name
                     ],
                 )?;
                 touch_player(&tx, entry.id, entry.name.as_deref(), seen_at)?;
             }
-        } else {
+        } else if !state.early.is_empty() {
+            let roster_known: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM match_players WHERE match_id = ?1 AND team IS NOT NULL)",
+                [match_id], |r| r.get(0),
+            )?;
             for (position, early) in state.early.iter().enumerate() {
+                touch_player(&tx, early.id, early.name.as_deref(), seen_at)?;
+                if roster_known {
+                    continue;
+                }
                 tx.execute(
                     "INSERT INTO match_players(match_id, player_id, position, team, log_name)
                      VALUES (?1, ?2, ?3, NULL, ?4)
@@ -498,7 +514,6 @@ impl Store {
                         early.name
                     ],
                 )?;
-                touch_player(&tx, early.id, early.name.as_deref(), seen_at)?;
             }
         }
         tx.commit()?;
