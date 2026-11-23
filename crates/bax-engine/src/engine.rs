@@ -195,6 +195,11 @@ impl Engine {
         reply(wait).await
     }
 
+    pub async fn reserve_reminder_id(&self) -> Result<u32, CommandError> {
+        self.read(|store| store.reserve_reminder_id().map_err(|e| e.to_string()))
+            .await
+    }
+
     /// 手动校准当前比赛的计时：此刻处于正式开局后 `elapsed_ms` 毫秒，准备阶段里为负数。
     pub async fn calibrate(&self, elapsed_ms: i64) -> Result<(), CommandError> {
         let (done, wait) = oneshot::channel();

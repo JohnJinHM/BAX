@@ -802,6 +802,40 @@ async fn reminders_passed_before_bax_started_are_marked_missed() {
     engine.shutdown().await;
 }
 
+#[tokio::test]
+async fn a_replacement_reminder_gets_its_own_outcome_after_restart() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&match_in_progress(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "补读完成", |s| s.log.ready).await;
+    engine
+        .set_reminders(vec![rule(7, 10, "旧版规则")])
+        .await
+        .expect("保存");
+    wait_for(&engine, "旧规则已处理", |s| {
+        s.reminders[0].outcome.is_some()
+    })
+    .await;
+    engine.set_reminders(vec![]).await.expect("删除旧规则");
+    engine.shutdown().await;
+    let engine = fx.start();
+    wait_for(&engine, "重新打开", |s| s.log.ready).await;
+    let id = engine.reserve_reminder_id().await.expect("分配新编号");
+    assert!(id > 7);
+    engine
+        .set_reminders(vec![rule(id, 120, "新规则")])
+        .await
+        .expect("保存新规则");
+    fx.clock.set(ts("18:56:34.000"));
+    let fired = wait_for(&engine, "新规则响铃", |s| {
+        s.alert.as_ref().is_some_and(|a| a.rule_id == id)
+    })
+    .await;
+    assert_eq!(fired.reminders[0].outcome, Some(ReminderOutcome::Fired));
+    engine.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn manual_calibration_moves_the_clock() {
     let fx = Fixture::new().await;

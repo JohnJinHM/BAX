@@ -93,6 +93,7 @@ export const commands = {
   refreshPlayers: () => invoke<void>("refresh_players"),
   setLogDir: (dir: string | null) => invoke<void>("set_log_dir", { dir }),
   setReminders: (rules: ReminderRule[]) => invoke<void>("set_reminders", { rules }),
+  reserveReminderId: () => invoke<number>("reserve_reminder_id"),
   /** 此刻处于正式开局后多少毫秒，准备阶段里为负数。 */
   calibrate: (elapsedMs: number) => invoke<void>("calibrate", { elapsedMs }),
   setUiSetting: (key: string, value: JsonValue) => invoke<void>("set_ui_setting", { key, value }),

@@ -690,6 +690,31 @@ impl Store {
 
     // ------------------------------------------------------------ 提醒
 
+    /// 分配稳定编号。首次分配时兼容旧版规则和已经删除的提醒的触发记录。
+    pub fn reserve_reminder_id(&mut self) -> Result<u32> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let last: u32 = tx.query_row(
+            "SELECT max(
+                coalesce((SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'reminders.lastId'), 0),
+                coalesce((SELECT max(rule_id) FROM reminder_log), 0),
+                coalesce((SELECT max(json_extract(r.value, '$.id'))
+                          FROM settings s, json_each(s.value) r WHERE s.key = 'reminders'), 0)
+            )", [], |r| r.get(0),
+        )?;
+        let id = last
+            .checked_add(1)
+            .ok_or_else(|| StoreError::Corrupt("提醒编号已用尽".into()))?;
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES ('reminders.lastId', ?1)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [id.to_string()],
+        )?;
+        tx.commit()?;
+        Ok(id)
+    }
+
     /// 记下一条提醒规则在一场比赛里的结果。每条规则每场只记第一次，返回这次是否记下了。
     pub fn record_reminder(
         &mut self,

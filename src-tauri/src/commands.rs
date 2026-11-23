@@ -78,6 +78,15 @@ pub async fn set_log_dir(state: State<'_, AppState>, dir: Option<String>) -> Com
 }
 
 #[tauri::command]
+pub async fn reserve_reminder_id(state: State<'_, AppState>) -> Result<u32, String> {
+    state
+        .engine
+        .reserve_reminder_id()
+        .await
+        .map_err(rejected("reserve_reminder_id"))
+}
+
+#[tauri::command]
 pub async fn set_reminders(state: State<'_, AppState>, rules: Vec<ReminderRule>) -> CommandResult {
     state
         .engine

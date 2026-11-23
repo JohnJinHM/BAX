@@ -72,8 +72,11 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       ambiguous: i === 3,
     })) }; m.players = []; m.teams = [];
   }
+  let lastReminderId = Math.max(0, ...fixtureSnapshot.reminders.map(r => r.id));
   mockIPC((cmd, args) => {
     switch (cmd) {
+      case "reserve_reminder_id":
+        return ++lastReminderId;
       case "check_data_sources":
         return new Promise(resolve => setTimeout(() => resolve([
           { name: "主源 · 玩家资料", available: true, message: "预览样本：查询成功", latencyMs: 180, checkedAt: Math.floor(Date.now() / 1000) },

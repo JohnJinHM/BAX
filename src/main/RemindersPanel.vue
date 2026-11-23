@@ -48,10 +48,14 @@ function edit() {
   message.value = null;
 }
 
-function add() {
-  const id = Math.max(0, ...drafts.value.map((d) => d.id)) + 1;
-  drafts.value.push({ id, time: "", label: "", enabled: true });
-  edit();
+async function add() {
+  try {
+    const id = await commands.reserveReminderId();
+    drafts.value.push({ id, time: "", label: "", enabled: true });
+    edit();
+  } catch (error) {
+    message.value = { ok: false, text: errorText(error) };
+  }
 }
 
 function remove(index: number) {

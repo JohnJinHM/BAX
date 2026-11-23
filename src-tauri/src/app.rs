@@ -99,6 +99,7 @@ pub fn run() {
             commands::refresh_players,
             commands::set_log_dir,
             commands::set_reminders,
+            commands::reserve_reminder_id,
             commands::calibrate,
             commands::set_ui_setting,
             commands::set_overlay_locked,
