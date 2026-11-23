@@ -59,6 +59,34 @@ async fn empty_report_is_not_cached_and_later_archive_can_succeed() {
 }
 
 #[tokio::test]
+async fn an_empty_fallback_is_retried_and_only_the_complete_report_is_cached() {
+    let primary = MockServer::start().await;
+    let fallback = MockServer::start().await;
+    Mock::given(path("/api/match"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"matchInfo": null})))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .expect(1)
+        .mount(&fallback)
+        .await;
+    mock(
+        &fallback,
+        "/api/match",
+        json!({"matchInfo": {"Data": {"12": {"Id": 12}}}}),
+        1,
+    )
+    .await;
+    let client = client(&primary, &fallback);
+    assert!(matches!(
+        client.match_report(MatchId(88)).await,
+        Err(ApiError::NotFound)
+    ));
+    for _ in 0..2 {
+        assert!(client.match_report(MatchId(88)).await.is_ok());
+    }
+}
+
+#[tokio::test]
 async fn expired_cache_is_refreshed_and_primary_recovers_after_cooldown() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;

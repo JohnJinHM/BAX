@@ -179,6 +179,21 @@ impl BatraceClient {
         path: &str,
         timeout: Option<Duration>,
     ) -> Result<Fetched<T>, ApiError> {
+        self.fetch_parsed(source, base, endpoint, path, timeout, |raw| {
+            serde_json::from_str(raw).map_err(|e| ApiError::Decode(e.to_string()))
+        })
+        .await
+    }
+
+    async fn fetch_parsed<T>(
+        &self,
+        source: &str,
+        base: &str,
+        endpoint: &'static str,
+        path: &str,
+        timeout: Option<Duration>,
+        parse: impl Fn(&str) -> Result<T, ApiError>,
+    ) -> Result<Fetched<T>, ApiError> {
         let url = format!("{}{path}", base.trim_end_matches('/'));
         let ttl = match endpoint {
             "match" => 24 * 3600,
@@ -205,7 +220,7 @@ impl BatraceClient {
             && let Some((at, raw)) = &**guard
             && at.elapsed() < Duration::from_secs(ttl)
         {
-            let data = serde_json::from_str(raw).map_err(|e| ApiError::Decode(e.to_string()))?;
+            let data = parse(raw)?;
             return Ok(Fetched {
                 data,
                 raw: raw.clone(),
@@ -251,7 +266,7 @@ impl BatraceClient {
             if !is_json {
                 return Err(ApiError::Challenge);
             }
-            let data = serde_json::from_str(&raw).map_err(|e| ApiError::Decode(e.to_string()))?;
+            let data = parse(&raw)?;
             Ok(Fetched { data, raw })
         }
         .await;
@@ -389,46 +404,51 @@ impl BatraceClient {
     ) -> Result<Fetched<MatchInfo>, ApiError> {
         let upstream = self.upstream.as_ref().expect("upstream enabled");
         let primary = self
-            .fetch_at::<Value>(
+            .fetch_parsed(
                 "reports",
                 &upstream.reports_url,
                 "match",
                 &format!("/fights/fight_{id}.json"),
                 None,
+                |raw| {
+                    let mut value =
+                        serde_json::from_str(raw).map_err(|e| ApiError::Decode(e.to_string()))?;
+                    normalize_report(&mut value)?;
+                    let info: MatchInfo = serde_json::from_value(value.clone())
+                        .map_err(|e| ApiError::Decode(e.to_string()))?;
+                    if info.is_empty() {
+                        return Err(ApiError::NotFound);
+                    }
+                    Ok((info, value))
+                },
             )
-            .await
-            .and_then(|mut r| {
-                normalize_report(&mut r.data)?;
-                let info: Fetched<MatchInfo> = decode(r.data.clone())?;
-                if info.data.is_empty() {
-                    return Err(ApiError::NotFound);
-                }
-                Ok(Fetched {
-                    data: info.data,
-                    raw: json!({"matchInfo": r.data}).to_string(),
-                })
-            });
+            .await;
         match primary {
-            Ok(report) => Ok(report),
-            Err(err) => {
-                // Empty shells and incompatible reports must be retried, never cached for a day.
-                self.shared
-                    .lock()
-                    .expect("request state")
-                    .cache
-                    .remove(&format!(
-                        "{}/fights/fight_{id}.json",
-                        upstream.reports_url.trim_end_matches('/')
-                    ));
-                let fallback = self
-                    .get::<MatchReportResponse>("match", &format!("/api/match?matchid={id}"), None)
-                    .await
-                    .and_then(|r| match r.data.match_info {
-                        Some(data) if !data.is_empty() => Ok(Fetched { data, raw: r.raw }),
-                        _ => Err(ApiError::NotFound),
-                    });
-                fallback.map_err(|other| fallback_error(err, other))
+            Ok(report) => {
+                let (data, value) = report.data;
+                Ok(Fetched {
+                    data,
+                    raw: json!({"matchInfo": value}).to_string(),
+                })
             }
+            Err(err) => self
+                .fetch_parsed(
+                    "batrace",
+                    &self.base_url,
+                    "match",
+                    &format!("/api/match?matchid={id}"),
+                    None,
+                    |raw| {
+                        let response: MatchReportResponse = serde_json::from_str(raw)
+                            .map_err(|e| ApiError::Decode(e.to_string()))?;
+                        response
+                            .match_info
+                            .filter(|info| !info.is_empty())
+                            .ok_or(ApiError::NotFound)
+                    },
+                )
+                .await
+                .map_err(|other| fallback_error(err, other)),
         }
     }
 
