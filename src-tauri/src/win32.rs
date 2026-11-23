@@ -25,35 +25,88 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect,
-    GetWindowThreadProcessId, HWND_TOPMOST, LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow, WS_EX_LAYERED,
-    WS_EX_TRANSPARENT,
+    GetWindowThreadProcessId, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA,
+    SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER,
+    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
+    WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
-/// 显示窗口但不激活它，并保持在最上层。
-pub fn show_without_activating(hwnd: *mut c_void) {
+#[derive(Debug, Clone, Copy)]
+pub struct WindowState {
+    pub visible: bool,
+    pub minimized: bool,
+    pub topmost: bool,
+}
+
+impl WindowState {
+    pub fn shown(self) -> bool {
+        self.visible && !self.minimized
+    }
+
+    pub fn healthy(self) -> bool {
+        self.shown() && self.topmost
+    }
+}
+
+/// 直接读取系统状态，不能用 tao 内部缓存的可见标志；不代表窗口未被遮挡。
+pub fn window_state(hwnd: *mut c_void) -> Option<WindowState> {
+    // SAFETY: 只读系统窗口状态；无效句柄返回 None。
+    unsafe {
+        (IsWindow(hwnd) != 0).then(|| WindowState {
+            visible: IsWindowVisible(hwnd) != 0,
+            minimized: IsIconic(hwnd) != 0,
+            topmost: GetWindowLongW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST != 0,
+        })
+    }
+}
+
+/// 前台句柄与矩形用于检测窗口切换，不读取标题或进程信息。
+pub fn foreground_context() -> (usize, [i32; 4]) {
+    // SAFETY: RECT 在栈上；无前台窗口或取矩形失败时按空状态返回。
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        let mut rect: RECT = std::mem::zeroed();
+        if !hwnd.is_null() {
+            GetWindowRect(hwnd, &mut rect);
+        }
+        (
+            hwnd as usize,
+            [rect.left, rect.top, rect.right, rect.bottom],
+        )
+    }
+}
+
+/// 显示或恢复窗口并重新置顶，不激活它。已经显示时只调整 Z 顺序。
+pub fn show_without_activating(hwnd: *mut c_void) -> bool {
     let hwnd = hwnd as HWND;
+    let Some(before) = window_state(hwnd) else {
+        return false;
+    };
     // SAFETY: 句柄来自 Tauri 窗口，窗口存活期间有效。即使句柄失效，这两个函数也只返回失败，不会访问无效内存。
     unsafe {
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        SetWindowPos(
+        if !before.shown() {
+            // ShowWindow 返回的是此前是否可见，不是操作是否成功。
+            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        }
+        let placed = SetWindowPos(
             hwnd,
             HWND_TOPMOST,
             0,
             0,
             0,
             0,
-            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-        );
+            SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOOWNERZORDER,
+        ) != 0;
+        placed && window_state(hwnd).is_some_and(WindowState::healthy)
     }
 }
 
-pub fn hide(hwnd: *mut c_void) {
+pub fn hide(hwnd: *mut c_void) -> bool {
     // SAFETY: 同上。
     unsafe {
         ShowWindow(hwnd as HWND, SW_HIDE);
     }
+    window_state(hwnd).is_some_and(|state| !state.visible)
 }
 
 /// 打开或关闭鼠标穿透。打开时窗口成为不透明度 100% 的分层窗口，点击落到下面的窗口上；
@@ -187,5 +240,169 @@ pub fn beep(frequency: u32, duration_ms: u32) {
     // SAFETY: 只接受两个整数参数，没有指针。
     unsafe {
         Beep(frequency, duration_ms);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows_sys::Win32::System::StationsAndDesktops::{
+        CloseDesktop, CreateDesktopW, GetThreadDesktop, HDESK, SetThreadDesktop,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetActiveWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, GW_HWNDPREV, GetWindow, HWND_NOTOPMOST, SW_SHOWMINNOACTIVE,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
+    };
+
+    struct Desktop {
+        handle: HDESK,
+        original: HDESK,
+    }
+
+    impl Drop for Desktop {
+        fn drop(&mut self) {
+            // SAFETY: 所有测试窗口先销毁；original 是系统借出的句柄，不关闭它。
+            unsafe {
+                SetThreadDesktop(self.original);
+                CloseDesktop(self.handle);
+            }
+        }
+    }
+
+    struct TestWindow(HWND);
+
+    impl Drop for TestWindow {
+        fn drop(&mut self) {
+            // SAFETY: 窗口由本线程创建，RAII 保证只销毁一次。
+            unsafe {
+                DestroyWindow(self.0);
+            }
+        }
+    }
+
+    fn above(first: HWND, second: HWND) -> bool {
+        // SAFETY: 只遍历本测试桌面的窗口顺序，遇到空句柄终止。
+        unsafe {
+            let mut current = GetWindow(second, GW_HWNDPREV);
+            while !current.is_null() {
+                if current == first {
+                    return true;
+                }
+                current = GetWindow(current, GW_HWNDPREV);
+            }
+            false
+        }
+    }
+
+    #[test]
+    fn native_recovery_preserves_focus_geometry_and_click_through() {
+        // 新线程绑定到未切换显示的私有桌面，不在用户游戏画面上创建测试窗口。
+        std::thread::spawn(|| {
+            // SAFETY: 句柄都由本线程创建；桌面从不调用 SwitchDesktop，窗口由 RAII 先于桌面释放。
+            unsafe {
+                let name: Vec<u16> = format!(
+                    "BAX-overlay-test-{}-{}\0",
+                    std::process::id(),
+                    GetCurrentThreadId()
+                )
+                .encode_utf16()
+                .collect();
+                let desktop = Desktop {
+                    original: GetThreadDesktop(GetCurrentThreadId()),
+                    handle: CreateDesktopW(
+                        name.as_ptr(),
+                        std::ptr::null(),
+                        std::ptr::null(),
+                        0,
+                        0x01ff,
+                        std::ptr::null(),
+                    ),
+                };
+                assert!(
+                    !desktop.handle.is_null(),
+                    "{}",
+                    std::io::Error::last_os_error()
+                );
+                assert_ne!(SetThreadDesktop(desktop.handle), 0);
+                let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+                let create = || {
+                    let hwnd = CreateWindowExW(
+                        WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+                        class.as_ptr(),
+                        class.as_ptr(),
+                        WS_POPUP,
+                        100,
+                        100,
+                        340,
+                        120,
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null(),
+                    );
+                    assert!(!hwnd.is_null());
+                    TestWindow(hwnd)
+                };
+                let overlay = create();
+                let blocker = create();
+                let foreground = GetForegroundWindow();
+                let active = GetActiveWindow();
+                let mut rect: RECT = std::mem::zeroed();
+                assert_ne!(GetWindowRect(overlay.0, &mut rect), 0);
+
+                assert!(!window_state(overlay.0).expect("window").shown());
+                assert!(show_without_activating(overlay.0));
+                assert!(show_without_activating(blocker.0));
+                assert!(above(blocker.0, overlay.0));
+                assert!(window_state(overlay.0).expect("window").topmost);
+                assert!(show_without_activating(overlay.0));
+                assert!(
+                    above(overlay.0, blocker.0),
+                    "置顶标志不变时也必须恢复 Z 顺序"
+                );
+
+                assert_ne!(
+                    SetWindowPos(
+                        overlay.0,
+                        HWND_NOTOPMOST,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE
+                    ),
+                    0
+                );
+                assert!(!window_state(overlay.0).expect("window").topmost);
+                assert!(show_without_activating(overlay.0));
+                ShowWindow(overlay.0, SW_SHOWMINNOACTIVE);
+                assert!(window_state(overlay.0).expect("window").minimized);
+                assert!(show_without_activating(overlay.0));
+
+                assert!(set_click_through(overlay.0, true));
+                assert!(hide(overlay.0));
+                assert!(!window_state(overlay.0).expect("window").shown());
+                assert!(show_without_activating(overlay.0));
+                let style = GetWindowLongW(overlay.0, GWL_EXSTYLE) as u32;
+                assert_eq!(
+                    style & (WS_EX_LAYERED | WS_EX_TRANSPARENT),
+                    WS_EX_LAYERED | WS_EX_TRANSPARENT
+                );
+                assert_eq!(GetForegroundWindow(), foreground);
+                assert_eq!(GetActiveWindow(), active);
+                let mut after: RECT = std::mem::zeroed();
+                assert_ne!(GetWindowRect(overlay.0, &mut after), 0);
+                assert_eq!(
+                    [after.left, after.top, after.right, after.bottom],
+                    [rect.left, rect.top, rect.right, rect.bottom]
+                );
+                assert!(!show_without_activating(std::ptr::null_mut()));
+                assert!(!hide(std::ptr::null_mut()));
+            }
+        })
+        .join()
+        .expect("私有桌面原生窗口回归");
     }
 }

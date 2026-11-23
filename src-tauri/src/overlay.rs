@@ -9,7 +9,7 @@
 //! 页面按内容改变窗口大小时保持贴着的边，并留在工作区里。几何计算见 `snap` 模块。
 
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -21,6 +21,9 @@ use tauri::{
 
 use crate::app::AppState;
 use crate::snap;
+
+#[cfg(any(windows, test))]
+mod recovery;
 
 pub const LABEL: &str = "overlay";
 /// 悬浮窗的位置与锁定状态，由外壳维护。
@@ -115,6 +118,10 @@ struct OverlayState {
     /// 每次移动加一；停下一会儿之后只保存最后一次的位置。
     moves: Arc<AtomicU64>,
     pointer: Arc<Mutex<Pointer>>,
+    /// 用户的显示意图与系统观测状态分开，系统隐藏窗口时仍可恢复。
+    visible_requested: AtomicBool,
+    #[cfg(windows)]
+    recovery: Mutex<recovery::Recovery>,
 }
 
 fn read<T: for<'de> Deserialize<'de> + Default>(
@@ -158,8 +165,7 @@ pub fn create(
 
     let state = OverlayState {
         settings: Mutex::new(settings),
-        moves: Arc::default(),
-        pointer: Arc::default(),
+        ..OverlayState::default()
     };
     app.manage(state);
     apply_lock(app, &window, settings.locked);
@@ -176,6 +182,8 @@ pub fn create(
     if show {
         set_visible(app, true, "启动");
     }
+    #[cfg(windows)]
+    watch_visibility(app.clone());
     Ok(())
 }
 
@@ -209,39 +217,137 @@ fn default_position(window: &WebviewWindow) -> Option<LogicalPosition<f64>> {
 
 /// `via` 写进诊断日志，说明是谁要求的：快捷键、托盘、界面、提醒或启动。
 pub fn set_visible(app: &AppHandle, visible: bool, via: &'static str) {
+    app.state::<OverlayState>()
+        .visible_requested
+        .store(visible, Ordering::SeqCst);
+    let handle = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || {
+        // 已排队的显示请求不能盖过随后发出的隐藏请求。
+        if handle
+            .state::<OverlayState>()
+            .visible_requested
+            .load(Ordering::SeqCst)
+            == visible
+        {
+            apply_visibility(&handle, visible, via);
+        }
+    }) {
+        tracing::warn!(error = %err, "无法调度悬浮窗显示操作");
+    }
+}
+
+/// 所有原生可见性操作都在窗口所属线程执行。
+fn apply_visibility(app: &AppHandle, visible: bool, via: &'static str) {
     let Some(window) = app.get_webview_window(LABEL) else {
+        app.state::<AppState>()
+            .update_status(app, |s| s.overlay_visible = false);
         return;
     };
-    tracing::info!(visible, via = %via, "悬浮窗显示状态");
     // 显示前后各看一次前台程序，确认显示悬浮窗不抢游戏的焦点（验收清单的要求）
     #[cfg(windows)]
     let focus_before = (visible && tracing::enabled!(tracing::Level::DEBUG))
         .then(crate::win32::foreground_process_name);
     #[cfg(windows)]
-    match window.hwnd() {
-        Ok(hwnd) => {
-            if visible {
-                crate::win32::show_without_activating(hwnd.0);
-            } else {
-                crate::win32::hide(hwnd.0);
+    let observed = {
+        if let Ok(mut recovery) = app.state::<OverlayState>().recovery.lock() {
+            *recovery = recovery::Recovery::default();
+        }
+        match window.hwnd() {
+            Ok(hwnd) => {
+                let applied = if visible {
+                    crate::win32::show_without_activating(hwnd.0)
+                } else {
+                    crate::win32::hide(hwnd.0)
+                };
+                if !applied {
+                    tracing::warn!(requested = visible, via = %via, "悬浮窗显示操作未生效");
+                }
+                crate::win32::window_state(hwnd.0).is_some_and(crate::win32::WindowState::shown)
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "取不到悬浮窗的窗口句柄");
+                false
             }
         }
-        Err(err) => tracing::warn!(error = %err, "取不到悬浮窗的窗口句柄"),
-    }
+    };
     #[cfg(not(windows))]
-    {
-        let _ = if visible {
+    let observed = {
+        if let Err(err) = if visible {
             window.show()
         } else {
             window.hide()
-        };
-    }
+        } {
+            tracing::warn!(error = %err, "悬浮窗显示操作失败");
+        }
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+    };
+    tracing::info!(requested = visible, visible = observed, via = %via, "悬浮窗显示状态");
     app.state::<AppState>()
-        .update_status(app, |s| s.overlay_visible = visible);
+        .update_status(app, |s| s.overlay_visible = observed);
     #[cfg(windows)]
     if let Some(before) = focus_before {
         check_focus_after_show(before);
     }
+}
+
+/// 每次只排一个主线程任务，等待它完成后再采样，避免界面忙时堆积恢复请求。
+#[cfg(windows)]
+fn watch_visibility(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            let (done, completed) = tokio::sync::oneshot::channel();
+            let handle = app.clone();
+            if app
+                .run_on_main_thread(move || {
+                    let _ = done.send(maintain_visibility(&handle));
+                })
+                .is_err()
+                || completed.await != Ok(true)
+            {
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
+fn maintain_visibility(app: &AppHandle) -> bool {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        app.state::<AppState>()
+            .update_status(app, |s| s.overlay_visible = false);
+        return false;
+    };
+    let Ok(hwnd) = window.hwnd() else {
+        app.state::<AppState>()
+            .update_status(app, |s| s.overlay_visible = false);
+        return false;
+    };
+    let before = crate::win32::window_state(hwnd.0);
+    let overlay = app.state::<OverlayState>();
+    let requested = overlay.visible_requested.load(Ordering::SeqCst);
+    let reason = overlay.recovery.lock().ok().and_then(|mut recovery| {
+        recovery.poll(
+            std::time::Instant::now(),
+            requested,
+            crate::win32::foreground_context(),
+            before.is_some_and(crate::win32::WindowState::healthy),
+        )
+    });
+    if let Some(reason) = reason {
+        let applied = crate::win32::show_without_activating(hwnd.0);
+        if !applied {
+            tracing::warn!(?reason, ?before, "恢复悬浮窗显示或置顶失败");
+        } else if reason == recovery::Reason::WindowState {
+            tracing::info!(?before, "已恢复悬浮窗显示与置顶");
+        } else {
+            tracing::debug!("切换窗口后重新置顶悬浮窗");
+        }
+    }
+    let shown = crate::win32::window_state(hwnd.0).is_some_and(crate::win32::WindowState::shown);
+    app.state::<AppState>()
+        .update_status(app, |s| s.overlay_visible = shown);
+    before.is_some()
 }
 
 /// 显示悬浮窗 0.3 秒后，看前台窗口是否还是显示之前的那个程序。
@@ -260,7 +366,10 @@ fn check_focus_after_show(before: Option<String>) {
 }
 
 pub fn toggle_visible(app: &AppHandle, via: &'static str) {
-    let visible = app.state::<AppState>().status().overlay_visible;
+    let visible = app
+        .state::<OverlayState>()
+        .visible_requested
+        .load(Ordering::SeqCst);
     set_visible(app, !visible, via);
 }
 
@@ -382,7 +491,7 @@ pub fn on_alert(app: &AppHandle, ui: &BTreeMap<String, serde_json::Value>) {
         show_overlay = alerts.show_overlay,
         "提醒响应"
     );
-    if alerts.show_overlay && !app.state::<AppState>().status().overlay_visible {
+    if alerts.show_overlay {
         set_visible(app, true, "提醒");
     }
     #[cfg(windows)]

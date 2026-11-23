@@ -24,6 +24,7 @@ pub const MAIN_LABEL: &str = "main";
 pub struct AppStatus {
     pub update: crate::updater::UpdateStatus,
     pub ocr_supported: bool,
+    /// 系统观测到的显示且未最小化状态；不表示未被其他窗口遮挡。
     pub overlay_visible: bool,
     pub overlay_locked: bool,
     /// 注册失败的快捷键及原因。
