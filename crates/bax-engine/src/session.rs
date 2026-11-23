@@ -358,6 +358,8 @@ impl Session {
         }
         self.log_fetch_summary();
         tracing::info!("对局会话结束");
+        // 唤醒可能正在向满队列发送补读事件的日志线程，再等待它退出。
+        self.log_rx.close();
         if let Some(handle) = self.log_thread.as_mut().and_then(LogThread::stop) {
             let _ = tokio::task::spawn_blocking(move || handle.join()).await;
         }

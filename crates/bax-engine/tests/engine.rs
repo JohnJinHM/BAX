@@ -719,6 +719,18 @@ fn match_in_progress(id: u64) -> String {
         + &scenario_loaded("18:53:33.861")
 }
 
+#[tokio::test]
+async fn shutdown_unblocks_a_full_backfill_queue() {
+    let fx = Fixture::new().await;
+    fx.append(&"[2026-11-16 18:53:00.000]\nLog: Start reconnect to battle\n\n".repeat(1400));
+    let engine = fx.start();
+    // 单线程测试运行时此刻不消费日志，让独立的读取线程先填满通道。
+    std::thread::sleep(Duration::from_millis(100));
+    tokio::time::timeout(Duration::from_secs(2), engine.shutdown())
+        .await
+        .expect("补读仍在发送时也能退出");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_reminder_fires_once_and_not_again_after_a_restart() {
     let fx = Fixture::new().await;
