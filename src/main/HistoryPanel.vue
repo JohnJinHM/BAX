@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import type { HistoryRow } from "../shared/bindings/HistoryRow";
 import { commands, errorText, useSnapshot } from "../shared/engine";
@@ -14,23 +14,41 @@ const snapshot = useSnapshot();
 const rows = ref<HistoryRow[]>([]);
 const failure = ref<string | null>(null);
 const exhausted = ref(false);
+const loading = ref(false);
+let requestedRows = PAGE;
+let sequence = 0;
 
 async function load(more = false) {
+  if (more && (loading.value || exhausted.value)) return;
+  if (more) requestedRows = rows.value.length + PAGE;
+  const request = ++sequence;
+  loading.value = true;
   try {
-    const offset = more ? rows.value.length : 0;
-    const page = await commands.matchHistory(more ? PAGE : Math.max(PAGE, rows.value.length), offset);
-    rows.value = more ? [...rows.value, ...page] : page;
-    exhausted.value = page.length < PAGE;
+    const next = more ? [...rows.value] : [];
+    let atEnd = false;
+    while (next.length < requestedRows) {
+      const limit = Math.min(500, requestedRows - next.length);
+      const page = await commands.matchHistory(limit, next.length);
+      if (request !== sequence) return;
+      next.push(...page);
+      atEnd = page.length < limit;
+      if (atEnd) break;
+    }
+    rows.value = next;
+    exhausted.value = atEnd;
     failure.value = null;
     if (selectedMatch.value == null) {
       selectedMatch.value = rows.value.find((r) => r.report.state === "ready")?.matchId ?? rows.value[0]?.matchId ?? null;
     }
   } catch (error) {
-    failure.value = errorText(error);
+    if (request === sequence) failure.value = errorText(error);
+  } finally {
+    if (request === sequence) loading.value = false;
   }
 }
 
 onMounted(() => void load());
+onBeforeUnmount(() => { ++sequence; });
 // 有新比赛、新战报或者队列变了就刷新列表
 watch(
   [() => snapshot.value?.archive.seq, () => snapshot.value?.current?.matchId, () => snapshot.value?.current?.phase],
@@ -94,7 +112,7 @@ function reportTitle(row: HistoryRow): string | undefined {
           </div>
         </li>
       </ul>
-      <button v-if="rows.length && !exhausted" class="more" @click="load(true)">更多</button>
+      <button v-if="rows.length && !exhausted" class="more" :disabled="loading" @click="load(true)">更多</button>
       <p v-if="!rows.length && !failure" class="hint">还没有比赛记录。打完一场比赛，或者在设置里导入历史日志之后，这里会列出来。</p>
     </section>
     <ReportView v-if="selectedMatch != null" :id="selectedMatch" :row="selectedRow" @requested="load()" />

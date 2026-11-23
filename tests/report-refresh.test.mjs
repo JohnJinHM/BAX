@@ -122,3 +122,39 @@ test('same-match row refresh keeps the report mounted and its selection; a new m
     assert.equal(state.view.analysis.matchId, 124);
   } finally { app.unmount(); }
 });
+
+test('history refresh keeps all requested pages when it overtakes an outstanding load', async () => {
+  const snapshot = shallowRef(snapshotData());
+  const selectedMatch = ref(null);
+  const source = Array.from({ length: 650 }, (_, matchId) => ({ matchId, report: { state: 'ready' } }));
+  let hold = false;
+  let release;
+  const history = component('HistoryPanel', { useSnapshot: () => snapshot, commands: {
+    matchHistory: async (limit, offset) => {
+      assert.ok(limit <= 500);
+      const page = source.slice(offset, offset + limit);
+      if (hold) { hold = false; await new Promise(resolve => { release = resolve; }); }
+      return page;
+    },
+  } }, { './navigation': { selectedMatch } });
+  const app = renderer.createApp(history);
+  app.mount({});
+  try {
+    await flush();
+    const state = app._instance.setupState;
+    for (let i = 1; i < 5; ++i) await state.load(true);
+    selectedMatch.value = 550;
+    hold = true;
+    const more = state.load(true);
+    source.unshift({ matchId: 999, report: { state: 'ready' } });
+    snapshot.value = { ...snapshot.value, archive: { seq: 2 } };
+    await flush();
+    release(); await more;
+    assert.equal(state.rows.length, 600);
+    assert.equal(state.rows[0].matchId, 999);
+    assert.equal(state.selectedRow.matchId, 550);
+    await state.load(true);
+    assert.equal(state.rows.length, 651);
+    assert.equal(state.exhausted, true);
+  } finally { app.unmount(); }
+});
