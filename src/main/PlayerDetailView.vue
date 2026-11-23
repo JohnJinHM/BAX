@@ -19,6 +19,8 @@ const missing = ref(false);
 const failure = ref<string | null>(null);
 const noteDraft = ref("");
 const noteDirty = ref(false);
+const savingNote = ref(false);
+let noteSession = 0;
 const noteMessage = ref<{ ok: boolean; text: string } | null>(null);
 const refreshing = ref(false);
 const snapshot = useSnapshot();
@@ -45,6 +47,9 @@ async function load() {
 watch(
   () => props.id,
   () => {
+    ++noteSession;
+    savingNote.value = false;
+    noteDraft.value = "";
     noteDirty.value = false;
     noteMessage.value = null;
     detail.value = null;
@@ -75,13 +80,22 @@ function date(at: number): string {
 }
 
 async function saveNote() {
+  if (savingNote.value || !noteDirty.value) return;
+  const session = noteSession;
+  const body = noteDraft.value;
+  savingNote.value = true;
   try {
-    await commands.setNote(props.id, noteDraft.value);
-    noteDirty.value = false;
-    noteMessage.value = { ok: true, text: noteDraft.value.trim() ? "已保存" : "已删除" };
+    await commands.setNote(props.id, body);
+    if (session !== noteSession) return;
+    if (noteDraft.value === body) {
+      noteDirty.value = false;
+      noteMessage.value = { ok: true, text: body.trim() ? "已保存" : "已删除" };
+    }
     await load();
   } catch (error) {
-    noteMessage.value = { ok: false, text: errorText(error) };
+    if (session === noteSession) noteMessage.value = { ok: false, text: errorText(error) };
+  } finally {
+    if (session === noteSession) savingNote.value = false;
   }
 }
 
@@ -151,7 +165,7 @@ async function refresh() {
         @input="noteDirty = true; noteMessage = null"
       />
       <div class="row">
-        <button class="primary" :disabled="!noteDirty" @click="saveNote">保存备注</button>
+        <button class="primary" :disabled="!noteDirty || savingNote" @click="saveNote">{{ savingNote ? "保存中…" : "保存备注" }}</button>
         <span class="hint num">{{ noteDraft.length }}/2000</span>
         <span v-if="detail.note && !noteDirty" class="hint">更新于 {{ ago(detail.note.updatedAt, now) }}</span>
         <span v-if="noteMessage" :class="noteMessage.ok ? 'ok' : 'error'">{{ noteMessage.text }}</span>

@@ -30,6 +30,40 @@ function component(file, engine, extra = {}) {
 }
 const snapshotData = () => ({ archive: { seq: 1, pending: 0 }, current: { matchId: 456, phase: 'inGame' }, ui: {} });
 
+test('saving a note preserves edits made in flight and ignores completion on another player', async () => {
+  const player = ref(101);
+  const pending = [];
+  const saved = new Map();
+  const panel = component('PlayerDetailView', {
+    useSnapshot: () => shallowRef(snapshotData()),
+    commands: {
+      setNote: (id, body) => new Promise(resolve => pending.push(() => { saved.set(id, body); resolve(); })),
+      playerDetail: async id => ({ note: { body: saved.get(id) ?? '' } }),
+    },
+  }, { '../shared/useNow': { useNow: () => ref(0) } });
+  const app = renderer.createApp({ render: () => h(panel, { id: player.value }) });
+  app.mount({});
+  try {
+    await flush();
+    const state = app._instance.subTree.component.setupState;
+    state.noteDraft = 'first'; state.noteDirty = true;
+    const first = state.saveNote();
+    state.noteDraft = 'second';
+    pending.shift()(); await first;
+    assert.equal(state.noteDraft, 'second');
+    assert.equal(state.noteDirty, true);
+    assert.equal(state.noteMessage, null);
+    const second = state.saveNote();
+    player.value = 102; await flush();
+    state.noteDraft = 'another player'; state.noteDirty = true;
+    pending.shift()(); await second;
+    assert.equal(saved.get(101), 'second');
+    assert.equal(state.noteDraft, 'another player');
+    assert.equal(state.noteDirty, true);
+    assert.equal(state.noteMessage, null);
+  } finally { app.unmount(); }
+});
+
 test('saving timeline height or receiving a profile snapshot does not reload match history', async () => {
   const snapshot = shallowRef(snapshotData());
   let loads = 0;
