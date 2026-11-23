@@ -979,7 +979,9 @@ fn version_four_migrates_to_five_and_existing_five_reopens_without_data_loss() {
             .expect("match");
     }
     {
-        let store = Store::open(&path).expect("v4 -> v5");
+        let store = Store {
+            conn: db::open(Some(&path), &MIGRATIONS[..5], true).expect("v4 -> v5"),
+        };
         assert_eq!(store.schema_version().expect("version"), 5);
         assert!(db::backup_path(&path, 4).exists());
         let _: u32 = store
@@ -987,7 +989,7 @@ fn version_four_migrates_to_five_and_existing_five_reopens_without_data_loss() {
             .query_row("SELECT COUNT(*) FROM cancelled_matches", [], |r| r.get(0))
             .expect("v5 view");
     }
-    let store = Store::open(&path).expect("open existing v5");
+    let store = Store::open(&path).expect("升级已有 v5");
     assert_eq!(
         store
             .note(PlayerId(101))
@@ -997,5 +999,66 @@ fn version_four_migrates_to_five_and_existing_five_reopens_without_data_loss() {
         "保留备注"
     );
     assert!(store.match_record(MatchId(1)).expect("match").is_some());
-    assert_eq!(store.schema_version().expect("version"), 5);
+    assert_eq!(
+        store.schema_version().expect("version"),
+        MIGRATIONS.len() as u32
+    );
+}
+
+#[test]
+fn version_six_indexes_existing_reports_and_replaces_old_participants_atomically() {
+    let dir = tempfile::tempdir().expect("临时目录");
+    let path = dir.path().join("bax.db");
+    let old = db::open(Some(&path), &MIGRATIONS[..5], true).expect("v5");
+    let raw = r#"{"matchInfo":{"Data":{
+        "101":{"TransferredUnits":{"shared":{"Id":81}},"UnitData":null},
+        "102":{"UnitData":{"shared":{"Id":81},"own":{"Id":82},"from_ai":{"Id":99}}},
+        "-1":{"TransferredUnits":{"from_ai":{"Id":99}}},
+        "103":{"Id":103,"UnitData":{}}
+    }}}"#;
+    old.execute(
+        "INSERT INTO match_reports(match_id, raw, fetched_at, start_time)
+                 VALUES (7, ?1, 20, 10), (8, 'legacy invalid JSON', 30, NULL)",
+        [raw],
+    )
+    .expect("旧战报");
+    drop(old);
+    let mut store = Store::open(&path).expect("升级");
+    let id = MatchId(7);
+    let units = store
+        .indexed_report(id)
+        .expect("旧资料的索引")
+        .expect("已归档")
+        .units;
+    assert_eq!(units.len(), 3);
+    assert_eq!(units[&PlayerId(101)], [81].into());
+    assert_eq!(units[&PlayerId(102)], [82].into());
+    assert!(units[&PlayerId(103)].is_empty());
+    assert_eq!(
+        store.recent_player_reports(PlayerId(101), 1).expect("原文")[0].1,
+        raw
+    );
+    let changed = store
+        .save_report_with_players(
+            id,
+            r#"{"matchInfo":{"Data":{"104":{}}}}"#,
+            Default::default(),
+            t(40),
+        )
+        .expect("替换");
+    assert_eq!(changed, [101, 102, 103, 104].map(PlayerId).into());
+    assert!(
+        store
+            .recent_player_units(PlayerId(101), 20)
+            .expect("已移除")
+            .is_empty()
+    );
+    assert_eq!(
+        store
+            .recent_player_units(PlayerId(104), 20)
+            .expect("新玩家")
+            .len(),
+        1
+    );
+    assert!(db::backup_path(&path, 5).exists());
 }

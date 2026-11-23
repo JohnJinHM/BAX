@@ -1,6 +1,5 @@
 //! 从实际出兵约束求唯一专精组合，按已有战报统计场次。
 use crate::ProfileSummary;
-use bax_batrace::model::{MatchInfo, MatchReportResponse};
 use bax_core::PlayerId;
 use bax_store::Store;
 use serde::{Deserialize, Serialize};
@@ -41,26 +40,8 @@ pub(crate) fn entry(ids: Vec<u32>, games: u32) -> SpecPreference {
     SpecPreference { ids, name, games }
 }
 
-pub(crate) fn infer(info: &MatchInfo, player: PlayerId) -> Option<Vec<u32>> {
-    let (key, data) = info.data.iter().find(|(key, data)| {
-        data.id
-            .map(|v| v as u64 == player.get())
-            .unwrap_or_else(|| *key == &player.get().to_string())
-    })?;
-    let received: BTreeSet<_> = info
-        .data
-        .iter()
-        .filter(|(id, _)| *id != key)
-        .flat_map(|(_, p)| p.transferred_units.keys())
-        .collect();
-    let units: BTreeSet<_> = data
-        .unit_data
-        .iter()
-        .filter(|(k, _)| !received.contains(k))
-        .filter_map(|(_, u)| u.id)
-        .chain(data.transferred_units.values().filter_map(|u| u.id))
-        .collect();
-    infer_units(&units, &CATALOG)
+pub(crate) fn infer(units: &BTreeSet<i64>) -> Option<Vec<u32>> {
+    infer_units(units, &CATALOG)
 }
 
 fn infer_units(units: &BTreeSet<i64>, catalog: &Catalog) -> Option<Vec<u32>> {
@@ -87,7 +68,7 @@ fn infer_units(units: &BTreeSet<i64>, catalog: &Catalog) -> Option<Vec<u32>> {
 }
 
 pub(crate) fn enrich(profile: &mut ProfileSummary, store: &Store, id: PlayerId) {
-    let Ok(reports) = store.recent_player_reports(id, 20) else {
+    let Ok(reports) = store.recent_player_units(id, 20) else {
         return;
     };
     let mut counts = BTreeMap::<Vec<u32>, u32>::new();
@@ -98,12 +79,8 @@ pub(crate) fn enrich(profile: &mut ProfileSummary, store: &Store, id: PlayerId) 
     profile.last_spec_match = reports.first().map(|r| r.0);
     profile.spec_sample_matches = reports.len() as u32;
     profile.spec_identified_matches = 0;
-    for (index, (_, raw)) in reports.into_iter().enumerate() {
-        let pair = serde_json::from_str::<MatchReportResponse>(&raw)
-            .ok()
-            .and_then(|r| r.match_info)
-            .and_then(|r| infer(&r, id));
-        let Some(pair) = pair else {
+    for (index, (_, units)) in reports.into_iter().enumerate() {
+        let Some(pair) = infer(&units) else {
             continue;
         };
         profile.spec_identified_matches += 1;
@@ -145,6 +122,7 @@ pub(crate) fn copy_usage(old: &ProfileSummary, new: &mut ProfileSummary) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bax_batrace::model::MatchReportResponse;
     #[test]
     fn only_unique_compatible_pairs_are_counted() {
         let catalog = Catalog {
@@ -174,9 +152,23 @@ mod tests {
             "101": {"Id":101,"UnitData":{"a":{"Id":unit_for(12)}},"TransferredUnits":{"b":{"Id":unit_for(15)}}},
             "102": {"Id":102,"UnitData":{"b":{"Id":unit_for(15)},"c":{"Id":unit_for(3)},"d":{"Id":unit_for(4)}}}
         }});
-        let report: MatchInfo = serde_json::from_value(report).expect("report");
-        assert_eq!(infer(&report, PlayerId(101)), Some(vec![12, 15]));
-        assert_eq!(infer(&report, PlayerId(102)), Some(vec![3, 4]));
+        let mut store = Store::open_in_memory().expect("store");
+        let id = bax_core::MatchId(900001);
+        store
+            .save_report(
+                id,
+                &serde_json::json!({"matchInfo": report}).to_string(),
+                Default::default(),
+                bax_core::Timestamp::from_secs(10),
+            )
+            .expect("归档");
+        let units = store
+            .indexed_report(id)
+            .expect("出兵单位")
+            .expect("已归档")
+            .units;
+        assert_eq!(infer(&units[&PlayerId(101)]), Some(vec![12, 15]));
+        assert_eq!(infer(&units[&PlayerId(102)]), Some(vec![3, 4]));
     }
 
     #[test]

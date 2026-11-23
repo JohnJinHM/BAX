@@ -940,13 +940,13 @@ impl Session {
     fn on_report_event(&mut self, event: ReportEvent) {
         let archive = &mut self.archive;
         archive.pending = event.pending;
-        if event.archived.is_some() {
-            archive.last_archived = event.archived;
-        }
         archive.seq += 1;
-        if event.archived.is_some() {
+        if let Some((match_id, affected)) = event.archived {
+            archive.last_archived = Some(match_id);
             for slot in &mut self.slots {
-                if let Some(profile) = &mut slot.profile {
+                if affected.contains(&slot.id)
+                    && let Some(profile) = &mut slot.profile
+                {
                     crate::specs::enrich(profile, &self.store, slot.id);
                 }
             }
@@ -956,7 +956,9 @@ impl Session {
                 .iter_mut()
                 .flat_map(|p| &mut p.candidates)
             {
-                if let Some(profile) = &mut candidate.profile {
+                if affected.contains(&candidate.id)
+                    && let Some(profile) = &mut candidate.profile
+                {
                     crate::specs::enrich(profile, &self.store, candidate.id);
                 }
             }

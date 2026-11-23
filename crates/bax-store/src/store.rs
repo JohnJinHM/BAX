@@ -131,6 +131,15 @@ const MIGRATIONS: &[&str] = &[
        AND m.ended_at >= m.scenario_loaded_at
        AND m.ended_at <= m.start_at + 2000
        AND NOT EXISTS (SELECT 1 FROM match_reports r WHERE r.match_id = m.id);",
+    // 第 6 版：索引每场每人的原出兵单位类型；旧战报逐场投影。
+    "CREATE TABLE report_player_units (
+        match_id INTEGER NOT NULL REFERENCES match_reports(match_id) ON DELETE CASCADE,
+        player_id INTEGER NOT NULL,
+        start_time INTEGER,
+        unit_ids TEXT NOT NULL,
+        PRIMARY KEY (match_id, player_id)
+    ) STRICT, WITHOUT ROWID;
+    CREATE INDEX report_units_by_player ON report_player_units(player_id, start_time DESC, match_id DESC);",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -243,15 +252,21 @@ pub struct Store {
 impl Store {
     /// 打开长期库，必要时建库或迁移结构。迁移已有数据之前会在旁边留一份备份。
     pub fn open(path: &Path) -> Result<Store> {
-        Ok(Store {
-            conn: db::open(Some(path), MIGRATIONS, true)?,
-        })
+        Self::open_at(Some(path))
     }
 
     pub fn open_in_memory() -> Result<Store> {
-        Ok(Store {
-            conn: db::open(None, MIGRATIONS, true)?,
-        })
+        Self::open_at(None)
+    }
+
+    fn open_at(path: Option<&Path>) -> Result<Store> {
+        let conn = db::open_with_data_migrations(path, MIGRATIONS, true, |conn, version| {
+            if version == 6 {
+                crate::reports::backfill_player_units(conn)?;
+            }
+            Ok(())
+        })?;
+        Ok(Store { conn })
     }
 
     pub fn schema_version(&self) -> Result<u32> {

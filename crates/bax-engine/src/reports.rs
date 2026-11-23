@@ -10,11 +10,12 @@
 //! 应用在战报出来之前退出，下次启动接着等。每次只发一个请求，两次之间至少隔一小段时间，
 //! 不给站点添负担。
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
 use bax_batrace::{ApiError, BatraceClient};
-use bax_core::{BattleClock, ClockSource, MatchId, Timestamp};
+use bax_core::{BattleClock, ClockSource, MatchId, PlayerId, Timestamp};
 use bax_store::{QueuedReport, Store};
 use tokio::sync::{Notify, mpsc};
 
@@ -23,11 +24,11 @@ use crate::config::EngineConfig;
 use crate::postmatch::{UNITS_KEY, report_meta};
 
 /// 归档状态的变化，发给对局会话放进快照。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReportEvent {
     pub pending: u32,
-    /// 刚刚存进来的战报。
-    pub archived: Option<MatchId>,
+    /// 刚刚存进来的战报及需要刷新专精统计的玩家。
+    pub archived: Option<(MatchId, BTreeSet<PlayerId>)>,
 }
 
 /// 归档任务的设置，从 [`EngineConfig`] 里取。
@@ -186,10 +187,16 @@ impl ReportWorker {
         match result {
             Ok(fetched) => {
                 let meta = report_meta(&fetched.data);
-                if let Err(err) = self.store.save_report(id, &fetched.raw, meta, now) {
-                    tracing::warn!(error = %err, match_id = %id, "保存战报失败");
-                    return;
-                }
+                let players = match self
+                    .store
+                    .save_report_with_players(id, &fetched.raw, meta, now)
+                {
+                    Ok(players) => players,
+                    Err(err) => {
+                        tracing::warn!(error = %err, match_id = %id, "保存战报失败");
+                        return;
+                    }
+                };
                 // 战报的开始时间最可信，修正这场比赛的计时基准
                 if let Some(start) = meta.start_time {
                     let clock = BattleClock {
@@ -207,7 +214,7 @@ impl ReportWorker {
                     players = fetched.data.data.len(),
                     "战报已归档"
                 );
-                self.publish(Some(id));
+                self.publish(Some((id, players)));
             }
             Err(err) => {
                 let unplayed = is_unplayed(item.battle_ms);
@@ -270,7 +277,7 @@ impl ReportWorker {
         }
     }
 
-    fn publish(&self, archived: Option<MatchId>) {
+    fn publish(&self, archived: Option<(MatchId, BTreeSet<PlayerId>)>) {
         let pending = self.store.pending_reports().unwrap_or(0);
         let _ = self.events.send(ReportEvent { pending, archived });
     }

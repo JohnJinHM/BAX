@@ -134,19 +134,17 @@ pub(crate) async fn run(
         match response {
             Some(Ok(fetched)) => {
                 if fetched.data.players().any(|(id, _)| id == player)
-                    && store
-                        .save_report(
-                            match_id,
-                            &fetched.raw,
-                            crate::postmatch::report_meta(&fetched.data),
-                            clock.now(),
-                        )
-                        .is_ok()
+                    && let Ok(players) = store.save_report_with_players(
+                        match_id,
+                        &fetched.raw,
+                        crate::postmatch::report_meta(&fetched.data),
+                        clock.now(),
+                    )
                 {
                     let pending = store.pending_reports().unwrap_or(0);
                     let _ = events.send(ReportEvent {
                         pending,
-                        archived: Some(match_id),
+                        archived: Some((match_id, players)),
                     });
                 }
                 tracing::debug!(player = %player, match_id = %match_id, requests = budget.requests, "上一场专精战报已获取");
@@ -328,7 +326,7 @@ mod tests {
             .await
             .expect("event")
             .expect("archived");
-        assert_eq!(event.archived, Some(MatchId(900100)));
+        assert_eq!(event.archived.map(|(id, _)| id), Some(MatchId(900100)));
         assert!(
             Store::open(&db)
                 .expect("reader")

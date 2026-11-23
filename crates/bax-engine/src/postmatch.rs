@@ -135,7 +135,11 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
     if store.report_cancelled(id).map_err(|e| e.to_string())? {
         return Ok(None);
     }
-    let Some(stored) = store.report(id).map_err(|e| e.to_string())? else {
+    let Some(bax_store::IndexedReport {
+        report: stored,
+        units: deployed,
+    }) = store.indexed_report(id).map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
     let info: MatchInfo =
@@ -187,7 +191,7 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
         .filter_map(|p| {
             Some((
                 p.id,
-                crate::specs::infer(&info, p.id)?
+                crate::specs::infer(deployed.get(&p.id)?)?
                     .into_iter()
                     .map(|id| crate::specs::entry(vec![id], 1))
                     .collect(),

@@ -3,8 +3,10 @@
 //! 战报原文按接口返回的样子整份保存，口径变了可以重新解析。待获取队列跨重启保留：
 //! 应用在战报出来之前退出，下次启动接着等。
 
-use bax_core::{MatchId, Phase, Team, Timestamp};
-use rusqlite::{OptionalExtension, params};
+use std::collections::{BTreeMap, BTreeSet};
+
+use bax_core::{MatchId, Phase, PlayerId, Team, Timestamp};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::Result;
@@ -15,6 +17,13 @@ use crate::store::{Store, id_from_db, id_to_db, phase_from_db, team_from_db, tea
 pub struct StoredRaw {
     pub raw: String,
     pub fetched_at: Timestamp,
+}
+
+/// 同一数据库快照中的战报原文和出兵单位。
+#[derive(Debug)]
+pub struct IndexedReport {
+    pub report: StoredRaw,
+    pub units: BTreeMap<PlayerId, BTreeSet<i64>>,
 }
 
 /// 从战报里摘出来、列表要用的几项。
@@ -100,6 +109,26 @@ pub struct HistoryRow {
     pub report: ReportState,
 }
 
+const INDEX_UNITS: &str = include_str!("reports/index-units.sql");
+
+fn indexed_units(row: &rusqlite::Row<'_>) -> Result<BTreeSet<i64>> {
+    serde_json::from_str(&row.get::<_, String>(1)?)
+        .map_err(|e| crate::StoreError::Corrupt(e.to_string()))
+}
+
+pub(crate) fn backfill_player_units(conn: &Connection) -> Result<()> {
+    let mut reports = conn.prepare("SELECT match_id, start_time, raw FROM match_reports")?;
+    let mut rows = reports.query([])?;
+    let mut index = conn.prepare(INDEX_UNITS)?;
+    while let Some(row) = rows.next()? {
+        let id: i64 = row.get(0)?;
+        let start: Option<i64> = row.get(1)?;
+        let raw: String = row.get(2)?;
+        index.execute(params![id, start, raw])?;
+    }
+    Ok(())
+}
+
 impl Store {
     /// 玩家最近已有的完整战报，不依赖同场日志是否存在。
     pub fn recent_player_reports(
@@ -107,15 +136,53 @@ impl Store {
         id: bax_core::PlayerId,
         limit: u32,
     ) -> Result<Vec<(MatchId, String)>> {
-        let path = format!("$.matchInfo.Data.\"{}\"", id.get());
         let mut stmt = self.conn.prepare(
-            "SELECT match_id, raw FROM match_reports WHERE json_type(raw, ?1) = 'object'
-             ORDER BY start_time DESC, match_id DESC LIMIT ?2",
+            "SELECT i.match_id, r.raw FROM report_player_units i JOIN match_reports r USING(match_id)
+             WHERE i.player_id = ?1 ORDER BY i.start_time DESC, i.match_id DESC LIMIT ?2",
         )?;
-        let rows = stmt.query_map(params![path, limit], |r| {
+        let rows = stmt.query_map(params![id_to_db(id.get()), limit], |r| {
             Ok((MatchId(id_from_db(r.get(0)?)), r.get(1)?))
         })?;
         rows.map(|r| r.map_err(Into::into)).collect()
+    }
+
+    /// 最近各场的原出兵单位类型，包含没有可识别单位的场次。
+    pub fn recent_player_units(
+        &self,
+        id: PlayerId,
+        limit: u32,
+    ) -> Result<Vec<(MatchId, BTreeSet<i64>)>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT match_id, unit_ids FROM report_player_units WHERE player_id = ?1
+             ORDER BY start_time DESC, match_id DESC LIMIT ?2",
+        )?;
+        let mut rows = stmt.query(params![id_to_db(id.get()), limit])?;
+        let mut reports = Vec::new();
+        while let Some(row) = rows.next()? {
+            reports.push((MatchId(id_from_db(row.get(0)?)), indexed_units(row)?));
+        }
+        Ok(reports)
+    }
+
+    pub fn indexed_report(&self, id: MatchId) -> Result<Option<IndexedReport>> {
+        let tx = self.conn.unchecked_transaction()?;
+        let Some(report) = self.report(id)? else {
+            return Ok(None);
+        };
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT player_id, unit_ids FROM report_player_units WHERE match_id = ?1",
+        )?;
+        let mut rows = stmt.query([id_to_db(id.get())])?;
+        let mut players = BTreeMap::new();
+        while let Some(row) = rows.next()? {
+            players.insert(PlayerId(id_from_db(row.get(0)?)), indexed_units(row)?);
+        }
+        drop(rows);
+        tx.commit()?;
+        Ok(Some(IndexedReport {
+            report,
+            units: players,
+        }))
     }
     pub fn report_cancelled(&self, id: MatchId) -> Result<bool> {
         Ok(self.conn.query_row(
@@ -133,6 +200,17 @@ impl Store {
         meta: ReportMeta,
         at: Timestamp,
     ) -> Result<()> {
+        self.save_report_with_players(id, raw, meta, at).map(|_| ())
+    }
+
+    /// 返回本次写入影响的玩家，包括替换旧战报时移除的成员。
+    pub fn save_report_with_players(
+        &mut self,
+        id: MatchId,
+        raw: &str,
+        meta: ReportMeta,
+        at: Timestamp,
+    ) -> Result<BTreeSet<PlayerId>> {
         let tx = self.conn.transaction()?;
         // 队列里记着等了多久、失败过几次，一并留下（验证 3 要用）
         let queued: Option<(i64, u32, i64)> = tx
@@ -180,8 +258,30 @@ impl Store {
             "DELETE FROM report_queue WHERE match_id = ?1",
             [id_to_db(id.get())],
         )?;
+        let mut players = BTreeSet::new();
+        {
+            let mut remove = tx.prepare_cached(
+                "DELETE FROM report_player_units WHERE match_id = ?1 RETURNING player_id",
+            )?;
+            let mut removed = remove.query([id_to_db(id.get())])?;
+            while let Some(row) = removed.next()? {
+                players.insert(PlayerId(id_from_db(row.get(0)?)));
+            }
+            let mut index = tx.prepare_cached(concat!(
+                include_str!("reports/index-units.sql"),
+                " RETURNING player_id"
+            ))?;
+            let mut added = index.query(params![
+                id_to_db(id.get()),
+                meta.start_time.map(Timestamp::as_millis),
+                raw
+            ])?;
+            while let Some(row) = added.next()? {
+                players.insert(PlayerId(id_from_db(row.get(0)?)));
+            }
+        }
         tx.commit()?;
-        Ok(())
+        Ok(players)
     }
 
     /// 一场比赛的战报原文。

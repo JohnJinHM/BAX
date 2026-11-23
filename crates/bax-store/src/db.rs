@@ -20,6 +20,15 @@ pub(crate) fn open(
     migrations: &[&str],
     backup_before_migrating: bool,
 ) -> Result<Connection> {
+    open_with_data_migrations(path, migrations, backup_before_migrating, |_, _| Ok(()))
+}
+
+pub(crate) fn open_with_data_migrations(
+    path: Option<&Path>,
+    migrations: &[&str],
+    backup_before_migrating: bool,
+    migrate_data: fn(&Connection, u32) -> Result<()>,
+) -> Result<Connection> {
     let mut conn = match path {
         Some(path) => {
             if let Some(parent) = path.parent() {
@@ -57,8 +66,10 @@ pub(crate) fn open(
             reader.backup(rusqlite::MAIN_DB, backup_path(path, found), None)?;
         }
         for (index, script) in migrations.iter().enumerate().skip(found as usize) {
+            let version = (index + 1) as u32;
             tx.execute_batch(script)?;
-            tx.pragma_update(None, "user_version", (index + 1) as u32)?;
+            migrate_data(&tx, version)?;
+            tx.pragma_update(None, "user_version", version)?;
         }
         tx.commit()?;
     }
