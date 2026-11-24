@@ -16,19 +16,20 @@ interface Draft {
 
 const drafts = ref<Draft[]>([]);
 const dirty = ref(false);
+const saving = ref(false);
+let revision = 0;
 const message = ref<{ ok: boolean; text: string } | null>(null);
+
+function toDraft(rule: ReminderRule): Draft {
+  return { id: rule.id, time: mmss(rule.atSecs * 1000), label: rule.label, enabled: rule.enabled };
+}
 
 // 保存之前，引擎推来的新快照不覆盖正在编辑的内容
 watch(
   () => snapshot.value?.reminders,
   (rules) => {
     if (!rules || dirty.value) return;
-    drafts.value = rules.map((r) => ({
-      id: r.id,
-      time: mmss(r.atSecs * 1000),
-      label: r.label,
-      enabled: r.enabled,
-    }));
+    drafts.value = rules.map(toDraft);
   },
   { immediate: true },
 );
@@ -44,6 +45,7 @@ const states = computed(() => {
 });
 
 function edit() {
+  ++revision;
   dirty.value = true;
   message.value = null;
 }
@@ -64,6 +66,8 @@ function remove(index: number) {
 }
 
 async function save() {
+  if (saving.value || !dirty.value) return;
+  const version = revision;
   const rules: ReminderRule[] = [];
   for (const d of drafts.value) {
     const ms = parseMmss(d.time);
@@ -76,12 +80,17 @@ async function save() {
     const label = d.label.trim() || `开局 ${mmss(secs * 1000)}`;
     rules.push({ id: d.id, atSecs: secs, label, enabled: d.enabled });
   }
+  saving.value = true;
   try {
     await commands.setReminders(rules);
+    if (version !== revision) return;
     dirty.value = false;
+    drafts.value = rules.map(toDraft);
     message.value = { ok: true, text: "已保存" };
   } catch (error) {
     message.value = { ok: false, text: errorText(error) };
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -89,7 +98,7 @@ function discard() {
   dirty.value = false;
   message.value = null;
   const rules = snapshot.value?.reminders ?? [];
-  drafts.value = rules.map((r) => ({ id: r.id, time: mmss(r.atSecs * 1000), label: r.label, enabled: r.enabled }));
+  drafts.value = rules.map(toDraft);
 }
 
 // ---------------------------------------------------------------- 校准
@@ -144,9 +153,10 @@ async function calibrate() {
     </table>
     <div class="row actions">
       <button @click="add">添加提醒</button>
-      <button class="primary" :disabled="!dirty" @click="save">保存</button>
-      <button :disabled="!dirty" @click="discard">放弃修改</button>
-      <span v-if="message" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</span>
+      <button class="primary" :disabled="!dirty || saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+      <button :disabled="!dirty || saving" @click="discard">放弃修改</button>
+      <span v-if="dirty" class="hint">未保存</span>
+      <span v-if="message" role="status" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</span>
     </div>
   </section>
 

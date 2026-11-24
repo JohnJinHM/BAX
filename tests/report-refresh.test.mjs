@@ -46,7 +46,7 @@ test('saving a note preserves edits made in flight and ignores completion on ano
   try {
     await flush();
     const state = app._instance.subTree.component.setupState;
-    state.noteDraft = 'first'; state.noteDirty = true;
+    state.noteDraft = 'first';
     const first = state.saveNote();
     state.noteDraft = 'second';
     pending.shift()(); await first;
@@ -55,12 +55,18 @@ test('saving a note preserves edits made in flight and ignores completion on ano
     assert.equal(state.noteMessage, null);
     const second = state.saveNote();
     player.value = 102; await flush();
-    state.noteDraft = 'another player'; state.noteDirty = true;
+    state.noteDraft = 'another player';
     pending.shift()(); await second;
     assert.equal(saved.get(101), 'second');
     assert.equal(state.noteDraft, 'another player');
     assert.equal(state.noteDirty, true);
     assert.equal(state.noteMessage, null);
+    player.value = 101; await flush();
+    assert.equal(state.noteDraft, 'second');
+    assert.equal(state.noteDirty, false);
+    player.value = 102; await flush();
+    assert.equal(state.noteDraft, 'another player');
+    assert.equal(state.noteDirty, true);
   } finally { app.unmount(); }
 });
 

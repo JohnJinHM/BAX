@@ -15,6 +15,7 @@ import SettingsPanel from "./SettingsPanel.vue";
 const snapshot = useSnapshot();
 const appStatus = useAppStatus();
 useSkin(snapshot);
+const panels = { match: MatchPanel, history: HistoryPanel, players: PlayersPanel, reminders: RemindersPanel, settings: SettingsPanel };
 
 const logLine = computed(() => logStatus(snapshot.value?.log).text);
 
@@ -44,11 +45,9 @@ const apiLine = computed(() => {
       </div>
     </nav>
     <main>
-      <MatchPanel v-if="tab === 'match'" />
-      <HistoryPanel v-else-if="tab === 'history'" />
-      <PlayersPanel v-else-if="tab === 'players'" />
-      <RemindersPanel v-else-if="tab === 'reminders'" />
-      <SettingsPanel v-else />
+      <KeepAlive include="PlayersPanel,RemindersPanel">
+        <component :is="panels[tab]" />
+      </KeepAlive>
     </main>
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
 import type { Relation } from "../shared/bindings/Relation";
@@ -17,11 +17,18 @@ const detail = ref<PlayerDetail | null>(null);
 const loading = ref(false);
 const missing = ref(false);
 const failure = ref<string | null>(null);
-const noteDraft = ref("");
-const noteDirty = ref(false);
-const savingNote = ref(false);
-let noteSession = 0;
+const drafts = reactive(new Map<number, string>());
+const pendingSaves = reactive(new Set<number>());
+const noteDirty = computed(() => drafts.has(props.id));
+const savingNote = computed(() => pendingSaves.has(props.id));
 const noteMessage = ref<{ ok: boolean; text: string } | null>(null);
+const noteDraft = computed({
+  get: () => drafts.get(props.id) ?? detail.value?.note?.body ?? "",
+  set(body: string) {
+    drafts.set(props.id, body);
+    noteMessage.value = null;
+  },
+});
 const refreshing = ref(false);
 const snapshot = useSnapshot();
 let loadSequence = 0;
@@ -36,7 +43,6 @@ async function load() {
     if (sequence !== loadSequence || requestedId !== props.id) return;
     detail.value = result;
     missing.value = result == null;
-    if (!noteDirty.value) noteDraft.value = result?.note?.body ?? "";
   } catch (error) {
     if (sequence === loadSequence) failure.value = errorText(error);
   } finally {
@@ -47,10 +53,6 @@ async function load() {
 watch(
   () => props.id,
   () => {
-    ++noteSession;
-    savingNote.value = false;
-    noteDraft.value = "";
-    noteDirty.value = false;
     noteMessage.value = null;
     detail.value = null;
     void load();
@@ -81,21 +83,20 @@ function date(at: number): string {
 
 async function saveNote() {
   if (savingNote.value || !noteDirty.value) return;
-  const session = noteSession;
+  const id = props.id;
   const body = noteDraft.value;
-  savingNote.value = true;
+  pendingSaves.add(id);
   try {
-    await commands.setNote(props.id, body);
-    if (session !== noteSession) return;
-    if (noteDraft.value === body) {
-      noteDirty.value = false;
-      noteMessage.value = { ok: true, text: body.trim() ? "已保存" : "已删除" };
+    await commands.setNote(id, body);
+    if (props.id === id) await load();
+    if (drafts.get(id) === body) {
+      drafts.delete(id);
+      if (props.id === id) noteMessage.value = { ok: true, text: body.trim() ? "已保存" : "已删除" };
     }
-    await load();
   } catch (error) {
-    if (session === noteSession) noteMessage.value = { ok: false, text: errorText(error) };
+    if (props.id === id) noteMessage.value = { ok: false, text: errorText(error) };
   } finally {
-    if (session === noteSession) savingNote.value = false;
+    pendingSaves.delete(id);
   }
 }
 
@@ -159,13 +160,15 @@ async function refresh() {
       <h3>备注</h3>
       <textarea
         v-model="noteDraft"
+        aria-label="玩家备注"
         rows="3"
         maxlength="2000"
         placeholder="只保存在本机，对局时显示在悬浮窗上"
-        @input="noteDirty = true; noteMessage = null"
       />
       <div class="row">
         <button class="primary" :disabled="!noteDirty || savingNote" @click="saveNote">{{ savingNote ? "保存中…" : "保存备注" }}</button>
+        <button v-if="noteDirty" :disabled="savingNote" @click="drafts.delete(id); noteMessage = null">放弃修改</button>
+        <span v-if="noteDirty" class="hint">未保存</span>
         <span class="hint num">{{ noteDraft.length }}/2000</span>
         <span v-if="detail.note && !noteDirty" class="hint">更新于 {{ ago(detail.note.updatedAt, now) }}</span>
         <span v-if="noteMessage" :class="noteMessage.ok ? 'ok' : 'error'">{{ noteMessage.text }}</span>
