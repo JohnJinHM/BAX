@@ -20,6 +20,7 @@ import { commands, errorText, useAppStatus, useSnapshot, type SourceCheck } from
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 import { appearanceRevision } from "../shared/skin";
 import { type SkinId, skins } from "../shared/skins";
+import LogDirectory from "./LogDirectory.vue";
 
 const sourceChecks = ref<SourceCheck[] | null>(null);
 const sourcesBusy = ref(false);
@@ -104,20 +105,6 @@ function resetAppearance() {
   delete colors[skinSettings.value.id];
   return saveAppearance({ colors, fontScale: 1, density: "standard" }, "已恢复默认外观");
 }
-
-// ---------------------------------------------------------------- 日志目录
-
-const logDir = ref("");
-watch(
-  () => snapshot.value?.log.dir,
-  (dir) => {
-    logDir.value = dir ?? "";
-  },
-  { immediate: true },
-);
-
-const saveLogDir = () => run(() => commands.setLogDir(logDir.value.trim() || null), "已切换日志目录");
-const autoLogDir = () => run(() => commands.setLogDir(null), "已改回自动定位");
 
 // ---------------------------------------------------------------- 快捷键
 
@@ -221,12 +208,7 @@ async function exportDiag() {
   </section>
   <section class="card">
     <h2>游戏日志</h2>
-    <p class="hint">通常能自动找到，位于 Steam 库的 steamapps\common\broken_arrow\GameLogs。</p>
-    <div class="row">
-      <input v-model="logDir" type="text" class="wide" placeholder="GameLogs 目录" />
-      <button class="primary" @click="saveLogDir">使用这个目录</button>
-      <button @click="autoLogDir">自动定位</button>
-    </div>
+    <LogDirectory settings />
   </section>
 
   <section class="card" aria-labelledby="skin-heading">
@@ -453,7 +435,10 @@ async function exportDiag() {
     </div>
   </section>
 
-  <p v-if="message" class="toast" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</p>
+  <div v-if="message" class="toast">
+    <span role="status" :class="message.ok ? 'ok' : 'error'">{{ message.text }}</span>
+    <button aria-label="关闭反馈" @click="message = null">关闭</button>
+  </div>
 </template>
 
 <style scoped>
@@ -503,11 +488,6 @@ input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outli
   margin-top: calc(16px * var(--bax-density));
 }
 
-.wide {
-  flex: 1;
-  min-width: 320px;
-}
-
 .grid {
   display: grid;
   grid-template-columns: calc(150px * var(--bax-font-scale)) minmax(0, 1fr);
@@ -532,7 +512,19 @@ input[type="number"]:focus-visible { outline: 2px solid var(--bax-accent); outli
 }
 
 .toast {
-  margin-top: 16px;
+  position: fixed;
+  bottom: 12px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(38em, 80vw);
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+  background: var(--bax-surface-2);
+  border: 1px solid var(--bax-border);
+  border-radius: var(--bax-radius-sm);
 }
 
 .path {

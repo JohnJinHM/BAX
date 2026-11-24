@@ -3,6 +3,7 @@ import { computed } from "vue";
 
 import { useAppStatus, useSnapshot } from "../shared/engine";
 import { errorNames } from "../shared/format";
+import { logStatus } from "../shared/match-presentation";
 import { useSkin } from "../shared/skin";
 import HistoryPanel from "./HistoryPanel.vue";
 import MatchPanel from "./MatchPanel.vue";
@@ -15,14 +16,7 @@ const snapshot = useSnapshot();
 const appStatus = useAppStatus();
 useSkin(snapshot);
 
-const logLine = computed(() => {
-  const s = snapshot.value;
-  if (!s) return "正在连接…";
-  if (s.log.searching) return "正在寻找游戏日志";
-  if (s.log.error) return `日志读取失败：${s.log.error}`;
-  if (!s.log.dir) return "没有找到游戏日志";
-  return s.log.ready ? "日志已就绪" : "正在读取日志";
-});
+const logLine = computed(() => logStatus(snapshot.value?.log).text);
 
 const apiLine = computed(() => {
   const api = snapshot.value?.api;

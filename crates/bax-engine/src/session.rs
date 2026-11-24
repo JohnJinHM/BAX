@@ -69,7 +69,7 @@ pub(crate) enum Command {
     /// 换一个日志目录；`None` 表示改回自动定位。
     SetLogDir {
         dir: Option<PathBuf>,
-        done: oneshot::Sender<()>,
+        done: oneshot::Sender<Result<(), String>>,
     },
     /// 替换全部提醒规则。
     SetReminders {
@@ -428,6 +428,8 @@ impl Session {
                 };
                 if let Err(err) = saved {
                     tracing::warn!(error = %err, "保存日志目录设置失败");
+                    let _ = done.send(Err(format!("保存日志目录失败：{err}")));
+                    return;
                 }
                 match &dir {
                     Some(dir) => tracing::info!(dir = %dir.display(), "切换游戏日志目录"),
@@ -436,7 +438,7 @@ impl Session {
                 self.reset_match_state();
                 self.start_log_thread(dir);
                 self.publish();
-                let _ = done.send(());
+                let _ = done.send(Ok(()));
             }
             Command::SetReminders { rules, done } => {
                 let _ = done.send(self.set_reminders(rules));
@@ -702,11 +704,8 @@ impl Session {
 
     fn on_log(&mut self, msg: LogMsg) {
         match msg {
-            LogMsg::Searching => {
-                self.log = LogStatus {
-                    searching: true,
-                    ..LogStatus::default()
-                };
+            LogMsg::NotFound => {
+                self.log.searching = false;
                 self.publish();
             }
             LogMsg::Watching { dir } => {
@@ -1282,7 +1281,11 @@ impl Session {
         }
         let (tx, rx) = mpsc::channel(LOG_CHANNEL_CAPACITY);
         self.log_rx = rx;
-        self.log = LogStatus::default();
+        self.log = LogStatus {
+            searching: dir.is_none(),
+            dir: dir.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            ..LogStatus::default()
+        };
         self.backfill_events = 0;
         self.log_started = Instant::now();
         let timing = LogTiming {

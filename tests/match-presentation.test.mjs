@@ -4,7 +4,23 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 const source = await readFile(new URL('../src/shared/match-presentation.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-const { matchSpecs, showOverlaySpecs, rosterSummary } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { logStatus, matchSpecs, showOverlaySpecs, rosterSummary, rosterWaitingText } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+
+test('log discovery distinguishes retrying, reading an empty folder and waiting for a match', () => {
+  const log = { searching: false, dir: null, ready: false, error: null, file: null };
+  assert.equal(logStatus({ ...log, searching: true }).needsDirectory, false);
+  assert.equal(logStatus(log).needsDirectory, true);
+  assert.match(logStatus({ ...log, dir: 'GameLogs', ready: true }).text, /等待游戏写入/);
+  assert.match(logStatus({ ...log, dir: 'GameLogs', ready: true, file: 'game.log' }).text, /已就绪/);
+  assert.match(logStatus({ ...log, ready: true, error: '权限不足' }).text, /权限不足/);
+});
+
+test('an empty OCR roster retains the reason and the log fallback', () => {
+  const m = { mode: 'custom', pregame: { players: [], status: 'OCR 模型未就绪' } };
+  assert.match(rosterWaitingText(m), /模型未就绪.*游戏日志/);
+  assert.equal(rosterWaitingText({ ...m, pregame: { players: [], status: '' } }), '等待游戏日志提供正式名单。');
+  assert.match(rosterWaitingText({ ...m, mode: 'pve' }), /PvE.*暂停/);
+});
 
 test('overlay shows last specs only during selection, then this match after completion', () => {
   for (const phase of ['waitingRoom', 'loading', 'deployment', 'inBattle', 'ended']) {

@@ -97,6 +97,7 @@ pub fn run() {
             crate::updater::open_releases,
             commands::get_app_status,
             commands::refresh_players,
+            commands::pick_log_dir,
             commands::set_log_dir,
             commands::set_reminders,
             commands::reserve_reminder_id,

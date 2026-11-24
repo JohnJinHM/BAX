@@ -17,7 +17,8 @@ import { useNow } from "../shared/useNow";
 import { openMatch, openPlayer } from "./navigation";
 import SpecIcon from "../shared/SpecIcon.vue";
 import { useCurrentReport } from "../shared/useCurrentReport";
-import { matchSpecs, rosterSummary } from "../shared/match-presentation";
+import { matchSpecs, rosterSummary, rosterWaitingText } from "../shared/match-presentation";
+import LogDirectory from "./LogDirectory.vue";
 
 const snapshot = useSnapshot();
 const now = useNow(1000);
@@ -79,7 +80,7 @@ async function refresh() {
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>
 
-    <p v-if="!current.rosterKnown" class="hint" role="status">{{ current.mode === 'pve' ? 'PvE · OCR 已暂停，等待日志名单' : current.pregame.players.length ? current.pregame.status : "等待玩家名单" }}</p>
+    <p v-if="!current.rosterKnown" class="hint" role="status">{{ rosterWaitingText(current) }}</p>
     <div v-for="group in groups" :key="group.key" class="group">
       <h3>{{ group.title }}</h3>
       <div class="roster-table"><table>
@@ -139,8 +140,8 @@ async function refresh() {
     </p>
   </section>
   <section v-else class="card">
-    <h2>还没有比赛</h2>
-    <p class="hint">打开游戏进入对局后，这里会显示双方玩家。</p>
+    <h2>当前对局</h2>
+    <LogDirectory />
   </section>
 </template>
 

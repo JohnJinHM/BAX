@@ -63,6 +63,27 @@ pub async fn refresh_players(state: State<'_, AppState>) -> CommandResult {
         .map_err(rejected("refresh_players"))
 }
 
+/// 打开所属窗口的系统目录选择器；取消时保留当前日志来源。
+#[tauri::command]
+pub async fn pick_log_dir(window: Window) -> Result<Option<PathBuf>, String> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            rfd::FileDialog::new()
+                .set_parent(&window)
+                .set_title("选择 Broken Arrow 的 GameLogs 目录")
+                .pick_folder()
+        })
+        .await
+        .map_err(|e| format!("无法打开目录选择器：{e}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = window;
+        Err("请在设置中输入 GameLogs 目录路径".into())
+    }
+}
+
 /// `dir` 为空表示改回自动定位。
 #[tauri::command]
 pub async fn set_log_dir(state: State<'_, AppState>, dir: Option<String>) -> CommandResult {

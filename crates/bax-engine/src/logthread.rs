@@ -14,8 +14,8 @@ use tokio::sync::mpsc;
 /// 日志线程发给会话的消息。
 #[derive(Debug)]
 pub(crate) enum LogMsg {
-    /// 没有指定目录，正在自动寻找。
-    Searching,
+    /// 首次自动查找未命中，之后仍定期重试。
+    NotFound,
     /// 开始读这个目录。
     Watching {
         dir: PathBuf,
@@ -79,9 +79,6 @@ fn run(dir: Option<PathBuf>, timing: LogTiming, tx: &mpsc::Sender<LogMsg>, stop:
             dir
         }
         None => {
-            if tx.blocking_send(LogMsg::Searching).is_err() {
-                return;
-            }
             tracing::info!("自动定位游戏日志目录");
             let mut attempts = 0u32;
             loop {
@@ -91,6 +88,9 @@ fn run(dir: Option<PathBuf>, timing: LogTiming, tx: &mpsc::Sender<LogMsg>, stop:
                     break found;
                 }
                 if attempts == 1 {
+                    if tx.blocking_send(LogMsg::NotFound).is_err() {
+                        return;
+                    }
                     tracing::info!(
                         candidates = discovery::candidate_log_dirs().len(),
                         "没有找到游戏日志目录，稍后重试"

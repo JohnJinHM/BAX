@@ -183,9 +183,15 @@ impl Engine {
     /// 改用另一个日志目录并记住这个选择；`None` 表示改回自动定位。
     /// 返回时新的日志线程已经启动，当前比赛的状态已经清空。
     pub async fn set_log_dir(&self, dir: Option<PathBuf>) -> Result<(), CommandError> {
+        if let Some(path) = dir.clone() {
+            tokio::task::spawn_blocking(move || std::fs::read_dir(path).map(drop))
+                .await
+                .map_err(|e| CommandError::Rejected(e.to_string()))?
+                .map_err(|e| CommandError::Rejected(format!("无法读取所选目录：{e}")))?;
+        }
         let (done, wait) = oneshot::channel();
         self.send(Command::SetLogDir { dir, done }).await?;
-        wait.await.map_err(|_| CommandError::Stopped)
+        reply(wait).await
     }
 
     /// 替换全部提醒规则并保存。

@@ -23,6 +23,11 @@ export function previewOverlayStage(stage: "waitingRoom" | "loading" | "deployme
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
   mockWindows("main");
   const params = new URLSearchParams(location.search);
+  const previewLogDir = fixtureSnapshot.log.dir;
+  if (params.has("missingLog")) {
+    fixtureSnapshot.current = null;
+    fixtureSnapshot.log = { searching: false, dir: null, file: null, ready: false, error: null };
+  }
   const saved = localStorage.getItem("bax.dev.ui");
   if (saved) fixtureSnapshot.ui = { ...fixtureSnapshot.ui, ...JSON.parse(saved) };
   // ?skin=broken-arrow 直接用某个皮肤预览
@@ -75,6 +80,23 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
   let lastReminderId = Math.max(0, ...fixtureSnapshot.reminders.map(r => r.id));
   mockIPC((cmd, args) => {
     switch (cmd) {
+      case "pick_log_dir":
+        return previewLogDir;
+      case "set_log_dir": {
+        const { dir } = args as { dir: string | null };
+        const pending = { searching: dir == null, dir, file: null, ready: false, error: null };
+        fixtureSnapshot.log = pending;
+        fixtureSnapshot.revision++;
+        void emit("bax://snapshot", structuredClone(fixtureSnapshot));
+        window.setTimeout(() => {
+          if (fixtureSnapshot.log !== pending) return;
+          const found = dir ?? previewLogDir;
+          fixtureSnapshot.log = { searching: false, dir: found, file: found ? "Gamelog__preview.log" : null, ready: !!found, error: null };
+          fixtureSnapshot.revision++;
+          void emit("bax://snapshot", structuredClone(fixtureSnapshot));
+        }, 300);
+        return null;
+      }
       case "reserve_reminder_id":
         return ++lastReminderId;
       case "check_data_sources":

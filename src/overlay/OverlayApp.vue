@@ -9,7 +9,7 @@ import { saveSetting, useSetting } from "../shared/settings";
 import { useSkin } from "../shared/skin";
 import { useNow } from "../shared/useNow";
 import { useCurrentReport } from "../shared/useCurrentReport";
-import { matchSpecs, rosterSummary, showOverlaySpecs } from "../shared/match-presentation";
+import { logStatus, matchSpecs, rosterSummary, rosterWaitingText, showOverlaySpecs } from "../shared/match-presentation";
 import AnimatedNumber from "../shared/AnimatedNumber.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 import { OverlayAutomation } from "../shared/overlay-automation";
@@ -114,13 +114,10 @@ const meter = computed(() => {
 });
 
 const emptyText = computed(() => {
-  const s = snapshot.value;
-  if (!s) return "正在连接…";
-  if (s.log.searching) return "正在寻找游戏日志…";
-  if (s.log.error) return `日志读取失败：${s.log.error}`;
-  if (!s.log.dir) return "没有找到游戏日志，请在主窗口设置";
-  if (!s.log.ready) return "正在读取日志…";
-  return "等待对局…";
+  const log = snapshot.value?.log;
+  const state = logStatus(log);
+  if (state.needsDirectory) return `${state.text} 可在主窗口选择目录。`;
+  return log?.ready ? "日志已就绪，等待进入对局。" : state.text;
 });
 
 function playerTitle(p: RosterRow): string {
@@ -344,10 +341,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
           </li>
         </ul>
       </section>
-      <p v-if="current && !current.rosterKnown" class="next" role="status">
-        {{ current.mode === 'pve' ? 'PvE · 等待日志名单' : current.pregame.players.length ? current.pregame.status : '等待玩家名单' }}
-      </p>
       </div></div>
+      <p v-if="!current.rosterKnown" class="next" role="status">{{ rosterWaitingText(current) }}</p>
     </template>
     <div v-else class="empty">{{ emptyText }}</div>
 

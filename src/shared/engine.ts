@@ -91,6 +91,7 @@ export const commands = {
   installUpdate: () => invoke<void>("install_update"),
   openReleases: () => invoke<void>("open_releases"),
   refreshPlayers: () => invoke<void>("refresh_players"),
+  pickLogDir: () => invoke<string | null>("pick_log_dir"),
   setLogDir: (dir: string | null) => invoke<void>("set_log_dir", { dir }),
   setReminders: (rules: ReminderRule[]) => invoke<void>("set_reminders", { rules }),
   reserveReminderId: () => invoke<number>("reserve_reminder_id"),

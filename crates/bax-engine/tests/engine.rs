@@ -625,6 +625,16 @@ async fn switching_log_dirs_resets_the_match_and_is_remembered() {
     })
     .await;
 
+    assert!(
+        engine
+            .set_log_dir(Some(other.join("missing")))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        engine.snapshot().current.as_ref().map(|m| m.match_id),
+        Some(MatchId(9_000_001))
+    );
     engine
         .set_log_dir(Some(other.clone()))
         .await
