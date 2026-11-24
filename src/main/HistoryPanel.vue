@@ -90,26 +90,24 @@ function reportTitle(row: HistoryRow): string | undefined {
         <span v-if="pending" class="hint">{{ pending }} 场在等战报</span>
       </div>
       <p v-if="failure" class="error">{{ failure }}</p>
-      <ul>
-        <li
-          v-for="row in rows"
-          :key="row.matchId"
-          :class="{ active: row.matchId === selectedMatch }"
-          @click="selectedMatch = row.matchId"
-        >
-          <div class="row-top">
-            <span v-if="row.selfTeam === 'spectators'" class="result spectator" title="旁观比赛" aria-label="旁观比赛">旁</span>
-            <span v-else-if="row.report.state === 'cancelled'" class="result cancelled">弃</span>
-            <span v-else-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
-            <span class="map">{{ row.map ?? "地图未知" }}</span>
-            <span class="when num">{{ date(row.at) }}</span>
-          </div>
-          <div class="row-sub hint">
-            <span class="num">{{ row.matchId }}</span>
-            <span v-if="row.durationMs != null" class="num">{{ mmss(row.durationMs) }}</span>
-            <span>{{ row.players }} 人</span>
-            <span class="state" :class="row.report.state" :title="reportTitle(row)">{{ reportText(row) }}</span>
-          </div>
+      <ul aria-label="比赛记录">
+        <li v-for="row in rows" :key="row.matchId">
+          <button type="button" class="match-entry" :aria-current="row.matchId === selectedMatch ? 'true' : undefined"
+            @click="selectedMatch = row.matchId">
+            <span class="row-top">
+              <span v-if="row.selfTeam === 'spectators'" class="result spectator" title="旁观比赛" aria-label="旁观比赛">旁</span>
+              <span v-else-if="row.report.state === 'cancelled'" class="result cancelled">弃</span>
+              <span v-else-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
+              <span class="map">{{ row.map ?? "地图未知" }}</span>
+              <span class="when num">{{ date(row.at) }}</span>
+            </span>
+            <span class="row-sub hint">
+              <span class="num">{{ row.matchId }}</span>
+              <span v-if="row.durationMs != null" class="num">{{ mmss(row.durationMs) }}</span>
+              <span>{{ row.players }} 人</span>
+              <span class="state" :class="row.report.state" :title="reportTitle(row)">{{ reportText(row) }}</span>
+            </span>
+          </button>
         </li>
       </ul>
       <button v-if="rows.length && !exhausted" class="more" :disabled="loading" @click="load(true)">更多</button>
@@ -142,19 +140,31 @@ ul {
   padding: 0;
 }
 
-li {
+.match-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
   padding: calc(6px * var(--bax-density)) 8px;
   border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
 
-li:hover {
+.match-entry:hover {
   background: var(--bax-surface-2);
 }
 
-li.active {
+.match-entry[aria-current="true"] {
   background: var(--bax-selected-bg);
   box-shadow: inset 2px 0 0 var(--bax-selected-edge);
+}
+
+.match-entry:focus-visible {
+  outline: 2px solid var(--bax-accent);
+  outline-offset: -2px;
 }
 
 /* 每行固定一行高：地图名过长时只省略地图名，日期、标签与状态不换行 */
