@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { rosterGroups, type RosterRow } from "../shared/roster";
-import { computed, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import {
@@ -27,6 +27,13 @@ const { report, failure: reportFailure } = useCurrentReport(snapshot);
 const specsFor = (p: RosterRow) => matchSpecs(p, current.value, report.value);
 const message = ref<string | null>(null);
 const refreshing = ref(false);
+const expandedPlayers = reactive(new Set<string>());
+watch(() => current.value?.matchId, () => expandedPlayers.clear());
+
+function toggleStats(key: string) {
+  if (expandedPlayers.has(key)) expandedPlayers.delete(key);
+  else expandedPlayers.add(key);
+}
 
 const groups = computed(() => rosterGroups(current.value).map(g => ({
   ...g, title: g.key === 'spectators' ? `旁观者 · ${g.count} 人` : `${g.title} · ${g.count} 人　均分 ${rating(g.averageValue)}（${g.rated} 人有分）`,
@@ -39,11 +46,6 @@ const clockLine = computed(() => {
   const elapsed = now.value - m.clock.startAt;
   return elapsed < 0 ? `距开局 ${mmss(-elapsed)}` : `已开局 ${mmss(elapsed)}`;
 });
-
-function encounters(p: RosterRow): string {
-  const e = p.encounters;
-  return e.total === 0 ? "–" : `${e.total}（友 ${e.asTeammate} / 敌 ${e.asOpponent}）`;
-}
 
 async function refresh() {
   message.value = null;
@@ -85,59 +87,68 @@ async function refresh() {
       <h3>{{ group.title }}</h3>
       <div class="roster-table"><table>
         <colgroup>
-          <col class="c-name" />
+          <col />
+          <col class="c-elo" />
           <col class="c-specs" />
-          <col v-for="n in 9" :key="n" />
           <col class="c-met" />
           <col class="c-fetched" />
+          <col class="c-action" />
         </colgroup>
         <thead>
           <tr>
             <th class="left">玩家</th>
-            <th>{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</th>
             <th>ELO</th>
-            <th>等级</th>
-            <th>排名</th>
-            <th>排位场次</th>
-            <th>胜率</th>
-            <th>离场</th>
-            <th>损毁比</th>
-            <th>价值比</th>
-            <th>场均时长</th>
+            <th class="spec-heading">{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</th>
             <th>以前同场</th>
-            <th>资料</th>
+            <th>资料状态</th>
+            <th>排位统计</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in group.players" :key="p.key" :class="{ self: p.isSelf }">
-            <td class="left">
-              <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
-              <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
-              <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
-              <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
-            </td>
-            <td><span class="specs"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
-            <td class="num strong">{{ rating(p.profile?.rating) }}</td>
-            <td class="num">{{ p.displayLevel ?? "–" }}</td>
-            <td class="num">{{ p.profile?.rank ?? "–" }}</td>
-            <td class="num">{{ p.profile?.ratingGames ?? "–" }}</td>
-            <td class="num">{{ percent(p.profile?.ranked?.winRate) }}</td>
-            <td class="num">{{ p.profile?.ranked?.leaves ?? "–" }}</td>
-            <td class="num">{{ ratio(p.profile?.ranked?.killLossRatio) }}</td>
-            <td class="num">{{ ratio(p.profile?.ranked?.costRatio) }}</td>
-            <td class="num">{{ minutes(p.profile?.ranked?.averageMinutes) }}</td>
-            <td class="num">{{ encounters(p) }}</td>
-            <td>
-              <span :class="{ stale: p.profile && !p.profileCurrent }">{{ p.provisional ? "待日志确认" : ago(p.profileFetchedAt, now) }}</span>
-              <span v-if="fetchText(p.fetch)" class="state" :class="p.fetch.state"> · {{ fetchText(p.fetch) }}</span>
-            </td>
-          </tr>
+          <template v-for="p in group.players" :key="p.key">
+            <tr :class="{ self: p.isSelf }">
+              <td class="left">
+                <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
+                <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
+                <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
+                <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
+              </td>
+              <td class="num strong">{{ rating(p.profile?.rating) }}</td>
+              <td><span class="specs"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
+              <td class="num">
+                {{ p.provisional ? '待确认' : `${p.encounters.total} 次` }}
+                <div v-if="p.encounters.total" class="hint">友 {{ p.encounters.asTeammate }} / 敌 {{ p.encounters.asOpponent }}</div>
+              </td>
+              <td class="profile-status">
+                <span>{{ p.provisional ? "待日志确认" : p.profileFetchedAt != null ? ago(p.profileFetchedAt, now) : "暂无资料" }}</span>
+                <span v-if="!p.provisional && p.profile && !p.profileCurrent" class="hint">赛前缓存</span>
+                <span v-if="fetchText(p.fetch)" class="state" :class="p.fetch.state">{{ fetchText(p.fetch) }}</span>
+              </td>
+              <td>
+                <button class="stats-toggle" :aria-label="`${expandedPlayers.has(p.key) ? '收起' : '展开'} ${p.name} 的排位统计`"
+                  :aria-expanded="expandedPlayers.has(p.key)" :aria-controls="expandedPlayers.has(p.key) ? `stats-${p.key}` : undefined"
+                  @click="toggleStats(p.key)">{{ expandedPlayers.has(p.key) ? '收起' : '展开' }}</button>
+              </td>
+            </tr>
+            <tr v-if="expandedPlayers.has(p.key)" :id="`stats-${p.key}`">
+              <td colspan="6" class="details">
+                <dl>
+                  <div><dt>等级</dt><dd>{{ p.displayLevel ?? '–' }}</dd></div>
+                  <div><dt>排名</dt><dd>{{ p.profile?.rank ?? '–' }}</dd></div>
+                  <div><dt>排位场次</dt><dd>{{ p.profile?.ratingGames ?? '–' }}</dd></div>
+                  <div><dt>胜率</dt><dd>{{ percent(p.profile?.ranked?.winRate) }}</dd></div>
+                  <div><dt>离场</dt><dd>{{ p.profile?.ranked?.leaves ?? '–' }}</dd></div>
+                  <div><dt>损毁比</dt><dd>{{ ratio(p.profile?.ranked?.killLossRatio) }}</dd></div>
+                  <div><dt>价值比</dt><dd>{{ ratio(p.profile?.ranked?.costRatio) }}</dd></div>
+                  <div><dt>场均时长</dt><dd>{{ minutes(p.profile?.ranked?.averageMinutes) }}</dd></div>
+                </dl>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table></div>
     </div>
-    <p class="hint">
-      损毁比与价值比是排位累计的击毁 ÷ 损失（数量与价值）。灰色的资料时间表示资料不是这场比赛开始之后取得的。
-    </p>
+    <p v-if="expandedPlayers.size" class="hint">损毁比与价值比均为排位累计击毁 ÷ 损失，分别按数量和价值计算。</p>
   </section>
   <section v-else class="card">
     <h2>当前对局</h2>
@@ -150,9 +161,17 @@ async function refresh() {
   margin: 0;
 }
 .roster-table { overflow-x: auto; scrollbar-color: var(--bax-faint) var(--bax-surface); }
-.roster-table table { min-width: calc(1160px * var(--bax-font-scale)); }
-.c-specs { width: 82px; }
-.specs { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.c-elo { width: 10%; }
+.c-specs { width: 16%; }
+.c-action { width: 5.4em; }
+.spec-heading { text-align: center; }
+.specs { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
+.profile-status span { display: block; }
+.stats-toggle { padding: 3px 6px; }
+.details { text-align: left; background: var(--bax-surface-2); }
+.details dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.details dt { color: var(--bax-muted); }
+.details dd { margin: 2px 0; font-variant-numeric: tabular-nums; }
 .hint a { color: var(--bax-accent); text-underline-offset: 3px; }
 
 .tag {
@@ -178,16 +197,12 @@ table {
   font-size: calc(13px * var(--bax-font-scale));
 }
 
-.c-name {
-  width: 22%;
-}
-
 .c-met {
-  width: calc(150px * var(--bax-font-scale));
+  width: 17%;
 }
 
 .c-fetched {
-  width: calc(130px * var(--bax-font-scale));
+  width: 18%;
 }
 
 td.left .name {
@@ -215,7 +230,7 @@ th,
 td {
   padding: calc(5px * var(--bax-density)) 8px;
   text-align: right;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   border-bottom: 1px solid var(--bax-border);
 }
 
@@ -243,10 +258,6 @@ tr.self > td:first-child {
 
 .strong {
   font-weight: 600;
-}
-
-.stale {
-  color: var(--bax-faint);
 }
 
 .state.failed {
