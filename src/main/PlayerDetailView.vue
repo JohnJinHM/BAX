@@ -141,7 +141,7 @@ async function refresh() {
       <div class="stats">
         <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
         <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
-        <div :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount == null ? "未知" : `${detail.traceCount} 次` }}</span></div>
+        <div v-if="detail.traceCount != null && detail.traceCount > 0" :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount }} 次</span></div>
         <div><label>排名</label><span class="num">{{ detail.profile?.rank ?? "–" }}</span></div>
         <div><label>排位场次</label><span class="num">{{ detail.profile?.ratingGames ?? "–" }}</span></div>
         <div><label>胜率</label><span class="num">{{ percent(detail.profile?.ranked?.winRate) }}</span></div>
