@@ -338,14 +338,19 @@ fn history_rows_carry_report_state_and_result() {
         ("Map2", Some(PlayerId(101)), vec![2]),
         ("Map2", Some(PlayerId(999)), vec![]),
     ] {
-        let found = store.search_match_history(10, 0, query, player).unwrap();
+        let found = store
+            .search_match_history(10, 0, query, player)
+            .expect("筛选历史对局");
         assert_eq!(
             found.iter().map(|r| r.match_id.get()).collect::<Vec<_>>(),
             expected
         );
     }
     assert_eq!(
-        store.search_match_history(1, 2, "ash", None).unwrap()[0].match_id,
+        store
+            .search_match_history(1, 2, "ash", None)
+            .expect("分页查询")[0]
+            .match_id,
         MatchId(2)
     );
     let one = &rows[3];
@@ -382,7 +387,7 @@ fn history_rows_carry_report_state_and_result() {
 
 #[test]
 fn player_history_scope_distinguishes_identical_log_names() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().expect("打开长期库");
     record(&mut store, 8, 1000, true, true);
     record(&mut store, 9, 3000, true, true);
     store
@@ -391,11 +396,11 @@ fn player_history_scope_distinguishes_identical_log_names() {
             "UPDATE match_players SET player_id = 202 WHERE match_id = 9 AND player_id = 101",
             [],
         )
-        .unwrap();
+        .expect("构造同名玩家的参赛记录");
     for (id, expected) in [(101, 8), (202, 9)] {
         let rows = store
             .search_match_history(10, 0, "Ash", Some(PlayerId(id)))
-            .unwrap();
+            .expect("按玩家 ID 查找对局");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].match_id, MatchId(expected));
     }

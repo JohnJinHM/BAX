@@ -491,7 +491,7 @@ mod tests {
                 "all",
                 (Some(PlayerId(500)), Some(MatchId(2))),
             )
-            .unwrap();
+            .expect("查询本局玩家");
         assert_eq!(first[0].id, PlayerId(101));
     }
 
