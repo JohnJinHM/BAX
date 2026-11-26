@@ -174,6 +174,23 @@ impl BatraceClient {
         Ok(fetched)
     }
 
+    /// Trace Express 按玩家 ID 返回的当前被标记次数，撤销后可减少。
+    pub async fn player_trace_count(&self, id: PlayerId) -> Result<u32, ApiError> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct TraceResponse {
+            trace_count: u32,
+        }
+        let response: Fetched<TraceResponse> = self
+            .get(
+                "players.trace",
+                &format!("/api/players/{id}/trace"),
+                Some(self.player_info_timeout),
+            )
+            .await?;
+        Ok(response.data.trace_count)
+    }
+
     /// 名称搜索；URL 编码后复用统一错误分类，不记录查询文本。
     pub async fn search_players(
         &self,

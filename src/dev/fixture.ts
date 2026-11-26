@@ -25,6 +25,7 @@ function player(
     id,
     name,
     logName: name,
+    traceCount: rating == null ? null : id === 102 ? 3 : 0,
     team,
     isSelf: false,
     profile:
@@ -152,6 +153,8 @@ export function fixtureDetail(id: number): PlayerDetail | null {
     name: p.name,
     logName: p.logName,
     steamId: "76561190000000201",
+    traceCount: p.traceCount,
+    traceCheckedAt: p.traceCount == null ? null : now - 30_000,
     profile: p.profile,
     fetchedAt: p.profileFetchedAt,
     firstSeenAt: now - 120 * day,

@@ -34,7 +34,7 @@ use tokio::time::MissedTickBehavior;
 use crate::clock::Clock;
 use crate::config::EngineConfig;
 use crate::logthread::{LogMsg, LogThread, LogTiming};
-use crate::player::PlayerDetail;
+use crate::player::{PlayerDetail, ProfileLookup};
 use crate::profile::ProfileSummary;
 use crate::reports::ReportEvent;
 use crate::snapshot::{
@@ -110,7 +110,7 @@ pub(crate) enum Command {
     /// 保存一份单独取得的资料（主窗口里“刷新这名玩家”）。请求由调用方发出，会话只负责写入。
     SaveProfile {
         id: PlayerId,
-        fetched: Box<Fetched<PlayerInfoResponse>>,
+        lookup: Box<ProfileLookup>,
         done: oneshot::Sender<Result<(), String>>,
     },
     /// 长期库被别处改过（例如导入了历史日志）：重新读取当前比赛玩家的同场次数与备注。
@@ -124,7 +124,7 @@ struct FetchResult {
     generation: u64,
     at: Timestamp,
     elapsed_ms: u64,
-    result: Result<Fetched<PlayerInfoResponse>, ApiError>,
+    lookup: ProfileLookup,
 }
 
 /// 上一次记录诊断日志时的比赛状态，用来发现变化。
@@ -320,6 +320,9 @@ impl Session {
         let _ocr_guard = OcrGuard(ocr_task);
         #[cfg(not(feature = "ocr"))]
         drop(ocr_tx);
+        let mut trace_tasks = tokio::task::JoinSet::new();
+        let mut trace_ticket = None;
+        let mut trace_attempted = std::collections::BTreeSet::new();
         loop {
             let input = tokio::select! {
                 command = commands.recv() => match command {
@@ -331,6 +334,8 @@ impl Session {
                 Some(result) = self.fetch_rx.recv() => Input::Fetched(Box::new(result)),
                 Some(event) = self.report_rx.recv() => Input::Report(event),
                 Some(message) = ocr_rx.recv() => Input::Pregame(message),
+                Some(Ok((key, id, at, count))) = trace_tasks.join_next(), if !trace_tasks.is_empty() =>
+                    Input::PregameTrace(key, id, at, count),
                 _ = tick.tick() => Input::Tick,
             };
             // 处理过程中的诊断记录都挂在当前比赛的 span 下
@@ -338,13 +343,48 @@ impl Session {
             let _entered = span.enter();
             match input {
                 Input::Pregame(message) => self.on_pregame(message),
+                Input::PregameTrace(key, id, at, count) => {
+                    if trace_ticket.as_ref() == Some(&key)
+                        && self
+                            .pregame
+                            .players
+                            .iter()
+                            .any(|p| p.matched_id() == Some(id))
+                        && let Some(count) = count
+                        && let Err(err) = self.save_trace_count(id, count, at)
+                    {
+                        tracing::warn!(player = %id, error = %err, "保存 BATrace 标记次数失败");
+                    }
+                }
                 Input::Command(command) => self.on_command(command),
                 Input::Log(msg) => self.on_log(msg),
                 Input::Fetched(result) => self.on_fetched(*result),
                 Input::Report(event) => self.on_report_event(event),
                 Input::Tick => self.on_tick(),
             }
-            if crate::pregame::ticket(&self.build_snapshot()).is_none() {
+            let ticket = crate::pregame::ticket(&self.build_snapshot());
+            if ticket != trace_ticket {
+                trace_tasks.abort_all();
+                trace_attempted.clear();
+                trace_ticket = ticket.clone();
+            }
+            if let Some(key) = ticket {
+                // 单独串行查询已匹配的 ID，不占用 OCR 身份查询额度。
+                if trace_tasks.is_empty()
+                    && let Some(id) = self
+                        .pregame
+                        .players
+                        .iter()
+                        .filter_map(|p| p.matched_id())
+                        .find(|id| trace_attempted.insert(*id))
+                {
+                    let client = self.client.clone();
+                    let at = self.clock.now();
+                    trace_tasks.spawn(async move {
+                        (key, id, at, client.player_trace_count(id).await.ok())
+                    });
+                }
+            } else {
                 if self.pregame != Default::default() {
                     self.dirty = true;
                 }
@@ -372,9 +412,23 @@ impl Session {
             && crate::pregame::ticket(&self.build_snapshot()).as_ref() == Some(&message.ticket)
         {
             for p in &mut message.view.players {
-                if p.ambiguous {
+                let Some(id) = p.matched_id() else {
+                    p.trace_count = None;
                     continue;
-                }
+                };
+                p.trace_count = self
+                    .pregame
+                    .players
+                    .iter()
+                    .find(|old| old.matched_id() == Some(id))
+                    .map(|old| old.trace_count)
+                    .unwrap_or_else(|| {
+                        self.store
+                            .player(id)
+                            .ok()
+                            .flatten()
+                            .and_then(|r| r.trace_count)
+                    });
                 if let Some(candidate) = p.candidates.first_mut()
                     && let Some(profile) = candidate.profile.as_mut()
                 {
@@ -485,8 +539,9 @@ impl Session {
             Command::SetNote { id, body, done } => {
                 let _ = done.send(self.set_note(id, &body));
             }
-            Command::SaveProfile { id, fetched, done } => {
-                let _ = done.send(self.save_single_profile(id, &fetched));
+            Command::SaveProfile { id, lookup, done } => {
+                let result = self.save_single_profile(id, *lookup);
+                let _ = done.send(result);
             }
             Command::ReloadArchive => {
                 let current = self.tracker.current().map(|m| m.match_id);
@@ -526,6 +581,8 @@ impl Session {
             name: record.as_ref().and_then(|r| r.name.clone()),
             log_name: record.as_ref().and_then(|r| r.last_log_name.clone()),
             steam_id: record.as_ref().and_then(|r| r.steam_id.clone()),
+            trace_count: record.as_ref().and_then(|r| r.trace_count),
+            trace_checked_at: record.as_ref().and_then(|r| r.trace_checked_at),
             profile,
             fetched_at: record.as_ref().and_then(|r| r.fetched_at),
             first_seen_at: record.as_ref().and_then(|r| r.first_seen_at),
@@ -557,14 +614,37 @@ impl Session {
         Ok(())
     }
 
-    fn save_single_profile(
+    fn save_trace_count(
         &mut self,
         id: PlayerId,
-        fetched: &Fetched<PlayerInfoResponse>,
-    ) -> Result<(), String> {
+        count: u32,
+        at: Timestamp,
+    ) -> bax_store::Result<()> {
+        self.store.save_trace_count(id, count, at)?;
+        let record = self.store.player(id)?;
+        let saved = record.as_ref().and_then(|r| r.trace_count);
+        if let Some(slot) = self.slot_mut(id) {
+            slot.record = record;
+            self.dirty = true;
+        }
+        for p in &mut self.pregame.players {
+            if p.matched_id() == Some(id) && p.trace_count != saved {
+                p.trace_count = saved;
+                self.dirty = true;
+            }
+        }
+        Ok(())
+    }
+
+    fn save_single_profile(&mut self, id: PlayerId, lookup: ProfileLookup) -> Result<(), String> {
+        if let Some(count) = lookup.trace_count {
+            self.save_trace_count(id, count, lookup.started_at)
+                .map_err(|e| e.to_string())?;
+        }
+        let fetched = lookup.profile.map_err(|err| err.to_string())?;
         let now = self.clock.now();
         self.store
-            .save_profile(&profile_update(id, fetched), now)
+            .save_profile(&profile_update(id, &fetched), now)
             .map_err(|e| e.to_string())?;
         if self.slots.iter().any(|s| s.id == id) {
             let record = self.store.player(id).ok().flatten();
@@ -873,8 +953,13 @@ impl Session {
             generation,
             at,
             elapsed_ms,
-            result,
+            lookup,
         } = result;
+        if let Some(count) = lookup.trace_count
+            && let Err(err) = self.save_trace_count(player, count, lookup.started_at)
+        {
+            tracing::warn!(player = %player, error = %err, "保存 BATrace 标记次数失败");
+        }
         let current = generation == self.generation;
         if current {
             self.fetch_stats.requests += 1;
@@ -882,7 +967,7 @@ impl Session {
         } else {
             tracing::debug!(player = %player, "比赛已经切换，资料只入库，不更新界面");
         }
-        match result {
+        match lookup.profile {
             Ok(fetched) => {
                 tracing::debug!(player = %player, elapsed_ms, "玩家资料已获取");
                 if current {
@@ -1372,13 +1457,13 @@ impl Session {
             let generation = self.generation;
             tokio::spawn(async move {
                 let started = Instant::now();
-                let result = client.player_info(id).await;
+                let lookup = ProfileLookup::fetch(&client, id, clock.now()).await;
                 let _ = tx.send(FetchResult {
                     player: id,
                     generation,
                     at: clock.now(),
                     elapsed_ms: started.elapsed().as_millis() as u64,
-                    result,
+                    lookup,
                 });
             });
         }
@@ -1403,6 +1488,7 @@ impl Session {
                     let fetched_at = slot.fetched_at();
                     PlayerView {
                         id: slot.id,
+                        trace_count: slot.record.as_ref().and_then(|r| r.trace_count),
                         name: slot
                             .profile
                             .as_ref()
@@ -1529,6 +1615,7 @@ fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> Profil
 /// 会话循环一次处理的输入。
 enum Input {
     Pregame(crate::pregame::Message),
+    PregameTrace(crate::pregame::Ticket, PlayerId, Timestamp, Option<u32>),
     Command(Command),
     Log(LogMsg),
     // 资料结果比其他输入大得多，装箱避免每次循环都搬动整块内存

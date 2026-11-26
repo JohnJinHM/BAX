@@ -1,6 +1,6 @@
 # 数据源与 BATrace 兼容接口参考
 
-状态：生效 · 更新：2026-11-21
+状态：生效 · 更新：2026-11-25
 
 本文记录 BAX 的主源与补充源、兼容响应字段的含义和已知的特殊取值。客户端代码在 `crates/bax-batrace`，响应模型在 `model.rs`，主源适配在 `client/upstream.rs`。
 
@@ -40,6 +40,7 @@ BAX 现在优先查询 `https://api.brokenarrowgame.tech/user/{id}` 获取基础
 |---|---|---|
 | `/api/players/search?q=昵称&limit=50` | 昵称候选，含 `players[].id/name/level` 与 `count`；可能是子串匹配，结果不保证身份唯一 | 没有候选；保留画面名字 |
 | `/api/players/info?stbid=玩家ID` | 玩家资料、累计统计、近期比赛 ID | `info` 为空：站点没有这名玩家 |
+| `/api/players/{玩家ID}/trace` | Trace Express 的 `traceCount`，表示玩家当前收到的社区标记次数 | 明确返回 0 时记录为 0。请求失败或计数无效时保留上次记录 |
 | `/api/players/matches?stbid=玩家ID&offset=N&limit=N` | 比赛摘要，新的在前，分页 | — |
 | `/api/match?matchid=比赛ID` | 完整战报，含单位实例 | `matchInfo` 为空或 `Data` 为空：尚未收录 |
 | `/api/units` | 单位目录 | — |
@@ -86,6 +87,8 @@ BAX 现在优先查询 `https://api.brokenarrowgame.tech/user/{id}` 获取基础
 | 单位实例的 `SpawnTime`、`DeathTime` | **Unix 秒**，不是相对开局的秒数。相对开局的时间要减去 `StartTime` |
 
 ## 玩家资料
+
+OCR 名单按匹配到的账号查询标记，有歧义时不显示。正式名单和手动刷新资料也按玩家 ID 更新。标记与基础资料独立保存，撤销标记后的较小数值同样生效。默认客户端可在 60 秒内复用同一玩家的标记响应。
 
 `info`：`id`、`name`、`steamId`、`level`、`rating`（ELO）、`rank`、`ratingGames`，以及头像、徽章等外观字段。
 

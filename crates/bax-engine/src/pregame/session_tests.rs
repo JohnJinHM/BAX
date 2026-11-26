@@ -78,6 +78,7 @@ fn message(s: &Session) -> Message {
             status: "候选".into(),
             queries_complete: true,
             players: vec![PregamePlayer {
+                trace_count: None,
                 observed: Observation {
                     side: "left".into(),
                     row: 0,
@@ -150,6 +151,69 @@ fn log_identity_replaces_candidate_without_polluting_history() {
         s.store.match_players(MatchId(7001)).expect("read")[0].player,
         PlayerId(202)
     );
+}
+
+#[tokio::test]
+async fn matched_ocr_row_refreshes_cached_marks_and_saves_them_without_an_encounter() {
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::path};
+    let dir = tempfile::tempdir().expect("dir");
+    let mut session = setup(dir.path());
+    // Drive the waiting-room state directly, without filesystem events.
+    session.log_rx = mpsc::channel(1).1;
+    let server = MockServer::start().await;
+    Mock::given(path("/api/players/101/trace"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"traceCount": 0})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    session.client = BatraceClient::new(bax_batrace::ClientConfig {
+        base_url: server.uri(),
+        upstream: None,
+        ..Default::default()
+    })
+    .expect("client");
+    let id = PlayerId(101);
+    session
+        .store
+        .save_trace_count(id, 3, Timestamp::from_millis(1))
+        .expect("old count");
+    let mut roster = message(&session);
+    let mut ambiguous = roster.view.players[0].clone();
+    ambiguous.candidates[0].id = PlayerId(102);
+    ambiguous.ambiguous = true;
+    roster.view.players.push(ambiguous);
+    session.on_pregame(roster);
+    assert_eq!(session.pregame.players[0].trace_count, Some(3));
+    let mut snapshots = session.snapshot_tx.subscribe();
+    let (commands, receiver) = mpsc::channel(2);
+    let task = tokio::spawn(session.run(receiver));
+    tokio::time::timeout(
+        Duration::from_secs(3),
+        snapshots.wait_for(|s| {
+            s.current.as_ref().is_some_and(|m| {
+                m.pregame.players.len() == 2
+                    && m.pregame.players[0].trace_count == Some(0)
+                    && m.pregame.players[1].trace_count.is_none()
+            })
+        }),
+    )
+    .await
+    .expect("trace refresh")
+    .expect("snapshot");
+    let (done, read) = oneshot::channel();
+    commands
+        .send(Command::PlayerDetail { id, done })
+        .await
+        .expect("command");
+    let detail = read.await.expect("reply").expect("db").expect("player");
+    assert_eq!(detail.trace_count, Some(0));
+    assert_eq!(detail.encounters.total, 0);
+    assert!(detail.fetched_at.is_none());
+    drop(commands);
+    task.await.expect("shutdown");
+    assert_eq!(server.received_requests().await.expect("requests").len(), 1);
 }
 #[test]
 fn old_match_and_disabled_results_cannot_return() {

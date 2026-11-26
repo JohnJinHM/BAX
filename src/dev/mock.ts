@@ -76,6 +76,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       observed: { side: i < 5 ? "left" : "right", row: i % 5, friendly: i < 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
       candidates: i === 4 ? [] : [{ id: p.id, name: p.name ?? "Raven", level: p.profile?.level ?? 50, local: i % 2 === 0, profile: p.profile }],
       ambiguous: i === 3,
+      traceCount: i === 3 || i === 4 ? null : p.traceCount,
     })) }; m.players = []; m.teams = [];
   }
   let lastReminderId = Math.max(0, ...fixtureSnapshot.reminders.map(r => r.id));

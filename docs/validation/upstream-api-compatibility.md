@@ -89,3 +89,7 @@ pwsh -NoProfile -File scripts/build.ps1 -Mode Dev -Edition Full -SkipOcrBuild -S
 - 本次未修改原有用户数据库，也未覆盖安装版；开发与打包指南已明确直接 Cargo 编译和独立 Debug 交付的区别。
 
 维护者已确认修正后的独立 Debug 版测试没有问题，并授权发布。本轮没有完成覆盖安装升级或新增 PvE 样本验证。
+
+## BATrace 标记次数补充验证（2026-11-25）
+
+使用 BAX 的请求头读取公开玩家的 `GET /api/players/{id}/trace`。带标记样本在 bot 与 dash 两个站点均返回 HTTP 200 和 `traceCount: 1`，另一个样本返回 `traceCount: 0`。客户端只读取次数。模拟服务覆盖清零、无效次数和接口故障，本地数据库测试覆盖旧库升级及迟到响应。

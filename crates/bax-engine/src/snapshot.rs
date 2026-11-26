@@ -191,6 +191,7 @@ pub struct PlayerView {
     pub encounters: EncounterSummary,
     /// 用户写的备注。
     pub note: Option<String>,
+    pub trace_count: Option<u32>,
 }
 
 /// 一名玩家的资料请求进行到哪一步。

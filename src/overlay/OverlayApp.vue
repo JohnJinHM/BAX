@@ -12,6 +12,7 @@ import { useCurrentReport } from "../shared/useCurrentReport";
 import { logStatus, matchSpecs, rosterSummary, rosterWaitingText, showOverlaySpecs } from "../shared/match-presentation";
 import AnimatedNumber from "../shared/AnimatedNumber.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
+import TraceBadge from "../shared/TraceBadge.vue";
 import { OverlayAutomation } from "../shared/overlay-automation";
 
 const snapshot = useSnapshot();
@@ -324,8 +325,12 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="wr num">{{ percent(p.profile?.ranked?.winRate) }}</span>
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
             <span class="name">
-              <a v-if="p.id != null" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
-              <template v-else>{{ p.name }}</template><span v-if="p.note" class="note"> · {{ p.note }}</span>
+              <span class="name-line">
+                <a v-if="p.id != null" class="nickname" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
+                <span v-else class="nickname">{{ p.name }}</span>
+                <TraceBadge :count="p.traceCount" />
+                <span v-if="p.note" class="note"> · {{ p.note }}</span>
+              </span>
               <span class="spec-reveal" :class="{ visible: specsVisible && specsFor(p).length }" :aria-hidden="!specsVisible || !specsFor(p).length">
                 <span class="spec-hint" :title="specsFor(p).map(s => s.name).join(' + ')"><span>{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</span><SpecIcon v-for="spec in specsFor(p).slice(0, 2)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /></span>
               </span>
@@ -658,6 +663,8 @@ li.stale .elo {
   white-space: nowrap;
 }
 
+.name-line { display: flex; align-items: baseline; }
+.nickname, .note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .note {
   color: var(--bax-warn);
   font-size: 11px;

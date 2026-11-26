@@ -140,6 +140,9 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (match_id, player_id)
     ) STRICT, WITHOUT ROWID;
     CREATE INDEX report_units_by_player ON report_player_units(player_id, start_time DESC, match_id DESC);",
+    // 第 7 版：BATrace 标记能独立于基本资料更新，旧档案的次数为未知。
+    "ALTER TABLE players ADD COLUMN trace_count INTEGER CHECK(trace_count >= 0);
+     ALTER TABLE players ADD COLUMN trace_checked_at INTEGER;",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -169,6 +172,8 @@ pub struct PlayerRecord {
     pub rating_games: Option<i64>,
     /// 按字段合并的接口资料；缺失字段保留上次有效值。
     pub profile_json: Option<String>,
+    pub trace_count: Option<u32>,
+    pub trace_checked_at: Option<Timestamp>,
     /// 最近一次成功取得资料的时刻；从未取到过时为 `None`。
     pub fetched_at: Option<Timestamp>,
     /// 最近一次在日志名单里见到的名字。
@@ -301,6 +306,18 @@ impl Store {
             }
         }
         Ok(out)
+    }
+
+    /// 按请求开始时间排序，迟到的旧次数不能覆盖新次数。
+    pub fn save_trace_count(&self, player: PlayerId, count: u32, at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO players(id, trace_count, trace_checked_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET trace_count = excluded.trace_count,
+                 trace_checked_at = excluded.trace_checked_at
+             WHERE players.trace_checked_at IS NULL OR players.trace_checked_at <= excluded.trace_checked_at",
+            params![id_to_db(player.get()), count, at.as_millis()],
+        )?;
+        Ok(())
     }
 
     /// 写入一份从接口取得的资料。只更新外部资料的列，不动相遇记录。
@@ -874,7 +891,7 @@ fn merge_match(existing: Option<MatchRecord>, state: &MatchState) -> MatchRecord
 }
 
 const PLAYER_COLUMNS: &str = "id, name, steam_id, level, rating, rank, rating_games, profile_json, \
-                              fetched_at, last_log_name, first_seen_at, last_seen_at";
+                              fetched_at, last_log_name, first_seen_at, last_seen_at, trace_count, trace_checked_at";
 
 fn player_from_row(row: &Row<'_>) -> rusqlite::Result<PlayerRecord> {
     let ts = |i: usize| -> rusqlite::Result<Option<Timestamp>> {
@@ -893,6 +910,8 @@ fn player_from_row(row: &Row<'_>) -> rusqlite::Result<PlayerRecord> {
         last_log_name: row.get(9)?,
         first_seen_at: ts(10)?,
         last_seen_at: ts(11)?,
+        trace_count: row.get(12)?,
+        trace_checked_at: ts(13)?,
     })
 }
 

@@ -59,7 +59,7 @@ export function rosterGroups(m: MatchView | null): RosterGroup[] {
       if (!groups.has(key)) groups.set(key, group(key, title, friendly == null ? 'waiting' : friendly ? 'mine' : 'enemy', []));
       const candidate = p.ambiguous ? null : p.candidates[0];
       groups.get(key)!.players.push({ id: null, key: `ocr-${p.observed.side}-${p.observed.row}`,
-        name: p.observed.name, logName: null, team: null, isSelf: false, provisional: true,
+        name: p.observed.name, traceCount: candidate ? p.traceCount : null, logName: null, team: null, isSelf: false, provisional: true,
         displayLevel: p.observed.level, profile: candidate?.profile ?? null, profileFetchedAt: null,
         profileCurrent: false, fetch: { state: 'idle' }, note: null,
         encounters: { total: 0, asTeammate: 0, asOpponent: 0, firstAt: null, lastAt: null } });

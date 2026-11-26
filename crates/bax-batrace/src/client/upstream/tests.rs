@@ -33,6 +33,41 @@ fn report() -> Value {
 }
 
 #[tokio::test]
+async fn optional_trace_route_requires_a_count_and_its_outage_leaves_search_available() {
+    let primary = MockServer::start().await;
+    let fallback = MockServer::start().await;
+    let client = client(&primary, &fallback);
+    mock(&fallback, "/api/players/10/trace", json!({"logs":null}), 1).await;
+    mock(
+        &fallback,
+        "/api/players/11/trace",
+        json!({"traceCount":-1}),
+        1,
+    )
+    .await;
+    for id in [10, 11] {
+        assert!(matches!(
+            client.player_trace_count(PlayerId(id)).await,
+            Err(ApiError::Decode(_))
+        ));
+    }
+    Mock::given(path("/api/players/12/trace"))
+        .respond_with(ResponseTemplate::new(503))
+        .expect(1)
+        .mount(&fallback)
+        .await;
+    assert!(client.player_trace_count(PlayerId(12)).await.is_err());
+    mock(
+        &fallback,
+        "/api/players/search",
+        json!({"players":[],"count":0}),
+        1,
+    )
+    .await;
+    assert!(client.search_players("Raven").await.is_ok());
+}
+
+#[tokio::test]
 async fn empty_report_is_not_cached_and_later_archive_can_succeed() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;

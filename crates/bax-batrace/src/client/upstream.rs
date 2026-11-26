@@ -226,15 +226,21 @@ impl BatraceClient {
                 raw: raw.clone(),
             });
         }
-        if let Some((until, err)) = self
-            .shared
-            .lock()
-            .expect("request state")
-            .cooldowns
-            .get(source)
-            && *until > Instant::now()
+        // 标记接口可以单独停用；429 仍约束整个站点。
+        let cooldown_key = if endpoint == "players.trace" {
+            endpoint
+        } else {
+            source
+        };
         {
-            return Err(err.clone());
+            let state = self.shared.lock().expect("request state");
+            for key in [source, cooldown_key] {
+                if let Some((until, err)) = state.cooldowns.get(key)
+                    && *until > Instant::now()
+                {
+                    return Err(err.clone());
+                }
+            }
         }
         let result = async {
             tracing::debug!(endpoint, source, "API 请求开始");
@@ -294,11 +300,16 @@ impl BatraceClient {
                     None
                 };
                 if let Some(delay) = delay {
+                    let key = if matches!(err, ApiError::RateLimited { .. }) {
+                        source
+                    } else {
+                        cooldown_key
+                    };
                     self.shared
                         .lock()
                         .expect("request state")
                         .cooldowns
-                        .insert(source.into(), (Instant::now() + delay, err.clone()));
+                        .insert(key.into(), (Instant::now() + delay, err.clone()));
                 }
                 tracing::debug!(endpoint, source, error = %err, "API 请求失败");
             }

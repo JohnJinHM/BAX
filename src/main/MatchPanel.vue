@@ -16,6 +16,7 @@ import {
 import { useNow } from "../shared/useNow";
 import { openMatch, openPlayer } from "./navigation";
 import SpecIcon from "../shared/SpecIcon.vue";
+import TraceBadge from "../shared/TraceBadge.vue";
 import { useCurrentReport } from "../shared/useCurrentReport";
 import { matchSpecs, rosterSummary, rosterWaitingText } from "../shared/match-presentation";
 import LogDirectory from "./LogDirectory.vue";
@@ -108,8 +109,11 @@ async function refresh() {
           <template v-for="p in group.players" :key="p.key">
             <tr :class="{ self: p.isSelf }">
               <td class="left">
-                <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
-                <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
+                <div class="name-line">
+                  <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
+                  <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
+                  <TraceBadge :count="p.traceCount" />
+                </div>
                 <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
                 <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
               </td>
@@ -205,7 +209,10 @@ table {
   width: 18%;
 }
 
+.name-line { display: flex; align-items: baseline; }
 td.left .name {
+  min-width: 0;
+  white-space: nowrap;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;

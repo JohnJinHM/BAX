@@ -127,6 +127,9 @@ impl Fixture {
     async fn requests(&self) -> Vec<(u64, usize)> {
         let mut counts = std::collections::BTreeMap::new();
         for request in self.server.received_requests().await.unwrap_or_default() {
+            if request.url.path() != "/api/players/info" {
+                continue;
+            }
             let id: u64 = request
                 .url
                 .query_pairs()
@@ -1005,6 +1008,13 @@ async fn notes_show_up_in_the_match_and_in_the_player_detail() {
 async fn a_single_player_can_be_refreshed_on_demand() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
+    Mock::given(path("/api/players/201/trace"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"traceCount": 4})),
+        )
+        .up_to_n_times(1)
+        .mount(&fx.server)
+        .await;
     fx.append(&finished_match(9_000_001));
     let engine = fx.start();
     wait_for(&engine, "补读完成", |s| {
@@ -1029,8 +1039,26 @@ async fn a_single_player_can_be_refreshed_on_demand() {
         .expect("查询")
         .expect("有档案");
     assert_eq!(detail.history.len(), 1);
+    assert_eq!(detail.trace_count, Some(4));
+    assert_eq!(
+        player(&snapshot, 201).expect("current player").trace_count,
+        Some(4)
+    );
+    engine
+        .refresh_player(PlayerId(201))
+        .await
+        .expect("trace route unavailable");
+    assert_eq!(
+        engine
+            .player_detail(PlayerId(201))
+            .await
+            .expect("detail")
+            .expect("player")
+            .trace_count,
+        Some(4)
+    );
     assert_eq!(detail.name.as_deref(), Some("API-201"));
-    assert_eq!(fx.requests().await, vec![(201, 1)]);
+    assert_eq!(fx.requests().await, vec![(201, 2)]);
     engine.shutdown().await;
 }
 

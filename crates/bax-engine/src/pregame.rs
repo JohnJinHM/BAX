@@ -48,6 +48,16 @@ pub struct PregamePlayer {
     /// 最多三个候选；confirmed 永远由日志名单表达。
     pub candidates: Vec<Candidate>,
     pub ambiguous: bool,
+    pub trace_count: Option<u32>,
+}
+
+impl PregamePlayer {
+    pub(crate) fn matched_id(&self) -> Option<PlayerId> {
+        if self.ambiguous {
+            return None;
+        }
+        self.candidates.first().map(|c| c.id)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -165,6 +175,7 @@ pub(crate) fn rank(
         };
     PregamePlayer {
         observed,
+        trace_count: None,
         candidates: scored.into_iter().take(3).map(|(_, _, c)| c).collect(),
         ambiguous,
     }

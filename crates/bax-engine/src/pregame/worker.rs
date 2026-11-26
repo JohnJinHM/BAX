@@ -221,9 +221,9 @@ async fn resolve(
     if !result.ambiguous
         && let Some(first) = result.candidates.first_mut()
         && first.profile.is_none()
+        && budget.take().await.is_ok()
+        && let Ok(info) = client.prefetch_player_info(first.id).await
     {
-        budget.take().await?;
-        let info = client.prefetch_player_info(first.id).await?;
         first.profile = ProfileSummary::from_response(&info.data);
     }
     Ok(result)

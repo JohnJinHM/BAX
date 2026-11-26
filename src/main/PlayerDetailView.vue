@@ -62,6 +62,13 @@ watch(
 watch(() => snapshot.value?.archive.seq, (next, previous) => {
   if (previous != null && next !== previous) void load();
 });
+watch(() => {
+  const match = snapshot.value?.current;
+  return match?.players?.find(p => p.id === props.id)?.traceCount
+    ?? match?.pregame?.players.find(p => !p.ambiguous && p.candidates[0]?.id === props.id)?.traceCount;
+}, count => {
+  if (count != null && count !== detail.value?.traceCount) void load();
+});
 
 const title = computed(() => {
   const d = detail.value;
@@ -101,16 +108,18 @@ async function saveNote() {
 }
 
 async function refresh() {
+  const id = props.id;
   refreshing.value = true;
   failure.value = null;
+  let refreshError: string | null = null;
   try {
-    await commands.refreshPlayer(props.id);
-    await load();
+    await commands.refreshPlayer(id);
   } catch (error) {
-    failure.value = errorText(error);
-  } finally {
-    refreshing.value = false;
+    refreshError = errorText(error);
   }
+  if (props.id === id) await load();
+  if (props.id === id && refreshError) failure.value = refreshError;
+  refreshing.value = false;
 }
 </script>
 
@@ -132,6 +141,7 @@ async function refresh() {
       <div class="stats">
         <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
         <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
+        <div :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount == null ? "未知" : `${detail.traceCount} 次` }}</span></div>
         <div><label>排名</label><span class="num">{{ detail.profile?.rank ?? "–" }}</span></div>
         <div><label>排位场次</label><span class="num">{{ detail.profile?.ratingGames ?? "–" }}</span></div>
         <div><label>胜率</label><span class="num">{{ percent(detail.profile?.ranked?.winRate) }}</span></div>

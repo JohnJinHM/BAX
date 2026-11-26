@@ -106,6 +106,40 @@ fn a_new_database_is_at_the_latest_schema_version() {
 }
 
 #[test]
+fn trace_counts_survive_reopen_and_late_responses() {
+    let dir = tempfile::tempdir().expect("dir");
+    let path = dir.path().join("players.db");
+    let id = PlayerId(101);
+    let old = db::open(Some(&path), &MIGRATIONS[..6], true).expect("v6");
+    old.execute("INSERT INTO players(id, name) VALUES(101, 'Raven')", [])
+        .expect("old player");
+    drop(old);
+    let store = Store::open(&path).expect("upgrade");
+    assert_eq!(
+        store
+            .player(id)
+            .expect("read")
+            .expect("old player")
+            .trace_count,
+        None
+    );
+    store.save_trace_count(id, 5, t(10)).expect("first");
+    store.save_trace_count(id, 0, t(30)).expect("revoked");
+    store.save_trace_count(id, 2, t(20)).expect("late");
+    drop(store);
+    let record = Store::open(&path)
+        .expect("reopen")
+        .player(id)
+        .expect("read")
+        .expect("record");
+    assert_eq!(record.name.as_deref(), Some("Raven"));
+    assert_eq!(
+        (record.trace_count, record.trace_checked_at),
+        (Some(0), Some(t(30)))
+    );
+}
+
+#[test]
 fn profiles_round_trip() {
     let mut store = Store::open_in_memory().expect("打开长期库");
     assert_eq!(store.player(PlayerId(101)).expect("读取"), None);

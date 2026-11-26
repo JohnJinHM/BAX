@@ -16,7 +16,7 @@ use tokio::task::JoinHandle;
 
 use crate::clock::Clock;
 use crate::config::EngineConfig;
-use crate::player::PlayerDetail;
+use crate::player::{PlayerDetail, ProfileLookup};
 use crate::postmatch::{self, MatchReportView};
 use crate::reports::{ReportTiming, ReportWorker};
 use crate::session::{Command, LOG_DIR_KEY, Parts, REMINDERS_KEY, SELF_ID_KEY, Session, UI_PREFIX};
@@ -285,15 +285,11 @@ impl Engine {
 
     /// 立即从接口取一次这名玩家的资料并保存，不管他在不在当前比赛里。
     pub async fn refresh_player(&self, id: PlayerId) -> Result<(), CommandError> {
-        let fetched = self
-            .client
-            .player_info(id)
-            .await
-            .map_err(|err| CommandError::Rejected(err.to_string()))?;
+        let lookup = ProfileLookup::fetch(&self.client, id, self.clock.now()).await;
         let (done, wait) = oneshot::channel();
         self.send(Command::SaveProfile {
             id,
-            fetched: Box::new(fetched),
+            lookup: Box::new(lookup),
             done,
         })
         .await?;

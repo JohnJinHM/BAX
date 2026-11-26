@@ -170,6 +170,7 @@ mod tests {
         s.log.ready = true;
         let players = (101..=106)
             .map(|id| PlayerView {
+                trace_count: None,
                 id: PlayerId(id),
                 name: None,
                 log_name: None,
@@ -226,6 +227,7 @@ mod tests {
         for n in 0..5 {
             s.current.as_mut().expect("match").pregame.players.push(
                 crate::pregame::PregamePlayer {
+                    trace_count: None,
                     observed: crate::pregame::Observation {
                         side: "right".into(),
                         row: n,

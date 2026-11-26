@@ -6,4 +6,4 @@ export type PregamePlayer = { observed: Observation,
 /**
  * 最多三个候选；confirmed 永远由日志名单表达。
  */
-candidates: Array<Candidate>, ambiguous: boolean, };
+candidates: Array<Candidate>, ambiguous: boolean, traceCount: number | null, };
