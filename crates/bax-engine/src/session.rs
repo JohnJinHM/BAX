@@ -462,13 +462,22 @@ impl Session {
             } => {
                 let _ = done.send(
                     self.store
-                        .search_players_filtered(
+                        .search_players_in_match(
                             &query,
                             limit.min(500),
                             offset,
                             &sort,
                             &filter,
-                            self.self_hint,
+                            (
+                                self.self_hint,
+                                self.tracker
+                                    .current()
+                                    .filter(|m| {
+                                        m.phase != Phase::Ended
+                                            && m.my_team().is_some_and(|team| team.is_playing())
+                                    })
+                                    .map(|m| m.match_id),
+                            ),
                         )
                         .map_err(|e| e.to_string()),
                 );

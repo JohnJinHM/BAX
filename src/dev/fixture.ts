@@ -138,7 +138,7 @@ export function fixtureDetail(id: number): PlayerDetail | null {
   }));
   const maps = ["Airport", "Central Village", "Suwalki", "Baltiisk", "Coast"];
   const matches: EncounterRow[] = Array.from({ length: Math.min(8, p.encounters.total || 3) }, (_, i) => ({
-    matchId: 9000000 - i * 37,
+    matchId: 9000001 - (i + 1) * 37,
     at: now - (i + 1) * day * 0.7,
     map: maps[i % maps.length],
     relation: i % 3 === 2 ? "opponent" : "teammate",

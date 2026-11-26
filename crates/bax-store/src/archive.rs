@@ -64,7 +64,7 @@ pub struct EncounterRow {
 }
 
 /// 把用户输入变成 LIKE 的模式：前后加 `%`，转义通配符。
-fn like_pattern(query: &str) -> String {
+pub(crate) fn like_pattern(query: &str) -> String {
     let mut pattern = String::with_capacity(query.len() + 2);
     pattern.push('%');
     for c in query.chars() {
@@ -146,6 +146,18 @@ impl Store {
         filter: &str,
         self_id: Option<PlayerId>,
     ) -> Result<Vec<PlayerHit>> {
+        self.search_players_in_match(query, limit, offset, sort, filter, (self_id, None))
+    }
+
+    pub fn search_players_in_match(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        sort: &str,
+        filter: &str,
+        (self_id, active_match): (Option<PlayerId>, Option<MatchId>),
+    ) -> Result<Vec<PlayerHit>> {
         let query = query.trim();
         let exact_id = query.parse::<u64>().ok().map(id_to_db);
         let pattern = like_pattern(query);
@@ -172,7 +184,10 @@ impl Store {
                 OR p.name LIKE ?3 ESCAPE '\\'
                 OR p.last_log_name LIKE ?3 ESCAPE '\\'
              ) SELECT * FROM hits WHERE {condition}
-             ORDER BY (id = ?2) DESC, {ordering}, id
+             ORDER BY (id = ?2) DESC,
+                      (id IN (SELECT player_id FROM match_players WHERE match_id = ?7
+                              AND team IN ('alpha', 'bravo') AND player_id IS NOT ?5)) DESC,
+                      {ordering}, id
              LIMIT ?4 OFFSET ?6");
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let rows = stmt.query_map(
@@ -182,7 +197,8 @@ impl Store {
                 pattern,
                 limit,
                 self_id.map(|id| id_to_db(id.get())),
-                offset
+                offset,
+                active_match.map(|id| id_to_db(id.get()))
             ],
             |row| {
                 Ok(PlayerHit {
@@ -466,6 +482,17 @@ mod tests {
         assert_eq!(ids("default", "encountered", 0, 10), vec![101, 301, 201]);
         assert_eq!(ids("name", "all", 0, 2), vec![301, 101]);
         assert!(ids("default", "all", 99, 1).is_empty());
+        let first = store
+            .search_players_in_match(
+                "",
+                1,
+                0,
+                "default",
+                "all",
+                (Some(PlayerId(500)), Some(MatchId(2))),
+            )
+            .unwrap();
+        assert_eq!(first[0].id, PlayerId(101));
     }
 
     #[test]

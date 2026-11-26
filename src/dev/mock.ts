@@ -4,6 +4,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import type { JsonValue } from "../shared/bindings/serde_json/JsonValue";
 
+import { currentRelations } from "../shared/roster";
 import { fixtureDetail, fixtureHistory, fixtureHits, fixtureReport, fixtureSnapshot } from "./fixture";
 
 /** 预览页控制按钮使用虚构快照模拟阶段变化，不进入正式构建。 */
@@ -135,8 +136,19 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         return null;
       case "player_detail":
         return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
-      case "match_history":
-        return structuredClone(fixtureHistory);
+      case "match_history": {
+        const { query = "", player, limit = 100, offset = 0 } = args as { query?: string; player?: number; limit?: number; offset?: number };
+        const q = query.trim().toLowerCase();
+        const members = fixtureHits("").map(hit => ({
+          ...hit, matches: new Set(fixtureDetail(hit.id)?.matches.map(row => row.matchId)),
+        }));
+        return fixtureHistory.filter(row => {
+          const roster = members.filter(p => p.matches.has(row.matchId));
+          return (!player || roster.some(p => p.id === player)) && (!q || row.matchId === Number(q)
+            || row.map?.toLowerCase().includes(q) || roster.some(p => p.id === Number(q)
+              || p.name?.toLowerCase().includes(q) || p.logName?.toLowerCase().includes(q)));
+        }).slice(offset, offset + limit);
+      }
       case "open_batrace_player":
         window.open(`https://dash.batrace.top/player/${Number((args as { id: number }).id)}`, "_blank", "noopener,noreferrer");
         return null;
@@ -161,7 +173,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       case "search_players": {
         const { query = "", sort = "default", filter = "all", limit = 80, offset = 0 } = args as { query?: string; sort?: string; filter?: string; limit?: number; offset?: number };
         const hits = fixtureHits(query).filter(p => filter === "noted" ? p.hasNote : filter === "rated" ? p.rating != null : filter === "encountered" ? p.encounters > 0 : true);
+        const relations = currentRelations(fixtureSnapshot.current);
         hits.sort((a, b) => {
+          const priority = Number(relations.has(b.id)) - Number(relations.has(a.id));
+          if (priority) return priority;
           if (sort === "name") return (a.name ?? a.logName ?? "").localeCompare(b.name ?? b.logName ?? "");
           if (sort === "recent") return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
           if (sort === "ratingDesc" || sort === "ratingAsc") return Number(a.rating == null) - Number(b.rating == null) || ((a.rating ?? 0) - (b.rating ?? 0)) * (sort === "ratingDesc" ? -1 : 1);

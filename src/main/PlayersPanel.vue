@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 
 import type { PlayerHit } from "../shared/bindings/PlayerHit";
 import { commands, errorText, useSnapshot } from "../shared/engine";
+import { currentRelations } from "../shared/roster";
 import { ago, rating } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import { selectedPlayer } from "./navigation";
@@ -11,6 +12,7 @@ import PlayerDetailView from "./PlayerDetailView.vue";
 const now = useNow(60_000);
 const query = ref("");
 const snapshot = useSnapshot();
+const relations = computed(() => currentRelations(snapshot.value?.current));
 const sort = ref("default");
 const filter = ref("all");
 const busy = ref(false);
@@ -45,7 +47,8 @@ watch([query, sort, filter], () => {
   window.clearTimeout(timer);
   timer = window.setTimeout(() => void search(), 250);
 });
-watch(() => snapshot.value?.selfId, () => void search());
+watch([() => snapshot.value?.selfId, () => snapshot.value?.current?.matchId,
+  () => Array.from(relations.value.entries()).join("|")], () => void search());
 onMounted(() => void search());
 onBeforeUnmount(() => { ++latest; window.clearTimeout(timer); });
 
@@ -68,7 +71,7 @@ function title(hit: PlayerHit): string {
         <li
           v-for="hit in hits"
           :key="hit.id"
-          :class="{ active: hit.id === selectedPlayer }"
+          :class="{ active: hit.id === selectedPlayer, teammate: relations.get(hit.id) === '队友', opponent: relations.get(hit.id) === '对手' }"
           tabindex="0"
           @keydown.enter="selectedPlayer = hit.id"
           @keydown.space.prevent="selectedPlayer = hit.id"
@@ -77,6 +80,7 @@ function title(hit: PlayerHit): string {
           <div class="row-top">
             <span class="name">{{ title(hit) }}</span>
             <span v-if="hit.id === snapshot?.selfId" class="self-mark">本机</span>
+            <span v-if="relations.has(hit.id)" class="relation">本局{{ relations.get(hit.id) }}</span>
             <span v-if="hit.hasNote" class="note-mark" title="有备注">✎</span>
             <span class="elo num">{{ rating(hit.rating) }}</span>
           </div>
@@ -133,6 +137,11 @@ li {
   border-radius: var(--bax-radius-sm);
   cursor: pointer;
 }
+
+li.teammate { --team-color: var(--bax-good); }
+li.opponent { --team-color: var(--bax-bad); }
+li.teammate, li.opponent { background: color-mix(in srgb, var(--team-color) 7%, transparent); }
+.relation { color: var(--team-color); font-size: calc(12px * var(--bax-font-scale)); white-space: nowrap; }
 
 li:hover {
   background: var(--bax-surface-2);

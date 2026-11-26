@@ -15,7 +15,16 @@ export const selectedPlayer = ref<number | null>(Number.isFinite(requestedPlayer
 
 export const selectedMatch = ref<number | null>(Number.isFinite(requestedMatch) && requestedMatch > 0 ? requestedMatch : null);
 
+export const historyPlayer = ref<{ id: number; name: string } | null>(null);
+
+export function openPlayerHistory(id: number, name: string) {
+  historyPlayer.value = { id, name };
+  selectedMatch.value = null;
+  currentTab.value = "history";
+}
+
 export function openMatch(id: number) {
+  historyPlayer.value = null;
   selectedMatch.value = id;
   currentTab.value = "history";
 }

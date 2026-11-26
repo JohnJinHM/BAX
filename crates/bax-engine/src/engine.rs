@@ -343,9 +343,20 @@ impl Engine {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HistoryRow>, CommandError> {
+        self.search_match_history(limit, offset, String::new(), None)
+            .await
+    }
+
+    pub async fn search_match_history(
+        &self,
+        limit: u32,
+        offset: u32,
+        query: String,
+        player: Option<PlayerId>,
+    ) -> Result<Vec<HistoryRow>, CommandError> {
         self.read(move |store| {
             store
-                .match_history(limit.min(500), offset)
+                .search_match_history(limit.min(500), offset, &query, player)
                 .map_err(|e| e.to_string())
         })
         .await

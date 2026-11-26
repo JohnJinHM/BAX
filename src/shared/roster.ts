@@ -24,6 +24,17 @@ function group(key: string, title: string, tone: RosterGroup['tone'], players: R
   return { key, title, tone, players, count: players.length, rated: ratings.length,
     averageValue: ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null };
 }
+export function currentRelations(match: MatchView | null | undefined) {
+  const relations = new Map<number, "队友" | "对手">();
+  if (!match?.rosterKnown || match.phase === "ended" || (match.selfTeam !== "alpha" && match.selfTeam !== "bravo")) return relations;
+  for (const p of match.players) {
+    if (!p.isSelf && (p.team === "alpha" || p.team === "bravo")) {
+      relations.set(p.id, p.team === match.selfTeam ? "队友" : "对手");
+    }
+  }
+  return relations;
+}
+
 function confirmed(p: PlayerView): RosterRow {
   return { ...p, name: p.name?.trim() || p.logName?.trim() || '资料读取中', key: `player-${p.id}`,
     provisional: false, displayLevel: p.profile?.level ?? null };

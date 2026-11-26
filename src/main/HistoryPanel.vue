@@ -4,13 +4,15 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import type { HistoryRow } from "../shared/bindings/HistoryRow";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { mmss, phaseNames } from "../shared/format";
-import { selectedMatch } from "./navigation";
+import { historyPlayer, selectedMatch } from "./navigation";
 
 // 战后分析带着图表库，打开这一页时才加载
 const ReportView = defineAsyncComponent(() => import("./ReportView.vue"));
 
 const PAGE = 100;
 const snapshot = useSnapshot();
+const query = ref("");
+let timer: number | undefined;
 const rows = ref<HistoryRow[]>([]);
 const failure = ref<string | null>(null);
 const exhausted = ref(false);
@@ -28,7 +30,7 @@ async function load(more = false) {
     let atEnd = false;
     while (next.length < requestedRows) {
       const limit = Math.min(500, requestedRows - next.length);
-      const page = await commands.matchHistory(limit, next.length);
+      const page = await commands.matchHistory(limit, next.length, query.value.trim(), historyPlayer.value?.id);
       if (request !== sequence) return;
       next.push(...page);
       atEnd = page.length < limit;
@@ -37,7 +39,7 @@ async function load(more = false) {
     rows.value = next;
     exhausted.value = atEnd;
     failure.value = null;
-    if (selectedMatch.value == null) {
+    if (selectedMatch.value == null || ((query.value.trim() || historyPlayer.value) && !next.some(r => r.matchId === selectedMatch.value))) {
       selectedMatch.value = rows.value.find((r) => r.report.state === "ready")?.matchId ?? rows.value[0]?.matchId ?? null;
     }
   } catch (error) {
@@ -48,7 +50,17 @@ async function load(more = false) {
 }
 
 onMounted(() => void load());
-onBeforeUnmount(() => { ++sequence; });
+watch([query, historyPlayer], () => {
+  ++sequence;
+  requestedRows = PAGE;
+  rows.value = [];
+  selectedMatch.value = null;
+  failure.value = null;
+  loading.value = true;
+  window.clearTimeout(timer);
+  timer = window.setTimeout(() => void load(), 200);
+});
+onBeforeUnmount(() => { ++sequence; window.clearTimeout(timer); });
 // 有新比赛、新战报或者队列变了就刷新列表
 watch(
   [() => snapshot.value?.archive.seq, () => snapshot.value?.current?.matchId, () => snapshot.value?.current?.phase],
@@ -86,6 +98,10 @@ function reportTitle(row: HistoryRow): string | undefined {
 <template>
   <div class="layout">
     <section class="card list">
+      <label class="history-search">查询过往对局
+        <input v-model="query" type="search" placeholder="地图、玩家名、玩家或对局 ID" />
+      </label>
+      <button v-if="historyPlayer" class="scope" :aria-label="`取消玩家筛选：${historyPlayer.name}`" @click="historyPlayer = null">{{ historyPlayer.name }} ×</button>
       <div class="row">
         <span v-if="pending" class="hint">{{ pending }} 场在等战报</span>
       </div>
@@ -111,7 +127,9 @@ function reportTitle(row: HistoryRow): string | undefined {
         </li>
       </ul>
       <button v-if="rows.length && !exhausted" class="more" :disabled="loading" @click="load(true)">更多</button>
-      <p v-if="!rows.length && !failure" class="hint">还没有比赛记录。打完一场比赛，或者在设置里导入历史日志之后，这里会列出来。</p>
+      <p v-if="loading" class="hint" role="status">正在查询…</p>
+      <p v-else-if="!rows.length && !failure && (query.trim() || historyPlayer)" class="hint" role="status">没有找到符合条件的对局。</p>
+      <p v-else-if="!rows.length && !failure" class="hint">还没有比赛记录。打完一场比赛，或者在设置里导入历史日志之后，这里会列出来。</p>
     </section>
     <ReportView v-if="selectedMatch != null" :id="selectedMatch" :row="selectedRow" @requested="load()" />
     <section v-else class="card empty">
@@ -129,6 +147,10 @@ function reportTitle(row: HistoryRow): string | undefined {
 }
 
 .list { position: sticky; top: 0; max-height: calc(100vh - 40px * var(--bax-density)); overflow-y: auto; }
+
+.history-search { display: grid; gap: 6px; }
+.history-search input { width: 100%; }
+.scope { margin-top: 8px; }
 
 .list h2 {
   margin: 0;

@@ -225,10 +225,17 @@ pub async fn match_history(
     state: State<'_, AppState>,
     limit: Option<u32>,
     offset: Option<u32>,
+    query: Option<String>,
+    player: Option<PlayerId>,
 ) -> Result<Vec<HistoryRow>, String> {
     state
         .engine
-        .match_history(limit.unwrap_or(100), offset.unwrap_or(0))
+        .search_match_history(
+            limit.unwrap_or(100),
+            offset.unwrap_or(0),
+            query.unwrap_or_default(),
+            player,
+        )
         .await
         .map_err(rejected("match_history"))
 }

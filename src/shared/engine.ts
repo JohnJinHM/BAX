@@ -121,7 +121,7 @@ export const commands = {
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
   refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),
   /** 比赛记录，新的在前，带战报状态。 */
-  matchHistory: (limit = 100, offset = 0) => invoke<HistoryRow[]>("match_history", { limit, offset }),
+  matchHistory: (limit = 100, offset = 0, query = "", player: number | null = null) => invoke<HistoryRow[]>("match_history", { limit, offset, query, player }),
   /** 一场比赛的战后分析；还没有战报时为 null。 */
   matchReport: (id: number) => invoke<MatchReportView | null>("match_report", { id }),
   /** 立即去取战报，取不到时按时间表继续等。 */

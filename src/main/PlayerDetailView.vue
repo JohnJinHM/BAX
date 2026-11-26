@@ -6,7 +6,7 @@ import type { Relation } from "../shared/bindings/Relation";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
-import { openMatch } from "./navigation";
+import { openMatch, openPlayerHistory } from "./navigation";
 import Sparkline from "./Sparkline.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 
@@ -122,6 +122,7 @@ async function refresh() {
       <span class="hint">ID {{ id }}</span>
       <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
       <span v-if="detail?.steamId" class="hint">Steam {{ detail.steamId }}</span>
+      <button @click="openPlayerHistory(id, title)">查询过往对局</button>
       <button class="refresh" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
     </div>
     <p v-if="failure" class="error">{{ failure }}</p>

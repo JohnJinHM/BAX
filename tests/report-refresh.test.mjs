@@ -24,7 +24,7 @@ function component(file, engine, extra = {}) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, require: id => id === 'vue' ? vue : id.endsWith('/engine') ? engine : id.endsWith('/format') ? format : (extra[id] ?? {}),
     getComputedStyle: () => ({ getPropertyValue: () => '#ffffff' }), document: { documentElement: {} },
-    window: { matchMedia: () => ({ matches: false }) },
+    window: { setTimeout, clearTimeout, matchMedia: () => ({ matches: false }) },
   });
   return { ...exports.default, render: () => null };
 }
@@ -75,7 +75,7 @@ test('saving timeline height or receiving a profile snapshot does not reload mat
   let loads = 0;
   const history = component('HistoryPanel', { useSnapshot: () => snapshot, commands: {
     matchHistory: async () => { loads++; return [{ matchId: 123, report: { state: 'ready' } }]; },
-  } }, { './navigation': { selectedMatch: ref(null) } });
+  } }, { './navigation': { selectedMatch: ref(null), historyPlayer: ref(null) } });
   const app = renderer.createApp(history);
   app.mount({});
   try {
@@ -142,7 +142,7 @@ test('history refresh keeps all requested pages when it overtakes an outstanding
       if (hold) { hold = false; await new Promise(resolve => { release = resolve; }); }
       return page;
     },
-  } }, { './navigation': { selectedMatch } });
+  } }, { './navigation': { selectedMatch, historyPlayer: ref(null) } });
   const app = renderer.createApp(history);
   app.mount({});
   try {

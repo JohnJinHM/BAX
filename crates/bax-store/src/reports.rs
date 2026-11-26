@@ -506,6 +506,19 @@ impl Store {
 
     /// 比赛记录，新的在前。
     pub fn match_history(&self, limit: u32, offset: u32) -> Result<Vec<HistoryRow>> {
+        self.search_match_history(limit, offset, "", None)
+    }
+
+    pub fn search_match_history(
+        &self,
+        limit: u32,
+        offset: u32,
+        query: &str,
+        player: Option<PlayerId>,
+    ) -> Result<Vec<HistoryRow>> {
+        let query = query.trim();
+        let exact_id = query.parse::<u64>().ok().map(id_to_db);
+        let pattern = crate::archive::like_pattern(query);
         let mut stmt = self.conn.prepare_cached(
             "SELECT m.id, m.discovered_at, m.map, m.phase, m.self_team, m.start_at, m.ended_at,
                     (SELECT COUNT(*) FROM match_players mp WHERE mp.match_id = m.id),
@@ -515,28 +528,43 @@ impl Store {
              FROM matches m
              LEFT JOIN match_reports r ON r.match_id = m.id
              LEFT JOIN report_queue q ON q.match_id = m.id
+             WHERE (?3 IS NULL OR m.id IN (SELECT match_id FROM match_players WHERE player_id = ?3))
+               AND (?4 = '' OR m.id = ?5 OR m.map LIKE ?6 ESCAPE '\\'
+                    OR EXISTS (SELECT 1 FROM match_players mp LEFT JOIN players p ON p.id = mp.player_id
+                               WHERE mp.match_id = m.id AND (mp.player_id = ?5 OR mp.log_name LIKE ?6 ESCAPE '\\'
+                                    OR p.name LIKE ?6 ESCAPE '\\')))
              ORDER BY m.discovered_at DESC, m.id DESC
              LIMIT ?1 OFFSET ?2",
         )?;
-        let rows = stmt.query_map(params![limit, offset], |row| {
-            Ok(RawHistory {
-                id: row.get(0)?,
-                at: row.get(1)?,
-                map: row.get(2)?,
-                phase: row.get(3)?,
-                self_team: row.get(4)?,
-                start_at: row.get(5)?,
-                ended_at: row.get(6)?,
-                players: row.get(7)?,
-                fetched_at: row.get(8)?,
-                report_secs: row.get(9)?,
-                winner: row.get(10)?,
-                attempts: row.get(11)?,
-                next_at: row.get(12)?,
-                last_error: row.get(13)?,
-                cancelled: row.get(14)?,
-            })
-        })?;
+        let rows = stmt.query_map(
+            params![
+                limit,
+                offset,
+                player.map(|id| id_to_db(id.get())),
+                query,
+                exact_id,
+                pattern
+            ],
+            |row| {
+                Ok(RawHistory {
+                    id: row.get(0)?,
+                    at: row.get(1)?,
+                    map: row.get(2)?,
+                    phase: row.get(3)?,
+                    self_team: row.get(4)?,
+                    start_at: row.get(5)?,
+                    ended_at: row.get(6)?,
+                    players: row.get(7)?,
+                    fetched_at: row.get(8)?,
+                    report_secs: row.get(9)?,
+                    winner: row.get(10)?,
+                    attempts: row.get(11)?,
+                    next_at: row.get(12)?,
+                    last_error: row.get(13)?,
+                    cancelled: row.get(14)?,
+                })
+            },
+        )?;
         let mut out = Vec::new();
         for row in rows {
             out.push(row?.decode()?);

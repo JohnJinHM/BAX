@@ -329,6 +329,25 @@ fn history_rows_carry_report_state_and_result() {
         rows.iter().map(|r| r.match_id.get()).collect::<Vec<_>>(),
         vec![4, 3, 2, 1]
     );
+    for (query, player, expected) in [
+        ("map1", None, vec![1]),
+        (" 2 ", None, vec![2]),
+        ("aSh", None, vec![4, 3, 2, 1]),
+        ("101", None, vec![4, 3, 2, 1]),
+        ("%", None, vec![]),
+        ("Map2", Some(PlayerId(101)), vec![2]),
+        ("Map2", Some(PlayerId(999)), vec![]),
+    ] {
+        let found = store.search_match_history(10, 0, query, player).unwrap();
+        assert_eq!(
+            found.iter().map(|r| r.match_id.get()).collect::<Vec<_>>(),
+            expected
+        );
+    }
+    assert_eq!(
+        store.search_match_history(1, 2, "ash", None).unwrap()[0].match_id,
+        MatchId(2)
+    );
     let one = &rows[3];
     assert_eq!(one.won, Some(true), "本方 Bravo，胜方 Bravo");
     assert_eq!(one.players, 2);
@@ -359,6 +378,27 @@ fn history_rows_carry_report_state_and_result() {
 
     let page = store.match_history(2, 2).expect("翻页");
     assert_eq!(page[0].match_id, MatchId(2));
+}
+
+#[test]
+fn player_history_scope_distinguishes_identical_log_names() {
+    let mut store = Store::open_in_memory().unwrap();
+    record(&mut store, 8, 1000, true, true);
+    record(&mut store, 9, 3000, true, true);
+    store
+        .conn
+        .execute(
+            "UPDATE match_players SET player_id = 202 WHERE match_id = 9 AND player_id = 101",
+            [],
+        )
+        .unwrap();
+    for (id, expected) in [(101, 8), (202, 9)] {
+        let rows = store
+            .search_match_history(10, 0, "Ash", Some(PlayerId(id)))
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].match_id, MatchId(expected));
+    }
 }
 
 #[test]
