@@ -55,9 +55,7 @@
   --bax-heading-mark: 3px;
   --bax-heading-mark-color: #5f6663;
 
-  /* 悬浮窗：按设置的不透明度，左边缘从透明开始，到一半宽度处恢复；不画边框，解锁时也不画虚线 */
-  --bax-overlay-fade-alpha: 0;
-  --bax-overlay-fade-width: 50%;
+  /* 锁定与解锁时均使用透明边框 */
   --bax-overlay-border: 1px solid transparent;
   --bax-overlay-unlocked-border: 1px solid transparent;
 }

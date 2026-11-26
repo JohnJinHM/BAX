@@ -127,7 +127,7 @@ function playerTitle(p: RosterRow): string {
   if (p.logName && p.logName !== p.name) parts.push(`日志名 ${p.logName}`);
   const e = p.encounters;
   if (e.total > 0) parts.push(`以前同场 ${e.total} 次（队友 ${e.asTeammate}，对手 ${e.asOpponent}）`);
-  if (p.profile && !p.profileCurrent) parts.push("资料不是这场比赛取得的");
+  if (!p.provisional && p.profile && !p.profileCurrent) parts.push("资料不是这场比赛取得的");
   const state = fetchText(p.fetch);
   if (state) parts.push(state);
   const result = p.id != null ? ratingResults.value.get(p.id) : null;
@@ -229,7 +229,12 @@ watch(appearance, () => requestAnimationFrame(relayout));
     ref="panel"
     class="panel"
     :class="{ unlocked: !locked, alerting: activeAlert, 'automatic-motion': automaticMotion, 'no-motion': !appearance.animations }"
-    :style="{ '--bax-opacity': appearance.opacity, zoom: appearance.scale }"
+    :style="{
+      '--bax-opacity': appearance.opacity,
+      '--bax-fade-position': `${appearance.fadePosition * 100}%`,
+      '--bax-edge-opacity': appearance.opacity * appearance.fadeEndOpacity,
+      zoom: appearance.scale,
+    }"
   >
     <header :data-tauri-drag-region="locked ? undefined : ''">
       <span class="phase" :class="current?.phase" :data-tauri-drag-region="locked ? undefined : ''">
@@ -316,7 +321,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
           <li
             v-for="p in block.players"
             :key="p.key"
-            :class="{ self: p.isSelf, stale: p.profile && !p.profileCurrent }"
+            :class="{ self: p.isSelf, stale: !p.provisional && p.profile && !p.profileCurrent }"
             :title="playerTitle(p)"
           >
             <span class="elo num">{{ rating(beforeRating(p)) }}</span>
@@ -367,8 +372,7 @@ watch(appearance, () => requestAnimationFrame(relayout));
   width: 340px;
   padding: 8px 10px 10px;
   border-radius: var(--bax-radius);
-  /* 不透明度来自设置；皮肤可以让左侧一段从更透明渐变过来（--bax-overlay-fade-*），默认是纯色 */
-  background: linear-gradient(to right, rgb(var(--bax-bg-rgb) / calc(var(--bax-opacity) * var(--bax-overlay-fade-alpha))), rgb(var(--bax-bg-rgb) / var(--bax-opacity)) var(--bax-overlay-fade-width));
+  background: linear-gradient(to right, rgb(var(--bax-bg-rgb) / var(--bax-edge-opacity)) 0%, rgb(var(--bax-bg-rgb) / var(--bax-opacity)) var(--bax-fade-position));
   /* 渐变铺满边框所在的一圈；默认从内边距开始，透明边框下会平铺出另一端的颜色 */
   background-origin: border-box;
   border: var(--bax-overlay-border);
@@ -639,6 +643,10 @@ li.self {
 .elo {
   font-weight: 600;
   text-align: right;
+}
+
+.elo, .side-avg, .team-avg .num, .rating-delta, .result-delta, .result-total {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 95%), 0 0 3px rgb(0 0 0 / 75%);
 }
 
 li.stale .elo {

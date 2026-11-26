@@ -43,7 +43,13 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       ...(skin ? { id: skin } : {}),
     };
   }
-  if (options.collapsed) fixtureSnapshot.ui["ui.overlay"] = { opacity: .88, scale: 1, expanded: false, autoExpand: false };
+  if (options.collapsed) {
+    const overlay = fixtureSnapshot.ui["ui.overlay"];
+    fixtureSnapshot.ui["ui.overlay"] = {
+      ...(overlay && typeof overlay === "object" && !Array.isArray(overlay) ? overlay : {}),
+      expanded: false, autoExpand: false,
+    };
+  }
   if (params.has("ended") && fixtureSnapshot.current) {
     fixtureSnapshot.current.matchId = 8999927;
     fixtureSnapshot.current.phase = "ended";

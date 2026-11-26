@@ -77,10 +77,6 @@
   /* 分区标题前的短竖线，宽度为 0 时不显示 */
   --bax-heading-mark: 0px;
   --bax-heading-mark-color: var(--bax-accent);
-  /* 悬浮窗背景左侧的渐变：左边缘的不透明度 = 设置的不透明度 × 系数，到渐变宽度处恢复设置的不透明度。
-     默认系数 1、宽度 0%，即纯色 */
-  --bax-overlay-fade-alpha: 1;
-  --bax-overlay-fade-width: 0%;
   --bax-overlay-border: 1px solid var(--bax-border);
   --bax-overlay-unlocked-border: 1px dashed color-mix(in srgb, var(--bax-accent) 60%, transparent);
 }

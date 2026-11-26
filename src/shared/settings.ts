@@ -11,6 +11,10 @@ import { commands } from "./engine";
 export interface OverlayAppearance {
   /** 背景不透明度，0.3～1 */
   opacity: number;
+  /** 渐变起点距左边缘的宽度比例，0～1 */
+  fadePosition: number;
+  /** 左边缘保留的背景不透明度比例，0～1 */
+  fadeEndOpacity: number;
   /** 整体缩放，0.8～1.5 */
   scale: number;
   /** 展开玩家列表；收起时只显示计时与两队均分 */
@@ -56,7 +60,10 @@ export const defaults: Settings = {
   "ui.skin": defaultAppearance,
   "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },
-  "ui.overlay": { opacity: 0.88, scale: 1, expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true, snapEdges: true },
+  "ui.overlay": {
+    opacity: 1, fadePosition: 0.5, fadeEndOpacity: 0.2, scale: 1,
+    expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true, snapEdges: true,
+  },
   "ui.alerts": { sound: true, showOverlay: true },
   "ui.hotkeys": { toggleOverlay: "Ctrl+Alt+B", toggleLock: "Ctrl+Alt+L" },
   "ui.diag": { level: "standard" },

@@ -45,6 +45,12 @@ async function updateAction(action: () => Promise<void>) {
 }
 const ocr = useSetting(snapshot, "ui.ocr");
 const appearance = useSetting(snapshot, "ui.overlay");
+const overlaySliders = [
+  { key: "opacity", label: "背景不透明度", min: 30, max: 100, step: 1 },
+  { key: "fadePosition", label: "渐变起点位置", min: 0, max: 100, step: 1 },
+  { key: "fadeEndOpacity", label: "渐变末端不透明度", min: 0, max: 100, step: 1 },
+  { key: "scale", label: "缩放", min: 80, max: 150, step: 5 },
+] as const;
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
 const skin = useSetting(snapshot, "ui.skin");
@@ -296,30 +302,24 @@ async function exportDiag() {
   <section class="card">
     <h2>悬浮窗</h2>
     <div class="grid">
-      <label>背景不透明度</label>
-      <div class="row">
-        <input
-          type="range"
-          min="0.3"
-          max="1"
-          step="0.02"
-          :value="appearance.opacity"
-          @change="run(() => saveSetting(appearance, 'ui.overlay', { opacity: Number(($event.target as HTMLInputElement).value) }))"
-        />
-        <span class="num">{{ Math.round(appearance.opacity * 100) }}%</span>
-      </div>
-      <label>缩放</label>
-      <div class="row">
-        <input
-          type="range"
-          min="0.8"
-          max="1.5"
-          step="0.05"
-          :value="appearance.scale"
-          @change="run(() => saveSetting(appearance, 'ui.overlay', { scale: Number(($event.target as HTMLInputElement).value) }))"
-        />
-        <span class="num">{{ Math.round(appearance.scale * 100) }}%</span>
-      </div>
+      <template v-for="slider in overlaySliders" :key="slider.key">
+        <label :for="`overlay-${slider.key}`">{{ slider.label }}</label>
+        <div class="row">
+          <input
+            :id="`overlay-${slider.key}`"
+            type="range"
+            :min="slider.min"
+            :max="slider.max"
+            :step="slider.step"
+            :value="Math.round(appearance[slider.key] * 100)"
+            :aria-valuetext="`${Math.round(appearance[slider.key] * 100)}%`"
+            @change="run(() => saveSetting(appearance, 'ui.overlay', { [slider.key]: ($event.target as HTMLInputElement).valueAsNumber / 100 }))"
+          />
+          <span class="num">{{ Math.round(appearance[slider.key] * 100) }}%</span>
+          <span v-if="slider.key === 'fadePosition'" class="hint">从左边缘量起，起点右侧保持背景不透明度</span>
+          <span v-if="slider.key === 'fadeEndOpacity'" class="hint">左边缘保留的背景不透明度比例</span>
+        </div>
+      </template>
       <label>显示</label>
       <div class="row">
         <button @click="run(() => commands.setOverlayVisible(!status?.overlayVisible), '已切换')">
