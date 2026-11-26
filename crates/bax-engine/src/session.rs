@@ -322,7 +322,8 @@ impl Session {
         drop(ocr_tx);
         let mut trace_tasks = tokio::task::JoinSet::new();
         let mut trace_ticket = None;
-        let mut trace_attempted = std::collections::BTreeSet::new();
+        // 缺项为尚未查询，Some 为暂时失败后的补查时间，None 为本局已查完。
+        let mut trace_attempts = BTreeMap::<PlayerId, Option<Timestamp>>::new();
         loop {
             let input = tokio::select! {
                 command = commands.recv() => match command {
@@ -343,17 +344,34 @@ impl Session {
             let _entered = span.enter();
             match input {
                 Input::Pregame(message) => self.on_pregame(message),
-                Input::PregameTrace(key, id, at, count) => {
+                Input::PregameTrace(key, id, at, result) => {
                     if trace_ticket.as_ref() == Some(&key)
-                        && self
+                        && (self
                             .pregame
                             .players
                             .iter()
                             .any(|p| p.matched_id() == Some(id))
-                        && let Some(count) = count
-                        && let Err(err) = self.save_trace_count(id, count, at)
+                            || self.slots.iter().any(|s| s.id == id && s.team.is_some()))
                     {
-                        tracing::warn!(player = %id, error = %err, "保存 BATrace 标记次数失败");
+                        let mut retry_at = None;
+                        match result {
+                            Ok(count) => {
+                                if let Err(err) = self.save_trace_count(id, count, at) {
+                                    tracing::warn!(player = %id, error = %err, "保存 BATrace 标记次数失败");
+                                }
+                            }
+                            Err(err) => {
+                                if err.is_transient() && !trace_attempts.contains_key(&id) {
+                                    let delay = err
+                                        .retry_after()
+                                        .unwrap_or_default()
+                                        .max(Duration::from_secs(60));
+                                    retry_at = Some(self.clock.now().plus_millis(millis(delay)));
+                                }
+                                tracing::debug!(player = %id, error = ?err.kind(), retry = retry_at.is_some(), "赛前标记查询失败");
+                            }
+                        }
+                        trace_attempts.insert(id, retry_at);
                     }
                 }
                 Input::Command(command) => self.on_command(command),
@@ -362,34 +380,44 @@ impl Session {
                 Input::Report(event) => self.on_report_event(event),
                 Input::Tick => self.on_tick(),
             }
-            let ticket = crate::pregame::ticket(&self.build_snapshot());
+            let snapshot = self.build_snapshot();
+            let ticket = crate::pregame::trace_ticket(&snapshot);
             if ticket != trace_ticket {
                 trace_tasks.abort_all();
-                trace_attempted.clear();
+                trace_attempts.clear();
                 trace_ticket = ticket.clone();
+            }
+            if ticket.is_none() || snapshot.current.as_ref().is_some_and(|m| m.roster_known) {
+                if self.pregame != Default::default() {
+                    self.dirty = true;
+                }
+                self.pregame = Default::default();
+                self.pregame_cutoff = self.revision + 1;
             }
             if let Some(key) = ticket {
                 // 单独串行查询已匹配的 ID，不占用 OCR 身份查询额度。
+                let at = self.clock.now();
                 if trace_tasks.is_empty()
                     && let Some(id) = self
                         .pregame
                         .players
                         .iter()
                         .filter_map(|p| p.matched_id())
-                        .find(|id| trace_attempted.insert(*id))
+                        .chain(
+                            self.slots
+                                .iter()
+                                .filter(|s| s.team.is_some() && trace_attempts.contains_key(&s.id))
+                                .map(|s| s.id),
+                        )
+                        .find(|id| match trace_attempts.get(id) {
+                            None => true,
+                            Some(retry_at) => retry_at.is_some_and(|t| t <= at),
+                        })
                 {
                     let client = self.client.clone();
-                    let at = self.clock.now();
-                    trace_tasks.spawn(async move {
-                        (key, id, at, client.player_trace_count(id).await.ok())
-                    });
+                    trace_tasks
+                        .spawn(async move { (key, id, at, client.player_trace_count(id).await) });
                 }
-            } else {
-                if self.pregame != Default::default() {
-                    self.dirty = true;
-                }
-                self.pregame = Default::default();
-                self.pregame_cutoff = self.revision + 1;
             }
             self.dispatch();
             if self.dirty && self.log.ready {
@@ -1615,7 +1643,12 @@ fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> Profil
 /// 会话循环一次处理的输入。
 enum Input {
     Pregame(crate::pregame::Message),
-    PregameTrace(crate::pregame::Ticket, PlayerId, Timestamp, Option<u32>),
+    PregameTrace(
+        crate::pregame::Ticket,
+        PlayerId,
+        Timestamp,
+        Result<u32, ApiError>,
+    ),
     Command(Command),
     Log(LogMsg),
     // 资料结果比其他输入大得多，装箱避免每次循环都搬动整块内存

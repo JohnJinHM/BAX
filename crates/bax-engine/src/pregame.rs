@@ -72,12 +72,12 @@ pub struct PregameView {
     pub(crate) queries_complete: bool,
 }
 
-/// 比赛代次由 ID、发现时间以及日志来源标识共同隔离。
+/// 同一日志目录内的文件轮换不改变比赛身份。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Ticket {
     pub id: MatchId,
     pub discovered: Timestamp,
-    pub file: Option<String>,
+    pub dir: Option<String>,
 }
 
 pub(crate) fn enabled(snapshot: &Snapshot) -> bool {
@@ -91,22 +91,29 @@ pub(crate) fn enabled(snapshot: &Snapshot) -> bool {
 }
 
 pub(crate) fn ticket(snapshot: &Snapshot) -> Option<Ticket> {
+    if snapshot.current.as_ref()?.roster_known {
+        return None;
+    }
+    trace_ticket(snapshot)
+}
+
+/// 正式名单到达后停止采集，已发出的账号标记请求仍可交给同局的正式名单。
+pub(crate) fn trace_ticket(snapshot: &Snapshot) -> Option<Ticket> {
     let m = snapshot.current.as_ref()?;
     (enabled(snapshot)
         && m.mode != crate::MatchMode::Pve
         && snapshot.log.ready
-        && !m.roster_known
         && !m.rejoined
         && m.connection == Connection::Connected
-        && matches!(
+        && (matches!(
             m.phase,
             Phase::WaitingRoom | Phase::Loading | Phase::Deployment
-        ))
-    .then(|| Ticket {
-        id: m.match_id,
-        discovered: m.discovered_at,
-        file: snapshot.log.file.clone(),
-    })
+        ) || (m.roster_known && m.phase == Phase::InBattle)))
+        .then(|| Ticket {
+            id: m.match_id,
+            discovered: m.discovered_at,
+            dir: snapshot.log.dir.clone(),
+        })
 }
 
 #[cfg(any(test, feature = "ocr"))]

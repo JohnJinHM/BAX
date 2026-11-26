@@ -232,18 +232,18 @@ async fn resolve(
 /// Match identity survives phase, log-file and foreground-screen changes.
 #[derive(Default)]
 struct CaptureLatch {
-    identity: Option<(MatchId, Timestamp)>,
+    identity: Option<Ticket>,
     previous: Vec<Observation>,
     stable: Vec<Observation>,
     complete: bool,
 }
 impl CaptureLatch {
-    fn select(&mut self, identity: (MatchId, Timestamp)) -> bool {
-        if self.identity == Some(identity) {
+    fn select(&mut self, identity: &Ticket) -> bool {
+        if self.identity.as_ref() == Some(identity) {
             return false;
         }
         *self = Self {
-            identity: Some(identity),
+            identity: Some(identity.clone()),
             ..Default::default()
         };
         true
@@ -307,7 +307,7 @@ pub(crate) async fn run(
             process = None;
             continue;
         };
-        if latch.select((key.id, key.discovered)) {
+        if latch.select(&key) {
             view = PregameView::default();
             attempted.clear();
             stopped = false;
@@ -403,10 +403,11 @@ pub(crate) async fn run(
         }
         for pos in 0..view.players.len() {
             let p = &view.players[pos];
+            let slot = (p.observed.side.clone(), p.observed.row);
             if p.observed.friendly != Some(false)
                 || prefer_local(p)
                 || p.observed.name.contains(['□', '\u{fffd}'])
-                || !attempted.insert((p.observed.side.clone(), p.observed.row))
+                || attempted.contains(&slot)
             {
                 continue;
             }
@@ -434,6 +435,7 @@ pub(crate) async fn run(
             let Some(result) = result else {
                 break;
             };
+            attempted.insert(slot);
             match result {
                 Ok(p) => view.players[pos] = p,
                 Err(_) => {
@@ -557,8 +559,12 @@ mod tests {
     #[test]
     fn partial_roster_grows_and_survives_screen_changes_until_a_new_match() {
         let mut latch = CaptureLatch::default();
-        let identity = (MatchId(7), Timestamp::from_millis(10));
-        assert!(latch.select(identity));
+        let identity = Ticket {
+            id: MatchId(7),
+            discovered: Timestamp::from_millis(10),
+            dir: None,
+        };
+        assert!(latch.select(&identity));
         assert!(!latch.observe(vec![row()]));
         assert!(latch.observe(vec![row()]));
         let stable = latch.stable.clone();
@@ -567,14 +573,17 @@ mod tests {
         let mut changed = row();
         changed.level = 19;
         assert!(!latch.observe(vec![changed]));
-        assert!(!latch.select(identity));
+        assert!(!latch.select(&identity));
         assert_eq!(latch.stable, stable);
         let mut extra = row();
         extra.row = 1;
         assert!(!latch.observe(vec![extra.clone()]));
         assert!(latch.observe(vec![extra]));
         assert_eq!(latch.stable.len(), 2);
-        assert!(latch.select((MatchId(8), identity.1)));
+        assert!(latch.select(&Ticket {
+            id: MatchId(8),
+            ..identity
+        }));
         assert!(latch.stable.is_empty());
     }
     #[test]
