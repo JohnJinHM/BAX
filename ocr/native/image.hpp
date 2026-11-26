@@ -48,20 +48,34 @@ inline Image load_image(const std::filesystem::path& path) {
     check_hr(converter->CopyPixels(nullptr, w * 3, static_cast<UINT>(image.pixels.size()), image.pixels.data()));
     return image;
 }
-inline Image capture_game() {
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd || IsIconic(hwnd)) return {};
-    DWORD pid = 0; GetWindowThreadProcessId(hwnd, &pid);
+inline bool is_game_window(HWND hwnd) {
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
+    RECT rect{};
+    if (!GetClientRect(hwnd, &rect) || rect.right < 960 || rect.bottom < 540 ||
+        rect.right > 8192 || rect.bottom > 8192) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return {};
-    wchar_t path[32768]; DWORD length = 32768;
+    if (!process) return false;
+    wchar_t path[32768];
+    DWORD length = 32768;
     bool got = QueryFullProcessImageNameW(process, 0, path, &length) != 0;
     CloseHandle(process);
-    if (!got) return {};
+    if (!got) return false;
     auto name = std::filesystem::path(path).filename().wstring();
-    if (_wcsicmp(name.c_str(), L"BrokenArrow.exe") && _wcsicmp(name.c_str(), L"Broken_Arrow.exe") && _wcsicmp(name.c_str(), L"Broken Arrow.exe")) return {};
-    RECT rect{}; POINT point{};
-    if (!GetClientRect(hwnd, &rect) || !ClientToScreen(hwnd, &point)) return {};
+    return !_wcsicmp(name.c_str(), L"BrokenArrow.exe") || !_wcsicmp(name.c_str(), L"Broken_Arrow.exe") ||
+           !_wcsicmp(name.c_str(), L"Broken Arrow.exe");
+}
+
+inline BOOL CALLBACK find_game_window(HWND hwnd, LPARAM result) {
+    if (!is_game_window(hwnd)) return TRUE;
+    *reinterpret_cast<HWND*>(result) = hwnd;
+    return FALSE;
+}
+
+inline Image capture_window(HWND hwnd) {
+    RECT rect{};
+    if (!hwnd || IsIconic(hwnd) || !GetClientRect(hwnd, &rect)) return {};
     int w = rect.right, h = rect.bottom;
     if (w < 960 || h < 540 || w > 8192 || h > 8192) return {};
     HDC screen = GetDC(nullptr);
@@ -75,9 +89,16 @@ inline Image capture_game() {
     Image out;
     if (bitmap) {
         auto previous = SelectObject(memory, bitmap);
-        bool copied = GetForegroundWindow() == hwnd && BitBlt(memory, 0, 0, w, h, screen, point.x, point.y, SRCCOPY | CAPTUREBLT);
+        POINT point{};
+        bool copied = GetForegroundWindow() == hwnd && ClientToScreen(hwnd, &point) &&
+                      BitBlt(memory, 0, 0, w, h, screen, point.x, point.y, SRCCOPY | CAPTUREBLT) &&
+                      GetForegroundWindow() == hwnd;
+        // Render the game's own client area when another window covers it.
+        if (!copied) copied = PrintWindow(hwnd, memory, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != FALSE;
         GdiFlush();
-        if (copied && GetForegroundWindow() == hwnd) {
+        RECT current{};
+        if (copied && is_game_window(hwnd) && GetClientRect(hwnd, &current) &&
+            current.right == w && current.bottom == h) {
             out = Image(w, h);
             auto source = static_cast<const uint8_t*>(bits);
             for (size_t i = 0; i < size_t(w) * h; ++i) std::copy_n(source + i * 4, 3, out.pixels.data() + i * 3);
@@ -87,6 +108,12 @@ inline Image capture_game() {
     DeleteDC(memory); ReleaseDC(nullptr, screen);
     return out;
 }
+inline Image capture_game() {
+    HWND hwnd = nullptr;
+    EnumWindows(find_game_window, reinterpret_cast<LPARAM>(&hwnd));
+    return capture_window(hwnd);
+}
+
 // Bilinear resize with half-pixel coordinates; BGR CHW normalized to [-1, 1].
 inline std::vector<float> tensor(const Image& image, int width, int resized_width, int height = 48) {
     if (image.empty() || resized_width > width || resized_width <= 0) throw std::runtime_error("invalid_crop");

@@ -230,7 +230,7 @@ int wmain(int argc, wchar_t** argv) {
                 try {
                     auto image = capture_game();
                     auto players = extract(general, russian, image);
-                    auto status = image.empty() ? "等待游戏前台画面" : (!supported(image) ? "暂不支持此分辨率或比例" : (players.empty() ? "等待固定双侧玩家卡片" : "已识别卡片"));
+                    auto status = image.empty() ? "等待可采集的游戏窗口" : (!supported(image) ? "暂不支持此分辨率或比例" : (players.empty() ? "等待固定双侧玩家卡片" : "已识别卡片"));
                     emit(players, status, std::chrono::duration<double, std::milli>(Clock::now() - start).count());
                 } catch (const std::exception&) { emit({}, "画面识别失败，将重试", 0); }
             }

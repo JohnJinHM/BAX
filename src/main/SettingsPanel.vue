@@ -204,7 +204,7 @@ async function exportDiag() {
       <input type="checkbox" :checked="ocr.enabled" @change="run(() => saveSetting(ocr, 'ui.ocr', { enabled: !ocr.enabled }))" />
       在日志名单出现前识别游戏画面的昵称与等级
     </label>
-    <p class="hint">优先查找本地玩家，再查询在线候选；日志 ID 到达后更新。仅在游戏位于前台时读取画面，截图不保存。</p>
+    <p class="hint">优先查找本地玩家，再查询在线候选；日志 ID 到达后更新。游戏切到后台后仍可识别，最小化时暂停采集，截图不保存。</p>
   </section>
   <section class="card">
     <h2>游戏日志</h2>

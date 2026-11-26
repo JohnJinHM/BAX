@@ -12,3 +12,8 @@ target_include_directories(bax-ocr SYSTEM PRIVATE "${ORT_ROOT}/build/native/incl
 target_link_libraries(bax-ocr PRIVATE "${ORT_ROOT}/runtimes/win-x64/native/onnxruntime.lib" windowscodecs ole32 gdi32 user32)
 enable_testing()
 add_test(NAME native-core COMMAND bax-ocr --unit-test)
+add_executable(capture-test capture_test.cpp)
+set_target_properties(capture-test PROPERTIES OUTPUT_NAME BrokenArrow)
+target_compile_definitions(capture-test PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(capture-test PRIVATE gdi32 user32 dwmapi)
+add_test(NAME background-capture COMMAND capture-test)
