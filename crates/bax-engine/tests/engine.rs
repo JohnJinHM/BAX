@@ -939,6 +939,37 @@ async fn invalid_reminder_rules_are_rejected_and_nothing_changes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn favorites_survive_restart_and_can_be_removed() {
+    let fx = Fixture::new().await;
+    fx.serve_profiles().await;
+    fx.append(&finished_match(9_000_001));
+    let engine = fx.start();
+    wait_for(&engine, "名单就绪", |s| {
+        s.log.ready && player(s, 101).is_some()
+    })
+    .await;
+    engine
+        .set_player_favorite(PlayerId(101), true)
+        .await
+        .expect("收藏");
+    engine.shutdown().await;
+
+    let engine = fx.start();
+    wait_for(&engine, "重新就绪", |s| s.log.ready).await;
+    let rows = engine.search_players("", 2).await.expect("默认排序");
+    assert_eq!(rows[0].id, engine.snapshot().self_id.expect("本机"));
+    assert_eq!(rows[1].id, PlayerId(101));
+    assert!(rows[1].is_favorite);
+    engine
+        .set_player_favorite(PlayerId(101), false)
+        .await
+        .expect("取消收藏");
+    let rows = engine.search_players("101", 1).await.expect("按 ID 查询");
+    assert!(!rows[0].is_favorite);
+    engine.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn notes_show_up_in_the_match_and_in_the_player_detail() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
