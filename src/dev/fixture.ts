@@ -27,6 +27,7 @@ function player(
     logName: name,
     traceCount: rating == null ? null : id === 102 ? 3 : 0,
     team,
+    country: id === 101 ? 1 : null,
     isSelf: false,
     profile:
       rating == null

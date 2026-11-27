@@ -4,8 +4,6 @@ import { computed, reactive, ref, watch } from "vue";
 
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import {
-  ago,
-  fetchText,
   minutes,
   mmss,
   percent,
@@ -37,7 +35,10 @@ function toggleStats(key: string) {
 }
 
 const groups = computed(() => rosterGroups(current.value).map(g => ({
-  ...g, title: g.key === 'spectators' ? `旁观者 · ${g.count} 人` : `${g.title} · ${g.count} 人　均分 ${rating(g.averageValue)}（${g.rated} 人有分）`,
+  ...g,
+  specHeading: current.value?.phase === 'ended' ? (g.key === 'spectators' ? null : '本局专精')
+    : g.tone === 'enemy' ? '专精预测' : null,
+  title: g.key === 'spectators' ? `旁观者 · ${g.count} 人` : `${g.title} · ${g.count} 人　均分 ${rating(g.averageValue)}（${g.rated} 人有分）`,
 })));
 
 const clockLine = computed(() => {
@@ -89,26 +90,28 @@ async function refresh() {
       <div class="roster-table"><table>
         <colgroup>
           <col />
-          <col class="c-elo" />
           <col class="c-specs" />
+          <col class="c-elo" />
+          <col class="c-level" />
+          <col class="c-rate" />
           <col class="c-met" />
-          <col class="c-fetched" />
           <col class="c-action" />
         </colgroup>
         <thead>
           <tr>
-            <th class="left">玩家</th>
+            <th class="left" :colspan="group.specHeading ? 1 : 2">玩家</th>
+            <th v-if="group.specHeading" class="spec-heading">{{ group.specHeading }}</th>
             <th>ELO</th>
-            <th class="spec-heading">{{ current.phase === 'ended' ? '本局专精' : '专精预测' }}</th>
+            <th>等级</th>
+            <th>胜率</th>
             <th>以前同场</th>
-            <th>资料状态</th>
             <th>排位统计</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="p in group.players" :key="p.key">
             <tr :class="{ self: p.isSelf }">
-              <td class="left">
+              <td class="left" :colspan="group.specHeading ? 1 : 2">
                 <div class="name-line">
                   <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
                   <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
@@ -117,16 +120,13 @@ async function refresh() {
                 <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
                 <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
               </td>
+              <td v-if="group.specHeading"><span class="specs" :title="current.phase === 'ended' ? undefined : predictionHint(p)"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
               <td class="num strong">{{ rating(p.profile?.rating) }}</td>
-              <td><span class="specs" :title="current.phase === 'ended' ? undefined : predictionHint(p)"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
+              <td class="num">{{ p.displayLevel ?? '–' }}</td>
+              <td class="num">{{ percent(p.profile?.ranked?.winRate) }}</td>
               <td class="num">
                 {{ p.provisional ? '待确认' : `${p.encounters.total} 次` }}
                 <div v-if="p.encounters.total" class="hint">友 {{ p.encounters.asTeammate }} / 敌 {{ p.encounters.asOpponent }}</div>
-              </td>
-              <td class="profile-status">
-                <span>{{ p.provisional ? "待日志确认" : p.profileFetchedAt != null ? ago(p.profileFetchedAt, now) : "暂无资料" }}</span>
-                <span v-if="!p.provisional && p.profile && !p.profileCurrent" class="hint">赛前缓存</span>
-                <span v-if="fetchText(p.fetch)" class="state" :class="p.fetch.state">{{ fetchText(p.fetch) }}</span>
               </td>
               <td>
                 <button class="stats-toggle" :aria-label="`${expandedPlayers.has(p.key) ? '收起' : '展开'} ${p.name} 的排位统计`"
@@ -135,12 +135,10 @@ async function refresh() {
               </td>
             </tr>
             <tr v-if="expandedPlayers.has(p.key)" :id="`stats-${p.key}`">
-              <td colspan="6" class="details">
+              <td colspan="7" class="details">
                 <dl>
-                  <div><dt>等级</dt><dd>{{ p.displayLevel ?? '–' }}</dd></div>
                   <div><dt>排名</dt><dd>{{ p.profile?.rank ?? '–' }}</dd></div>
                   <div><dt>排位场次</dt><dd>{{ p.profile?.ratingGames ?? '–' }}</dd></div>
-                  <div><dt>胜率</dt><dd>{{ percent(p.profile?.ranked?.winRate) }}</dd></div>
                   <div><dt>离场</dt><dd>{{ p.profile?.ranked?.leaves ?? '–' }}</dd></div>
                   <div><dt>损毁比</dt><dd>{{ ratio(p.profile?.ranked?.killLossRatio) }}</dd></div>
                   <div><dt>价值比</dt><dd>{{ ratio(p.profile?.ranked?.costRatio) }}</dd></div>
@@ -165,12 +163,12 @@ async function refresh() {
   margin: 0;
 }
 .roster-table { overflow-x: auto; scrollbar-color: var(--bax-faint) var(--bax-surface); }
-.c-elo { width: 10%; }
+.c-elo, .c-rate { width: 4.8em; }
+.c-level { width: 3.8em; }
 .c-specs { width: 16%; }
 .c-action { width: 5.4em; }
 .spec-heading { text-align: center; }
 .specs { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; }
-.profile-status span { display: block; }
 .stats-toggle { padding: 3px 6px; }
 .details { text-align: left; background: var(--bax-surface-2); }
 .details dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: 8px; margin: 4px 0 8px; }
@@ -193,9 +191,10 @@ async function refresh() {
   margin-left: auto;
 }
 
-/* 固定列宽：两队的表格上下对齐 */
+/* 为数值列保留宽度，在窄窗口内横向滚动。 */
 table {
   width: 100%;
+  min-width: 38em;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: calc(13px * var(--bax-font-scale));
@@ -203,10 +202,6 @@ table {
 
 .c-met {
   width: 17%;
-}
-
-.c-fetched {
-  width: 18%;
 }
 
 .name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
@@ -267,12 +262,4 @@ tr.self > td:first-child {
   font-weight: 600;
 }
 
-.state.failed {
-  color: var(--bax-bad);
-}
-
-.state.fetching,
-.state.queued {
-  color: var(--bax-muted);
-}
 </style>

@@ -82,7 +82,7 @@ fn message(s: &Session) -> Message {
                 observed: Observation {
                     side: "left".into(),
                     row: 0,
-                    country: None,
+                    country: Some(1),
                     friendly: Some(false),
                     name: "Raven".into(),
                     level: 57,
@@ -147,6 +147,7 @@ fn log_identity_replaces_candidate_without_polluting_history() {
     assert!(current.roster_known);
     assert!(current.pregame.players.is_empty());
     assert_eq!(current.players[0].id, PlayerId(202));
+    assert_eq!(current.players[0].country, None, "同名不同账号不沿用国旗");
     assert!(s.store.player(PlayerId(101)).expect("read").is_none());
     assert_eq!(
         s.store.match_players(MatchId(7001)).expect("read")[0].player,
@@ -377,9 +378,9 @@ async fn log_rotation_and_confirmed_roster_keep_the_inflight_mark_query() {
         snapshots
             .wait_for(|s| {
                 s.current.as_ref().is_some_and(|m| {
-                    m.players
-                        .iter()
-                        .any(|p| p.id == PlayerId(101) && p.trace_count == Some(4))
+                    m.players.iter().any(|p| {
+                        p.id == PlayerId(101) && p.country == Some(1) && p.trace_count == Some(4)
+                    })
                 })
             })
             .await

@@ -193,6 +193,8 @@ pub struct PlayerView {
     /// 用户写的备注。
     pub note: Option<String>,
     pub trace_count: Option<u32>,
+    // 本局赛前唯一匹配到此账号时观察到的国旗。
+    pub country: Option<u8>,
 }
 
 /// 一名玩家的资料请求进行到哪一步。

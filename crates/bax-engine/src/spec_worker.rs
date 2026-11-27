@@ -170,6 +170,7 @@ mod tests {
         s.log.ready = true;
         let players = (101..=106)
             .map(|id| PlayerView {
+                country: None,
                 trace_count: None,
                 id: PlayerId(id),
                 name: None,

@@ -18,7 +18,6 @@ export type RosterRow = Omit<PlayerView, 'id' | 'name'> & {
   name: string;
   key: string;
   provisional: boolean;
-  country?: number | null;
   labels: PlayerLabel[];
   displayLevel: number | null;
 };

@@ -154,6 +154,7 @@ struct FetchStats {
 #[derive(Debug)]
 struct Slot {
     id: PlayerId,
+    country: Option<u8>,
     log_name: Option<String>,
     team: Option<Team>,
     record: Option<PlayerRecord>,
@@ -1353,7 +1354,7 @@ impl Session {
         let mut previous = std::mem::take(&mut self.slots);
         let mut slots = Vec::with_capacity(roster.len());
         for entry in roster {
-            let slot = match previous.iter().position(|s| s.id == entry.id) {
+            let mut slot = match previous.iter().position(|s| s.id == entry.id) {
                 Some(index) => {
                     let mut slot = previous.swap_remove(index);
                     slot.team = Some(entry.team);
@@ -1362,6 +1363,15 @@ impl Session {
                 }
                 None => self.load_slot(entry.id, entry.name, Some(entry.team)),
             };
+            // 正式名单接管后会清空 OCR 视图，仅交接本局同一账号的国旗。
+            if let Some(row) = self
+                .pregame
+                .players
+                .iter()
+                .find(|p| p.matched_id() == Some(entry.id))
+            {
+                slot.country = row.observed.country;
+            }
             slots.push(slot);
         }
         self.slots = slots;
@@ -1394,6 +1404,7 @@ impl Session {
         });
         Slot {
             id,
+            country: None,
             log_name,
             team,
             record,
@@ -1564,6 +1575,7 @@ impl Session {
                     let fetched_at = slot.fetched_at();
                     PlayerView {
                         id: slot.id,
+                        country: slot.country,
                         trace_count: slot.record.as_ref().and_then(|r| r.trace_count),
                         name: slot
                             .profile

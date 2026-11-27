@@ -33,4 +33,4 @@ encounters: EncounterSummary,
 /**
  * 用户写的备注。
  */
-note: string | null, traceCount: number | null, };
+note: string | null, traceCount: number | null, country: number | null, };
