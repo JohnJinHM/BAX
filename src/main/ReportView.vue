@@ -169,7 +169,6 @@ function eloDelta(p: PlayerReport): string {
 
 // ------------------------------------------------------------ 图表
 
-const curveRange = computed(() => lossMinute.value == null ? selectedRange.value : [lossMinute.value * 60, (lossMinute.value + 1) * 60]);
 const axisCommon = computed(() => ({
   axisLine: { lineStyle: { color: colors.value.faint } },
   axisTick: { show: false },
@@ -202,38 +201,50 @@ function playerAxisLabel(rows: PlayerReport[]) {
   };
 }
 
-/** 双方累计净出兵价值随时间。 */
+function cumulativeValues(values: number[]): [number, number][] {
+  const points: [number, number][] = [[0, 0]];
+  let total = 0;
+  values.forEach((value, index) => {
+    total += value;
+    points.push([index + 1, total]);
+  });
+  return points;
+}
+
+const curveKeys = computed(() => teamOrder.value.flatMap(team =>
+  (["净出兵", "损失"] as const).map(metric => ({name:`${teamNames[team]} ${metric}`, team, loss:metric === "损失"}))));
+const hiddenCurves = ref<string[]>([]);
+function toggleCurve(key: string) {
+  hiddenCurves.value = hiddenCurves.value.includes(key)
+    ? hiddenCurves.value.filter(name => name !== key) : [...hiddenCurves.value, key];
+}
+
 const curveOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
   if (!v) return null;
-  const series = teamOrder.value.map((team) => {
-    const t = v.analysis.teams.find((x) => x.team === team);
-    let acc = 0;
-    const data: [number, number][] = [[0, 0]];
-    (t?.valueByMinute ?? []).forEach((value, i) => {
-      acc += value;
-      data.push([i + 1, acc]);
-    });
-    return {
-      name: teamLabel(team),
-      type: "line",
-      data,
-      showSymbol: false,
-      lineStyle: { width: 2 },
-      color: teamColor(team),
-      endLabel: { show: true, color: colors.value.muted, fontSize: 11 * colors.value.fontScale, formatter: (p: { seriesName: string }) => p.seriesName },
-      emphasis: { focus: "series" },
-      markArea: curveRange.value ? {
-        silent: true,
-        itemStyle: { color: colors.value.fg, opacity: 0.05 },
-        data: [[{ xAxis: curveRange.value[0] / 60 }, { xAxis: curveRange.value[1] / 60 }]],
-      } : undefined,
-    };
+  const { minutes, teams, sorties, players } = v.analysis;
+  const ownerTeam = new Map(players.map(p => [p.id, p.team]));
+  const series = teamOrder.value.flatMap((team, index) => {
+    const deployed = teams.find(t => t.team === team)?.valueByMinute ?? [];
+    const lost = Array<number>(minutes).fill(0);
+    for (const sortie of sorties) {
+      if (sortie.refunded || sortie.deathSecs == null || ownerTeam.get(sortie.player) !== team) continue;
+      const minute = Math.min(Math.floor(sortie.deathSecs / 60), minutes - 1);
+      lost[minute] += sortie.cost;
+    }
+    const line = { type:"line", showSymbol:false, color:teamColor(team), emphasis:{focus:"series"} };
+    return [
+      { ...line, name:`${teamNames[team]} 净出兵`, data:cumulativeValues(deployed), lineStyle:{width:2},
+        markArea: index === 0 && selectedRange.value ? {
+          silent:true, itemStyle:{color:colors.value.fg, opacity:0.05},
+          data:[[{xAxis:selectedRange.value[0] / 60}, {xAxis:selectedRange.value[1] / 60}]],
+        } : undefined },
+      { ...line, name:`${teamNames[team]} 损失`, data:cumulativeValues(lost), lineStyle:{width:2,type:"dashed"} },
+    ];
   });
   return {
-    animation: false,
-    grid: { left: 56, right: 120, top: 32, bottom: 28 },
-    legend: { top: 0, left: 0, textStyle: { color: colors.value.muted, fontSize: 12 * colors.value.fontScale }, itemWidth: 16, itemHeight: 2, icon: "rect" },
+    animation:false,
+    grid:{left:56,right:24,top:12,bottom:28},
     tooltip: {
       ...tooltipCommon.value,
       trigger: "axis",
@@ -247,46 +258,9 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
     },
     xAxis: { type: "value", min: 0, max: v.analysis.minutes, minInterval: 1, ...axisCommon.value, splitLine: { show: false }, axisLabel: { ...axisCommon.value.axisLabel, formatter: "{value} 分" } },
     yAxis: { type: "value", ...axisCommon.value },
-    series,
+    series: series.filter(line => !hiddenCurves.value.includes(line.name)),
   };
 });
-
-const lossMinute = ref<number | null>(null);
-watch(() => props.id, () => { lossMinute.value = null; });
-const losses = computed(() => {
-  if (!view.value) return [];
-  const byId = new Map(players.value.map(p => [p.id, p]));
-  return view.value.analysis.sorties.flatMap(s => {
-    const player = byId.get(s.player);
-    if (s.refunded || s.deathSecs == null || !player || !player.team || player.team === "spectators") return [];
-    return [{ minute: Math.floor(s.deathSecs / 60), unit: s.unitName, owner: name(player), team: player.team, cost: s.cost }];
-  });
-});
-const lossMinutes = computed(() => [...new Set(losses.value.map(l => l.minute))].sort((a,b) => a-b));
-const selectedLosses = computed(() => losses.value.filter(l => l.minute === lossMinute.value).sort((a,b) => b.cost-a.cost));
-const lossAxis = computed(() => [...new Set([...Array.from({length:view.value?.analysis.minutes ?? 0}, (_,i) => i), ...lossMinutes.value])].sort((a,b) => a-b));
-const lossOption = computed<EChartsCoreOption | null>(() => {
-  if (!view.value || !losses.value.length) return null;
-  const minutes = lossAxis.value;
-  const totals = new Map<string,number>();
-  for (const l of losses.value) {
-    const key = l.team + l.minute;
-    totals.set(key,(totals.get(key) ?? 0) + l.cost);
-  }
-  return {
-    grid: {left:58,right:18,top:36,bottom:28},
-    tooltip: {...tooltipCommon.value, trigger:"axis"},
-    legend: {textStyle:{color:colors.value.muted}},
-    xAxis: {...axisCommon.value,type:"category",data:minutes.map(m => m+"′")},
-    yAxis: {...axisCommon.value,type:"value"},
-    series: teamOrder.value.map(team => ({id:team,name:teamLabel(team),type:"bar",color:teamColor(team),
-      data:minutes.map(m => totals.get(team+m) ?? 0)})),
-  };
-});
-function selectLoss(_: string, index: number) {
-  const minute = lossAxis.value[index];
-  if (lossMinutes.value.includes(minute)) lossMinute.value = minute;
-}
 
 /** 每人的兵种构成。 */
 const visibleComposition = ref(compositionGroups.map(g => g.key));
@@ -409,17 +383,18 @@ function pendingText(row: HistoryRow | null | undefined): string {
         </div>
       </div>
 
-      <h3>累计净出兵价值</h3>
-      <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计净出兵价值随时间的变化" />
+      <h3>累计净出兵与损失价值</h3>
+      <p class="hint">实线为净出兵价值，虚线为阵亡单位的累计估算价值，均按原出兵者归队。</p>
+      <div class="curve-switches" role="group" aria-label="价值曲线">
+        <button v-for="key in curveKeys" :key="key.name" type="button" :aria-pressed="!hiddenCurves.includes(key.name)" @click="toggleCurve(key.name)">
+          <i aria-hidden="true" :class="{ dashed:key.loss }" :style="{borderColor:teamColor(key.team)}" />{{ key.name }}
+        </button>
+      </div>
+      <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计净出兵价值（实线）与损失价值（虚线）" />
 
-      <h3>损失时间线</h3>
-      <p class="hint">每分钟阵亡单位的估算价值，按原出兵者归队。回收单位除外。</p>
-      <EChart v-if="lossOption" :option="lossOption" :height="200" label="双方每分钟损失价值，可选择分钟查看单位" @select="selectLoss" />
-      <label class="loss-picker" v-if="lossMinutes.length">损失明细 <select v-model="lossMinute"><option :value="null">选择分钟</option><option v-for="m in lossMinutes" :key="m" :value="m">{{ mmss(m*60000) }}–{{ mmss((m+1)*60000) }}</option></select></label>
-      <ul v-if="selectedLosses.length"><li v-for="(l,i) in selectedLosses" :key="i">{{ teamLabel(l.team) }} · {{ l.owner }} · {{ l.unit }} · {{ count(l.cost) }}</li></ul>
-      <p v-if="!lossMinutes.length" class="hint">暂无带阵亡时间的单位记录。</p>
-      <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => { selectedRange = [start, end]; lossMinute = null; }" />
+      <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
       <SupplyAnalysis :key="'supply-'+view.analysis.matchId" :players="view.supply" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" />
+
 
       <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
       <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击类型排除或恢复，点击柱条只看该类型。</p>
@@ -521,7 +496,12 @@ function pendingText(row: HistoryRow | null | undefined): string {
 </template>
 
 <style scoped>
-.loss-picker select {color-scheme:dark;color:var(--bax-fg);background:var(--bax-surface-2);border:1px solid var(--bax-border);border-radius:var(--bax-radius-xs);padding:4px 6px;font:inherit;}
+.curve-switches {display:flex;flex-wrap:wrap;gap:4px 10px;}
+.curve-switches button {display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--bax-fg);padding:4px;border:0;}
+.curve-switches button[aria-pressed="false"] {color:var(--bax-muted);text-decoration:line-through;}
+.curve-switches i {width:30px;border-top:2px solid;}
+.curve-switches i.dashed {border-top-style:dashed;}
+.curve-switches button[aria-pressed="false"] i {opacity:.4;}
 .composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-fg); font-size: calc(12px * var(--bax-font-scale)); }
 .report h3 { color: var(--bax-fg); font-size: calc(14px * var(--bax-font-scale)); }
 .composition-head { margin-top: 20px; font-size: calc(12px * var(--bax-font-scale)); }

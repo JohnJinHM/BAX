@@ -39,11 +39,12 @@ let selectionDrag: { pointerId: number; surface: HTMLElement; anchor: Point; poi
 let selectionFrame = 0;
 const plotWidth = ref(700);
 const preferences = useSetting(useSnapshot(), "ui.sortie");
-const plotHeight = ref(600);
+const heightKey = computed(() => mode.value === "players" ? "playersHeight" : "height");
+const plotHeight = ref(400);
 const resizeError = ref("");
-watch(() => preferences.value.height, (height) => { plotHeight.value = Number.isFinite(height) ? Math.max(240, Math.min(2400, height)) : 600; }, { immediate: true });
+watch(() => preferences.value[heightKey.value], (height) => { plotHeight.value = Number.isFinite(height) ? Math.max(240, Math.min(2400, height)) : (mode.value === "players" ? 400 : 600); }, { immediate: true });
 async function saveHeight() {
-  try { await saveSetting(preferences.value, "ui.sortie", { height: plotHeight.value }); resizeError.value = ""; }
+  try { await saveSetting(preferences.value, "ui.sortie", { [heightKey.value]: plotHeight.value }); resizeError.value = ""; }
   catch (error) { resizeError.value = errorText(error); }
 }
 let resizeStart: { y: number; height: number } | null = null;
@@ -99,15 +100,16 @@ const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.len
   const marks = packLanes(clusters.map((c) => {
     const first = c.entries[0];
     const tiles = unitTiles(c.entries);
-    const iconWidth = 44;
-    const tileWidth = Math.max(76, ...tiles.map((tile) => 44 + 3 + (tile.count > 1 ? (String(tile.count).length + 1) * 7 : 0) + (tile.unit.refunded ? 12 : 0)));
+    const compact = mode.value === "players";
+    const iconWidth = compact ? 34 : 44;
+    const tileWidth = Math.max(compact ? 66 : 76, ...tiles.map((tile) => iconWidth + 3 + (tile.count > 1 ? (String(tile.count).length + 1) * 7 : 0) + (tile.unit.refunded ? 12 : 0)));
     const columns = Math.max(1, Math.min(3, tiles.length, Math.floor((plotWidth.value - 10) / tileWidth)));
     const minimum = mode.value === "life" ? lifeMinimum(iconWidth, first.refunded)
-      : tiles.length === 1 ? lifeMinimum(44, first.refunded) + (tiles[0].count > 1 ? 22 : 0) : columns * tileWidth + 10;
+      : tiles.length === 1 ? lifeMinimum(iconWidth, first.refunded) + (tiles[0].count > 1 ? 22 : 0) : columns * tileWidth + 10;
     const x = Math.max(0, (c.start - start.value) / span.value * plotWidth.value);
     const lifeWidth = ((first.deathSecs ?? recordEnd.value) - Math.max(start.value, c.start)) / span.value * plotWidth.value;
     const desiredWidth = mode.value === "life" && !first.refunded ? lifeWidth : minimum;
-    const height = mode.value === "life" ? 30 : Math.ceil(tiles.length / columns) * 32 + 6;
+    const height = mode.value === "life" ? 30 : Math.ceil(tiles.length / columns) * (compact ? 24 : 32) + (compact ? 4 : 6);
     return { ...c, ...fitMark(x, desiredWidth, plotWidth.value, minimum), iconWidth, tiles, columns, height };
   }));
   const laneHeights: number[] = [];
@@ -241,7 +243,7 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 </script>
 
 <template>
-  <section class="explorer" aria-label="出兵分析">
+  <section class="explorer" :class="{ compact:mode === 'players' }" aria-label="出兵分析">
     <div class="explorer-controls">
     <div class="heading"><h3>出兵分析</h3><span v-if="mode !== 'tree'" class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
     <div class="modes" role="group" aria-label="分析视图">
@@ -387,6 +389,15 @@ select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px s
 .batch-unit :deep(.unit-icon) { width: 44px; height: 24px; flex-shrink: 0; }
 .batch-unit b { position: absolute; left: 46px; top: 4px; margin: 0; padding: 0; font-size: 11px; line-height: 12px; white-space: nowrap; /* 固定尺寸框，字号不缩放 */ }
 .mark .batch-unit .refund-corner { left: 46px; right: auto; bottom: 4px; }
+.compact .batch-unit {height:24px;}
+.compact .batch-unit :deep(.unit-icon), .compact .batch-unit :deep(.missing-unit) {width:34px;height:20px;}
+.compact .batch-unit b {left:36px;top:1px;}
+.compact .mark .batch-unit .refund-corner {left:36px;bottom:1px;}
+.compact .modes {margin:6px 0 8px;}
+.compact .modes button {padding:4px 0;}
+.compact .toolbar {margin:8px 0 5px;}
+.compact .navigator {margin:5px 0;}
+.compact .overview {height:28px;}
 .legend { margin: 10px 0 18px; line-height: 1.7; }.empty { padding: 24px 0; text-align: center; color: var(--bax-soft); }
 .analysis-bottom { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--bax-border); gap: 24px; padding-top: 16px; }.analysis-bottom > section { min-width: 0; }.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }.comparison p { font-size: calc(12px * var(--bax-font-scale)); }.comparison b { font-size: calc(16px * var(--bax-font-scale)); font-weight: 500; }.stat-line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: calc(12px * var(--bax-font-scale)); }.stat-line > span:last-child { white-space: nowrap; }.detail-list { max-height: 270px; overflow-y: auto; margin-top: 8px; }.detail-list article { padding: 10px 0; border-bottom: 1px solid var(--bax-border); }.detail-list p { margin: 4px 0; font-size: calc(12px * var(--bax-font-scale)); line-height: 1.8; }.unit-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }.text-button { border: 0; background: transparent; padding: 0; text-align: left; color: var(--bax-accent); }.text-button:hover { text-decoration: underline; }details { margin-top: 12px; }summary { cursor: pointer; color: var(--bax-soft); }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 3px; }

@@ -153,6 +153,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
           const deployedUnits = p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class}));
           return [{
             hasLocalLog: fixtureHistory.some(local => local.matchId === m.matchId),
+            relation: player?.matches.find(row => row.matchId === m.matchId)?.relation ?? null,
             playedTogether: id !== fixtureSnapshot.selfId && !!player?.matches.some(row => row.matchId === m.matchId),
             matchId:m.matchId, start:m.at, durationSecs:report.analysis.durationSecs, map:m.map,
             team:p.team, won:winner == null ? null : p.team === winner, winner,

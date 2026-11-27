@@ -2,9 +2,8 @@
 import { computed, reactive, ref, watch } from "vue";
 
 import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
-import type { Relation } from "../shared/bindings/Relation";
 import { commands, errorText, useSnapshot } from "../shared/engine";
-import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
+import { ago, minutes, percent, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import type { PlayerFight } from "../shared/bindings/PlayerFight";
 import { playerAverages, combatAxes, preferenceAxes } from "./player-analysis";
@@ -13,6 +12,7 @@ import PlayerUnitPreferences from "./PlayerUnitPreferences.vue";
 import PlayerFightArchive from "./PlayerFightArchive.vue";
 import PlayerReportPreview from "./PlayerReportPreview.vue";
 import PlayerBadges from "../shared/PlayerBadges.vue";
+import { countries } from "../../crates/bax-engine/src/spec-units.json";
 import Sparkline from "./Sparkline.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 
@@ -91,9 +91,15 @@ const historyPoints = computed(() =>
     .filter((p) => p.rating != null)
     .map((p) => ({ at: p.at, value: p.rating as number })),
 );
+const specCountry: Record<string, number> = countries;
+const factions = [{ id: 2, name: "美军" }, { id: 1, name: "俄军" }];
+const factionFavorites = computed(() => factions.map(faction => {
+  const usage = detail.value?.profile?.favoriteSpecPairs ?? [];
+  const pairs = usage.filter(pair => pair.ids.length === 2 && pair.ids.every(id => specCountry[id] === faction.id));
+  const top = pairs.filter(pair => pair.games === pairs[0]?.games);
+  return { ...faction, top };
+}));
 const maxSpecGames = computed(() => Math.max(1, ...(detail.value?.profile?.favoriteSpecs.map(s => s.games) ?? [])));
-
-const relationNames: Record<Relation, string> = { teammate: "队友", opponent: "对手", other: "其他" };
 
 function date(at: number): string {
   return new Date(at).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -187,9 +193,15 @@ async function refresh() {
       </div>
 
       <h3>专精使用</h3>
-      <div v-if="detail.profile?.lastSpecs.length" class="last-specs">
-        <span class="hint">上次专精</span>
-        <span v-for="spec in detail.profile.lastSpecs" :key="spec.ids[0]"><SpecIcon :id="spec.ids[0]!" :label="spec.name" /> {{ spec.name }}</span>
+      <div class="faction-specs">
+        <section v-for="faction in factionFavorites" :key="faction.id">
+          <h4>{{ faction.name }}常用专精</h4>
+          <div v-for="pair in faction.top" :key="pair.ids.join('-')" class="favorite-pair">
+            <span class="pair-icons"><SpecIcon v-for="id in pair.ids" :key="id" :id="id" :label="pair.name" /></span>
+            <span>{{ pair.name }}</span><small>{{ pair.games }} 场</small>
+          </div>
+          <small v-if="!faction.top.length" class="hint">暂无已识别组合</small>
+        </section>
       </div>
       <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
       <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
@@ -207,36 +219,9 @@ async function refresh() {
       <h3>ELO 变化</h3>
       <Sparkline :points="historyPoints" />
 
-      <h3>
-        同场 {{ detail.encounters.total }} 场：队友 {{ detail.encounters.asTeammate }}，对手 {{ detail.encounters.asOpponent }}
-      </h3>
-      <table v-if="detail.matches.length">
-        <thead>
-          <tr>
-            <th class="left">时间</th>
-            <th class="left">地图</th>
-            <th class="left">关系</th>
-            <th class="left">当时的名字</th>
-            <th>时长</th>
-            <th>状态</th>
-            <th>比赛</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="m in detail.matches" :key="m.matchId">
-            <td class="left num">{{ date(m.at) }}</td>
-            <td class="left">{{ m.map ?? "–" }}</td>
-            <td class="left" :class="m.relation">{{ relationNames[m.relation] }}</td>
-            <td class="left">{{ m.logName ?? "–" }}</td>
-            <td class="num">{{ m.durationMs != null ? mmss(m.durationMs) : "–" }}</td>
-            <td>{{ phaseNames[m.phase] }}</td>
-            <td class="num"><a href="#" class="match" title="打开这场比赛" @click.prevent="preview = {id:m.matchId, map:m.map}">查看战报</a></td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else class="hint">还没有同场记录。</p>
     </template>
-    <PlayerFightArchive v-model:fights="fights" :id="id" @preview="preview = $event" />
+
+    <PlayerFightArchive v-model:fights="fights" :id="id" :encounters="detail?.isSelf ? [] : (detail?.matches ?? [])" @preview="preview = $event" />
     <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
 
   </section>
@@ -247,8 +232,11 @@ async function refresh() {
   margin: 0;
 }
 
-.last-specs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
-.last-specs > span { display: inline-flex; align-items: center; gap: 6px; }
+.faction-specs {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px;}
+.faction-specs h4 {margin:0 0 5px;font-size:inherit;}
+.favorite-pair {display:flex;align-items:center;gap:6px;margin:4px 0;}
+.pair-icons {display:flex;flex:none;}
+.favorite-pair small {white-space:nowrap;color:var(--bax-muted);}
 .spec-chart { list-style: none; padding: 0; margin: 12px 0 24px; max-width: 760px; }
 .spec-chart li { display: grid; grid-template-columns: 28px minmax(100px, 1fr) minmax(60px, 2fr) 44px; align-items: center; gap: 10px; margin: 8px 0; }
 .spec-name { overflow-wrap: anywhere; font-size: calc(13px * var(--bax-font-scale)); }
@@ -313,43 +301,4 @@ textarea:focus {
   border-color: var(--bax-accent);
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: calc(13px * var(--bax-font-scale));
-}
-
-th,
-td {
-  padding: calc(4px * var(--bax-density)) 8px;
-  text-align: right;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--bax-border);
-}
-
-th {
-  font-weight: 500;
-  font-size: calc(12px * var(--bax-font-scale));
-  color: var(--bax-muted);
-}
-
-.left {
-  text-align: left;
-}
-
-a.match {
-  color: var(--bax-muted);
-}
-
-a.match:hover {
-  color: var(--bax-accent);
-}
-
-td.teammate {
-  color: var(--bax-good);
-}
-
-td.opponent {
-  color: var(--bax-bravo);
-}
 </style>

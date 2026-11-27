@@ -24,6 +24,7 @@ bax-core.workspace = true
 bax-engine.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 # 2.12 起要求 Rust 1.90；前端的 @tauri-apps/api 要停在同一个次版本 2.11

@@ -51,6 +51,16 @@ const overlaySliders = [
   { key: "fadeEndOpacity", label: "渐变末端不透明度", min: 0, max: 100, step: 1 },
   { key: "scale", label: "缩放", min: 80, max: 150, step: 5 },
 ] as const;
+function changeDimension(key: "width" | "expandedHeight", event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (input.value === "" || !input.validity.valid) {
+    input.value = String(appearance.value[key]);
+    return;
+  }
+  const size = key === "expandedHeight" && input.valueAsNumber > 0 ? Math.max(100, input.valueAsNumber) : input.valueAsNumber;
+  input.value = String(size);
+  void run(() => saveSetting(appearance.value, "ui.overlay", { [key]: size }));
+}
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
 const skin = useSetting(snapshot, "ui.skin");
@@ -320,6 +330,10 @@ async function exportDiag() {
           <span v-if="slider.key === 'fadeEndOpacity'" class="hint">左边缘保留的背景不透明度比例</span>
         </div>
       </template>
+      <label for="overlay-width">窗口宽度</label>
+      <div class="row"><input id="overlay-width" type="number" min="280" max="720" :value="appearance.width" @change="changeDimension('width', $event)" /><span class="hint">px</span></div>
+      <label for="overlay-height">展开高度</label>
+      <div class="row"><input id="overlay-height" type="number" min="0" max="1200" :value="appearance.expandedHeight" @change="changeDimension('expandedHeight', $event)" /><span class="hint">px，0 为自动，固定高度从 100 px 起</span></div>
       <label>显示</label>
       <div class="row">
         <button @click="run(() => commands.setOverlayVisible(!status?.overlayVisible), '已切换')">

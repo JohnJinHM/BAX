@@ -20,13 +20,13 @@ use tauri::{
 };
 
 use crate::app::AppState;
-use crate::snap;
+use crate::{placement, snap};
 
 #[cfg(any(windows, test))]
 mod recovery;
 
 pub const LABEL: &str = "overlay";
-/// 悬浮窗的位置与锁定状态，由外壳维护。
+/// 悬浮窗锁定状态。旧版保存在此的坐标用于首次恢复。
 pub const WINDOW_KEY: &str = "ui.overlay.window";
 const ALERTS_KEY: &str = "ui.alerts";
 /// 悬浮窗外观，由界面维护；外壳只读其中的 `snapEdges`。
@@ -35,8 +35,6 @@ const APPEARANCE_KEY: &str = "ui.overlay";
 const SNAP_DISTANCE: f64 = 18.0;
 /// 移动停下多久后看是否松手、是否贴边。
 const SNAP_DELAY: Duration = Duration::from_millis(150);
-/// 移动停下多久后保存位置。
-const SAVE_DELAY: Duration = Duration::from_millis(600);
 /// 锁定期间鼠标进入或离开锁按钮。载荷是 `bool`，悬浮窗据此显示按钮的悬停样式：
 /// 窗口恢复穿透后页面收不到鼠标离开的事件，不能靠 CSS 的 `:hover`。
 pub const LOCK_HOVER_EVENT: &str = "bax://overlay-lock-hover";
@@ -115,7 +113,7 @@ struct Pointer {
 #[derive(Debug, Default)]
 struct OverlayState {
     settings: Mutex<WindowSettings>,
-    /// 每次移动加一；停下一会儿之后只保存最后一次的位置。
+    /// 每次移动加一，只在最后一次移动停下后贴边。
     moves: Arc<AtomicU64>,
     pointer: Arc<Mutex<Pointer>>,
     /// 用户的显示意图与系统观测状态分开，系统隐藏窗口时仍可恢复。
@@ -153,15 +151,27 @@ pub fn create(
         .visible(false)
         .build()?;
 
-    let saved = matches!((settings.x, settings.y), (Some(_), Some(_)));
-    let position = match (settings.x, settings.y) {
-        (Some(x), Some(y)) => Some(LogicalPosition::new(x, y)),
-        _ => default_position(&window),
-    };
-    if let Some(position) = position {
-        window.set_position(position)?;
-    }
-    log_placement(&window, saved);
+    placement::attach(&window, || {
+        if let (Some(x), Some(y)) = (settings.x, settings.y) {
+            let legacy = LogicalPosition::new(x, y);
+            for monitor in window.available_monitors()? {
+                let at: PhysicalPosition<i32> = legacy.to_physical(monitor.scale_factor());
+                let area = monitor.work_area();
+                if at.x >= area.position.x
+                    && at.y >= area.position.y
+                    && at.x < area.position.x + area.size.width as i32
+                    && at.y < area.position.y + area.size.height as i32
+                {
+                    return window.set_position(at);
+                }
+            }
+        }
+        if let Some(position) = default_position(&window) {
+            window.set_position(position)?;
+        }
+        Ok(())
+    });
+    log_placement(&window);
 
     let state = OverlayState {
         settings: Mutex::new(settings),
@@ -175,7 +185,7 @@ pub fn create(
     let handle = app.clone();
     window.on_window_event(move |event| {
         if let WindowEvent::Moved(_) = event {
-            remember_position(&handle);
+            schedule_snap(&handle);
         }
     });
 
@@ -188,10 +198,9 @@ pub fn create(
 }
 
 /// 悬浮窗所在的显示器与缩放，诊断多显示器和缩放问题时用。
-fn log_placement(window: &WebviewWindow, saved: bool) {
+fn log_placement(window: &WebviewWindow) {
     let monitor = window.current_monitor().ok().flatten();
     tracing::debug!(
-        saved_position = saved,
         monitor = %monitor
             .as_ref()
             .and_then(|m| m.name())
@@ -532,21 +541,23 @@ fn geometry(window: &WebviewWindow) -> Option<(snap::Rect, snap::Rect)> {
     ))
 }
 
-/// 离工作区边缘不远时贴过去。位置变了返回 `true`，之后的移动事件会负责保存。
-fn snap_to_edges(app: &AppHandle) -> bool {
+/// 离工作区边缘不远时贴过去。
+fn snap_to_edges(app: &AppHandle) {
     let Some(window) = app.get_webview_window(LABEL) else {
-        return false;
+        return;
     };
     let (Some((rect, area)), Ok(scale)) = (geometry(&window), window.scale_factor()) else {
-        return false;
+        return;
     };
     let distance = (SNAP_DISTANCE * scale).round() as i32;
     let (x, y) = snap::snap(rect, area, distance);
     if (x, y) == (rect.x, rect.y) {
-        return false;
+        return;
     }
     tracing::debug!(dx = x - rect.x, dy = y - rect.y, "悬浮窗贴边");
-    window.set_position(PhysicalPosition::new(x, y)).is_ok()
+    if let Err(err) = window.set_position(PhysicalPosition::new(x, y)) {
+        tracing::warn!(error = %err, "悬浮窗贴边失败");
+    }
 }
 
 /// 页面按内容报告的大小，逻辑像素。开启吸附边缘时，位置和大小一起算、一次改完：
@@ -577,8 +588,8 @@ pub fn fit(app: &AppHandle, width: f64, height: f64) -> tauri::Result<()> {
     }
 }
 
-/// 拖动会连续产生很多移动事件。停下一会儿、鼠标键都松开以后按设置贴边；停下 0.6 秒后保存位置。
-fn remember_position(app: &AppHandle) {
+/// 拖动会连续产生很多移动事件。停下一会儿、鼠标键都松开以后按设置贴边。
+fn schedule_snap(app: &AppHandle) {
     let overlay = app.state::<OverlayState>();
     let ticket = overlay.moves.fetch_add(1, Ordering::SeqCst) + 1;
     let moves = Arc::clone(&overlay.moves);
@@ -598,30 +609,8 @@ fn remember_position(app: &AppHandle) {
                     return;
                 }
             }
-            if snap_to_edges(&app) {
-                return;
-            }
+            snap_to_edges(&app);
         }
-        tokio::time::sleep(SAVE_DELAY.saturating_sub(SNAP_DELAY)).await;
-        if superseded() {
-            return;
-        }
-        let Some(window) = app.get_webview_window(LABEL) else {
-            return;
-        };
-        let (Ok(position), Ok(scale)) = (window.outer_position(), window.scale_factor()) else {
-            return;
-        };
-        let logical = position.to_logical::<f64>(scale);
-        let overlay = app.state::<OverlayState>();
-        let Ok(mut settings) = overlay.settings.lock() else {
-            return;
-        };
-        settings.x = Some(logical.x);
-        settings.y = Some(logical.y);
-        save(&app, *settings);
-        drop(settings);
-        log_placement(&window, true);
     });
 }
 
@@ -633,7 +622,7 @@ fn save(app: &AppHandle, settings: WindowSettings) {
         };
         let engine = &app.state::<AppState>().engine;
         if let Err(err) = engine.set_ui_setting(WINDOW_KEY, value).await {
-            tracing::warn!(error = %err, "保存悬浮窗位置失败");
+            tracing::warn!(error = %err, "保存悬浮窗锁定状态失败");
         }
     });
 }

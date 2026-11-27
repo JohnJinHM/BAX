@@ -17,6 +17,9 @@ export interface OverlayAppearance {
   fadeEndOpacity: number;
   /** 整体缩放，0.8～1.5 */
   scale: number;
+  width: number;
+  /** 展开时的高度，0 表示跟随内容。 */
+  expandedHeight: number;
   /** 展开玩家列表；收起时只显示计时与两队均分 */
   expanded: boolean;
   autoExpand: boolean;
@@ -48,7 +51,7 @@ export type SkinSettings = Appearance;
 
 interface Settings {
   "ui.skin": SkinSettings;
-  "ui.sortie": { height: number };
+  "ui.sortie": { height: number; playersHeight: number };
   "ui.ocr": { enabled: boolean };
   "ui.overlay": OverlayAppearance;
   "ui.alerts": AlertSettings;
@@ -58,10 +61,10 @@ interface Settings {
 
 export const defaults: Settings = {
   "ui.skin": defaultAppearance,
-  "ui.sortie": { height: 600 },
+  "ui.sortie": { height: 600, playersHeight: 400 },
   "ui.ocr": { enabled: true },
   "ui.overlay": {
-    opacity: 1, fadePosition: 0.5, fadeEndOpacity: 0.2, scale: 1,
+    opacity: 1, fadePosition: 0.5, fadeEndOpacity: 0.2, scale: 1, width: 340, expandedHeight: 0,
     expanded: true, autoExpand: true, collapseBeforeBattleSecs: 60, animations: true, snapEdges: true,
   },
   "ui.alerts": { sound: true, showOverlay: true },

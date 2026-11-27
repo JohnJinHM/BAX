@@ -66,6 +66,27 @@ fn deployment_index_counts_original_sorties_and_retains_earliest_spawn() {
 }
 
 #[test]
+fn archived_rosters_identify_teammates_and_opponents_without_local_logs() {
+    let mut store = Store::open_in_memory().expect("打开归档");
+    let raw = r#"{"matchInfo":{"Data":{"11":{},"22":{},"33":{"TeamId":1},"44":{"TeamId":100}}}}"#;
+    store
+        .save_report(MatchId(9), raw, meta(Team::Alpha), t(300))
+        .expect("保存");
+    for (player, expected) in [
+        (11, None),
+        (22, Some(crate::Relation::Teammate)),
+        (33, Some(crate::Relation::Opponent)),
+        (44, Some(crate::Relation::Other)),
+    ] {
+        let fights = store
+            .player_fights(PlayerId(player), Some(PlayerId(11)))
+            .expect("读取");
+        assert_eq!(fights[0].relation, expected);
+        assert_eq!(fights[0].played_together, expected.is_some());
+    }
+}
+
+#[test]
 fn cancellation_requires_a_normal_start_and_an_end_signal() {
     let mut store = Store::open_in_memory().expect("库");
     record(&mut store, 1, 100, true, true);

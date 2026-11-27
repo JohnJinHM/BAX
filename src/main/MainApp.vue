@@ -45,9 +45,11 @@ const apiLine = computed(() => {
       </div>
     </nav>
     <main>
-      <KeepAlive include="PlayersPanel,RemindersPanel">
-        <component :is="panels[tab]" />
-      </KeepAlive>
+      <div class="panel-content">
+        <KeepAlive include="PlayersPanel,RemindersPanel">
+          <component :is="panels[tab]" />
+        </KeepAlive>
+      </div>
     </main>
   </div>
 </template>
@@ -98,6 +100,9 @@ nav button.active {
 
 main {
   overflow: auto;
+}
+
+.panel-content {
   padding: calc(20px * var(--bax-density)) calc(24px * var(--bax-density));
 }
 
@@ -108,6 +113,6 @@ main {
   nav button { padding: 5px 7px; font-size: calc(12px * var(--bax-font-scale)); }
   nav button.active { box-shadow: inset 0 -2px 0 var(--bax-nav-active-edge); }
   .status { display: none; }
-  main { padding: calc(12px * var(--bax-density)); }
+  .panel-content { padding: calc(12px * var(--bax-density)); }
 }
 </style>
