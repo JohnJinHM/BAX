@@ -14,8 +14,8 @@ const metrics = computed(() => {
   if (!a) return props.extra;
   const m = a.metrics;
   const figures: [string, number, string?][] = [
-    ["数量",a.count],["击毁单位",a.kills],["自身阵亡",a.dead],["回收",a.refunded],
-    ["摧毁建筑",m.buildings],["造成伤害",a.damage],["承受伤害",m.damageReceived],["补给消耗",m.supply," 点"],
+    ["数量",a.count],["击毁",a.kills," 单位"],["自身阵亡",a.dead],["回收",a.refunded],
+    ["摧毁建筑",m.buildings],["造成伤害",a.damage],["承受伤害",m.damageReceived],["补给消耗",m.supply," kg"],
     ["造成友伤",m.friendlyDamageDealt],["受到友伤",m.friendlyDamageReceived],
     ["自身伤害",m.selfDamage],["自毁",m.selfDestroyed],["空投",m.airdropped],
   ];
@@ -36,6 +36,7 @@ h4 {margin:0 0 3px;color:var(--bax-fg);font-size:calc(18px * var(--bax-font-scal
 dl {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,115px),1fr));gap:10px 16px;margin:0;}
 dl div {border-top:1px solid var(--bax-divider);padding-top:5px;}dd {margin:2px 0 0;font-size:calc(15px * var(--bax-font-scale));font-weight:600;}
 .key-figures {grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:15px;gap:6px 16px;}
+header > *, dt, dd {opacity:var(--bax-tree-ink,1);}
 .key-figures dd {color:var(--bax-fg);font-size:calc(22px * var(--bax-font-scale));}
 @container (max-width: 420px) {.key-figures {grid-template-columns:repeat(2,minmax(0,1fr));}}
 </style>

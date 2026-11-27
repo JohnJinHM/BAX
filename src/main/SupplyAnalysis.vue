@@ -57,7 +57,7 @@ const extra = computed(() => {
   if (!model.value || !owner.value || !side.value) return [];
   const m = model.value;
   return [
-    ...(!m.activity ? [{label:"补给消耗",value:count(m.points)+" 点"}] : []),
+    ...(!m.activity ? [{label:"补给消耗",value:count(m.points)+" kg"}] : []),
     {label:"占本队消耗",value:percentage(m.points,side.value.total)},
     {label:"占该玩家消耗",value:percentage(m.points,owner.value.consumed)},
   ];
@@ -86,12 +86,12 @@ function navigate(depth:number) {
       <button :aria-pressed="mode === 'exchange'" @click="mode = 'exchange'">队友补给往来</button>
     </div>
     <div v-show="mode === 'tree'">
-      <div class="totals"><div><span>全场消耗</span><b>{{ count(total) }} <small>点</small></b></div>
-        <div v-for="s in sides" :key="s.team"><span>{{ s.label }}</span><b>{{ count(s.total) }} <small>点</small></b></div>
+      <div class="totals"><div><span>全场消耗</span><b>{{ count(total) }} <small>kg</small></b></div>
+        <div v-for="s in sides" :key="s.team"><span>{{ s.label }}</span><b>{{ count(s.total) }} <small>kg</small></b></div>
       </div>
-      <AnalysisTreemap :groups="groups" unit="点" label="补给消耗矩形树图" :path="path" :team-view="!selectedClass"
+      <AnalysisTreemap :groups="groups" unit="kg" label="补给消耗矩形树图" :path="path" :team-view="!selectedClass"
         :view-key="JSON.stringify([selectedTeam,selectedClass,ownerId,unitKey])" :detail="!!model" @choose="drill" @navigate="navigate">
-        <template #total><template v-if="model">{{ count(model.points) }} 点</template></template>
+        <template #total><template v-if="model">{{ count(model.points) }} kg</template></template>
         <template #detail><TreemapUnitDetail v-if="owner && model && side" :name="model.name" :color="side.color"
           :icon="model.id == null ? undefined : {id:model.id,name:model.name,kind:model.class,thumbnail:model.thumbnail}"
           :activity="model.activity" :extra="extra"
@@ -105,11 +105,11 @@ function navigate(depth:number) {
       <div v-for="s in sides" :key="s.team" class="exchange"><h4>{{ s.label }}</h4>
         <div v-for="p in s.players" :key="p.id" class="bar-row" :style="{'--team':s.color}">
           <span class="player">{{ p.name }}</span>
-          <span class="half left"><i :style="{width:(p.fromAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.fromAllies) }} 点</b></span>
-          <span class="half right"><i :style="{width:(p.byAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.byAllies) }} 点</b></span>
+          <span class="half left"><i :style="{width:(p.fromAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.fromAllies) }} kg</b></span>
+          <span class="half right"><i :style="{width:(p.byAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.byAllies) }} kg</b></span>
         </div>
       </div>
-      <p>每侧刻度为 0–{{ count(maxExchange) }} 点，两侧共用中央零线。</p>
+      <p>每侧刻度为 0–{{ count(maxExchange) }} kg，两侧共用中央零线。</p>
     </template>
   </section>
 </template>

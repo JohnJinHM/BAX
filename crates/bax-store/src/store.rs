@@ -158,6 +158,8 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE report_player_units ADD COLUMN losses INTEGER NOT NULL DEFAULT 0;
      ALTER TABLE report_player_units ADD COLUMN objectives INTEGER NOT NULL DEFAULT 0;
      ALTER TABLE report_player_units ADD COLUMN supplied_allies INTEGER NOT NULL DEFAULT 0;",
+    // 玩家效率使用战报的官方累计出兵分，缺失时保留 NULL。
+    "ALTER TABLE report_player_units ADD COLUMN spawned_score INTEGER;",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -281,8 +283,8 @@ impl Store {
 
     fn open_at(path: Option<&Path>) -> Result<Store> {
         let conn = db::open_with_data_migrations(path, MIGRATIONS, true, |conn, version| {
-            // 在完整索引结构就绪后统一回填，包括已经使用第 10 版的库。
-            if version == 11 {
+            // 在完整索引结构就绪后统一回填，包括已经使用第 11 版的库。
+            if version == 12 {
                 crate::reports::backfill_player_units(conn)?;
             }
             Ok(())

@@ -89,10 +89,6 @@ const summaries = computed(() => props.teams.map((t) => {
   }).filter((x) => x.count);
   return { team: t, entries: units, value: netValue(units), classes };
 }));
-const teamScores = computed(() => props.teams.map(team => ({
-  team, value: props.players.filter(p => p.team === team)
-    .reduce((sum,p) => sum + p.units.reduce((n,u) => n + u.deployedScore, 0), 0),
-})));
 const overview = computed(() => timeBins(filtered.value, 0, fullEnd.value, fullEnd.value / 80));
 const overviewMax = computed(() => Math.max(1, ...overview.value.map((b) => b.entries.length)));
 const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.length && mode.value !== "tree").map((p) => {
@@ -254,9 +250,6 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       <button v-for="item in ([['life', '存续时间'], ['players', '出兵批次'], ['tree', '出兵分布']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
     </div>
     <template v-if="mode !== 'tree'">
-    <div class="team-scores" aria-label="双方全场累计出兵分数">
-      <span v-for="s in teamScores" :key="s.team" :style="{borderColor:teamColor(s.team)}">{{ teamLabel(s.team) }} <b>{{ count(s.value) }} 分</b></span>
-    </div>
     <div class="filters">
       <label>队伍<select v-model="team" class="dropdown-trigger"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
       <CheckFilter v-model="selectedPlayers" label="玩家" :options="playerOptions" />
@@ -355,9 +348,6 @@ h4 { font-size: calc(13px * var(--bax-font-scale)); }
 .modes { margin: 12px 0 16px; border-bottom: 1px solid var(--bax-border); gap: 16px; }
 .modes button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 8px 0; color: var(--bax-soft); }
 .modes button[aria-pressed="true"] { color: var(--bax-fg); border-bottom-color: var(--bax-accent); }
-.team-scores {display:flex;gap:16px;margin:0 0 10px;font-size:calc(12px * var(--bax-font-scale));}
-.team-scores span {border-left:3px solid;padding-left:6px;}
-.team-scores b {white-space:nowrap;}
 .filters { align-items: end; gap: 12px; }
 label { display: flex; flex-direction: column; gap: 5px; color: var(--bax-soft); font-size: calc(12px * var(--bax-font-scale)); }
 select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px solid var(--bax-faint); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); color: var(--bax-fg); max-width: 190px; }

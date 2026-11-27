@@ -145,6 +145,8 @@ pub struct FightPerformance {
     pub losses: i64,
     pub objectives: i64,
     pub supplied_allies: i64,
+    // 官方累计出兵分，含回收架次。
+    pub spawned_score: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -209,7 +211,7 @@ impl Store {
                                       WHEN 1 THEN 'bravo' WHEN 100 THEN 'spectators' END)))
                      FROM report_player_units s
                      LEFT JOIN match_players log ON log.match_id=s.match_id AND log.player_id=s.player_id
-                     LEFT JOIN players profile ON profile.id=s.player_id WHERE s.match_id=i.match_id)
+                     LEFT JOIN players profile ON profile.id=s.player_id WHERE s.match_id=i.match_id), i.spawned_score
              FROM report_player_units i JOIN match_reports r USING(match_id)
              LEFT JOIN matches m ON m.id=i.match_id
              LEFT JOIN match_players mp ON mp.match_id=i.match_id AND mp.player_id=i.player_id
@@ -262,6 +264,7 @@ impl Store {
                     losses: row.get(14)?,
                     objectives: row.get(15)?,
                     supplied_allies: row.get(16)?,
+                    spawned_score: row.get(18)?,
                 },
                 deployment: serde_json::from_str(&row.get::<_, String>(11)?)
                     .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,

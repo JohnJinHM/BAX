@@ -377,7 +377,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
               <div><dt>损失价值</dt><dd class="num">{{ count(t.lossesScore) }} 分</dd></div>
               <div><dt>击毁 / 损失</dt><dd class="num">{{ count(t.destruction) }} / {{ count(t.losses) }}</dd></div>
               <div><dt>占点</dt><dd class="num">{{ count(t.objectives) }}</dd></div>
-              <div><dt>补给消耗</dt><dd class="num">{{ count(t.supplyConsumed) }} 点</dd></div>
+              <div><dt>补给消耗</dt><dd class="num">{{ count(t.supplyConsumed) }} kg</dd></div>
             </dl>
           </template>
         </div>
@@ -436,7 +436,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
               <td class="num">{{ count(p.lossesScore) }}</td>
               <td class="num">{{ count(p.destruction) }} / {{ count(p.losses) }}</td>
               <td class="num">{{ count(p.objectives) }}</td>
-              <td class="num">{{ count(p.supplyConsumed) }}</td>
+              <td class="num">{{ count(p.supplyConsumed) }}<template v-if="p.supplyConsumed != null"> kg</template></td>
               <td class="num">{{ p.sorties }}<span v-if="p.refunded" class="hint">（回收 {{ p.refunded }}）</span></td>
               <td class="num">{{ p.dead }}</td>
               <td class="num">{{ p.lastSpawnSecs != null ? mmss(p.lastSpawnSecs * 1000) : "–" }}</td>

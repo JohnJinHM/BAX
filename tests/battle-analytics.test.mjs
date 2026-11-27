@@ -37,16 +37,24 @@ test('team columns keep the perspective team left even on a narrow plot or with 
   assert.deepEqual(teamColumns([{value:0}],200,100),[]);
 });
 
-test('radars average player-games, count only supplies given to allies and omit ineligible games', () => {
+test('radars average each player-game rate and omit ineligible games', () => {
   const model = {id:5,name:'Scout',class:'recon'};
-  const a = {team:'alpha', performance:{kills:8,losses:2,objectives:1,suppliedAllies:200},
+  const a = {team:'alpha', durationSecs:600, performance:{kills:8,losses:2,objectives:1,spawnedScore:2000},
     composition:[{class:'recon',count:2},{class:'supply',count:2}],opening:[],deployedUnits:[model]};
-  const b = {...a,team:'bravo',performance:{kills:4,losses:0,objectives:3,suppliedAllies:0},
+  const b = {...a,team:'bravo',durationSecs:1800,performance:{kills:4,losses:0,objectives:3,spawnedScore:10200},
     composition:[{class:'infantry',count:8}],opening:[model]};
   const fights = [a,b,{...a,team:'spectators'}, {...a,composition:[],opening:null,deployedUnits:[]}];
   const result = playerAverages(fights);
   assert.equal(result.games,2);
-  assert.deepEqual(result.combat,[6,2,75,100]);
+  assert.deepEqual(result.combat,[6,2,75,270]);
+  assert.equal(result.efficiencyGames,2);
+  const missing = {...a,performance:{...a.performance,spawnedScore:null}};
+  const partial = playerAverages([a,missing,{...b,durationSecs:0}]);
+  assert.equal(partial.games,3);
+  assert.equal(partial.efficiencyGames,1);
+  assert.equal(partial.combat[3],200);
+  assert.equal(playerAverages([missing]).combat[3],null);
+  assert.equal(playerAverages([{...a,performance:{...a.performance,spawnedScore:0}}]).combat[3],0);
   assert.deepEqual(result.preferences,[50,50,0,0,0,0,0,0]);
   assert.equal(preferredModels(fights,true).samples,2);
   assert.equal(preferredModels(fights,true).top[0].games,1);
@@ -68,11 +76,22 @@ test('model details merge variants without mutating source records or losing tim
   assert.equal(first.metrics.supply,17);
 });
 
-test('radar axes keep defaults for absent and invalid overrides and preserve valid per-axis settings', async () => {
-  const {calibratedAxes,combatAxes,preferenceAxes} = await moduleFrom('player-analysis.ts');
-  const saved = {kills:48.25,objectives:0,survival:101,alliedSupply:'broken',recon:15.5,jet:Infinity};
-  assert.deepEqual(calibratedAxes(combatAxes,saved).map(a=>a.base),[48.25,2.44,48.129,2030.05]);
+test('effectiveness uses calibrated ranges while preferences keep independent reference shares', async () => {
+  const {calibratedAxes,combatAxes,preferenceAxes,axisRatio} = await moduleFrom('player-analysis.ts');
+  assert.deepEqual(combatAxes.map(a=>[a.low,a.base]),[[10,50],[1,3],[30,70],[200,340]]);
+  assert.deepEqual(preferenceAxes.map(a=>a.base),[20,28,6,10,6,8,10,12]);
+  for(const axis of combatAxes) {
+    assert.equal(axisRatio(axis,axis.low-1),0);
+    assert.equal(axisRatio(axis,axis.low),0);
+    assert.equal(axisRatio(axis,(axis.low+axis.base)/2),.5);
+    assert.equal(axisRatio(axis,axis.base),1);
+    assert.equal(axisRatio(axis,axis.base+(axis.base-axis.low)/2),1.5);
+  }
+  const saved = {kills:48.25,'kills.low':5,'kills.high':45,'objectives.low':6,'survival.high':101,
+    'efficiency.high':Infinity,recon:15.5,jet:0};
+  const calibrated = calibratedAxes(combatAxes,saved);
+  assert.deepEqual(calibrated.map(a=>[a.low,a.base]),[[5,45],[1,3],[30,70],[200,340]]);
   assert.equal(calibratedAxes(preferenceAxes,saved)[0].base,15.5);
-  assert.equal(calibratedAxes(preferenceAxes,saved).at(-1).base,11.947);
-  assert.deepEqual(calibratedAxes(combatAxes,{}),combatAxes);
+  assert.equal(calibratedAxes(preferenceAxes,saved).at(-1).base,12);
+  assert.equal(axisRatio(preferenceAxes[0],30),1.5);
 });

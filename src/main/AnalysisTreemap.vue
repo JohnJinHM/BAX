@@ -91,7 +91,7 @@ function animate(el: Element, entering: boolean, done: () => void) {
   const zoom = "translate("+origin.x*100+"%,"+origin.y*100+"%) scale("+Math.max(.015,origin.width)+","+Math.max(.015,origin.height)+")";
   const initial = forward ? zoom : "none";
   const end = forward ? "none" : zoom;
-  // Fade labels and dividers at their natural size. Only the color fields move.
+  // Fade the labels before zooming. Tile outlines travel with their color fields.
   const frames = entering ? [
     { offset:0, transform:initial, opacity:0, "--bax-tree-ink":"0" },
     { offset:.2, transform:initial, opacity:0, "--bax-tree-ink":"0", easing:"cubic-bezier(.2,.75,.25,1)" },
@@ -129,7 +129,7 @@ function animate(el: Element, entering: boolean, done: () => void) {
         <div :key="viewKey" class="panel" :class="{ 'detail-panel': detail }">
           <slot v-if="detail" name="detail" />
           <template v-else>
-            <p v-if="weighted.every(g => !g.value)" class="empty">{{ unit === "点" ? "暂无补给消耗记录" : "暂无可绘制的出兵分数" }}</p>
+            <p v-if="weighted.every(g => !g.value)" class="empty">{{ unit === "kg" ? "暂无补给消耗记录" : "暂无可绘制的出兵分数" }}</p>
             <div v-for="g in layout" :key="g.item.key" class="group" :style="{ ...style(g.rect), '--team':g.item.color }">
               <strong v-if="g.item.label" class="group-name" :style="{height:g.top+'px'}"><span>{{ g.item.label }}</span><span v-if="teamView" class="group-total">{{ count(g.item.total ?? g.item.value) }} {{ unit }}</span></strong>
               <div class="tiles" :style="{top:g.top+'px'}">
@@ -167,16 +167,16 @@ nav {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0;}
 .back {display:inline-flex;align-items:center;gap:4px;padding:4px 8px;min-height:30px;}
 .path {list-style:none;margin:0;padding:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-wrap:anywhere;}
 .path li {display:inline-flex;align-items:baseline;gap:6px;}.path a {color:var(--bax-accent);text-underline-offset:3px;}
-.tile > *, .group-name > *, .detail-panel > *, .empty {opacity:var(--bax-tree-ink);}
+.tile > *, .group-name > *, .empty {opacity:var(--bax-tree-ink);}
 .total {margin-left:auto;}
 .surface {position:relative;height:clamp(280px,34vw,420px);background:var(--bax-surface-2);overflow:hidden;isolation:isolate;}
 .panel {position:absolute;inset:0;transform-origin:top left;background:var(--bax-surface-2);}
 .panel[inert] {pointer-events:none;}.detail-panel {overflow:auto;}
 .group,.tiles,.tile {position:absolute;overflow:hidden;}.tiles {inset:0;}
-.group-name {display:flex;align-items:center;justify-content:space-between;gap:4px;padding:3px 8px;border-left:3px solid color-mix(in srgb,var(--team) calc(var(--bax-tree-ink)*100%),transparent);background:color-mix(in srgb,var(--team) 24%,var(--bax-surface-solid));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:calc(13px * var(--bax-font-scale));}
+.group-name {display:flex;align-items:center;justify-content:space-between;gap:4px;padding:3px 8px;border-left:3px solid var(--team);background:color-mix(in srgb,var(--team) 24%,var(--bax-surface-solid));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:calc(13px * var(--bax-font-scale));}
 .group-name span {overflow:hidden;text-overflow:ellipsis;}.group-total {flex:none;}
-.tile {box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;margin:0;padding:6px 10px;border:1px solid color-mix(in srgb,var(--bax-surface-solid) calc(var(--bax-tree-ink)*100%),transparent);border-radius:0;line-height:1.15;cursor:pointer;}
-.tile:hover,.tile:focus-visible {outline:2px solid color-mix(in srgb,currentColor calc(var(--bax-tree-ink)*100%),transparent);outline-offset:-3px;z-index:1;}
+.tile {box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;margin:0;padding:6px 10px;border:1px solid var(--bax-surface-solid);border-radius:0;line-height:1.15;cursor:pointer;}
+.tile:hover,.tile:focus-visible {outline:2px solid currentColor;outline-offset:-3px;z-index:1;}
 .tile-name,.tile small,.tile b {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 .tile b {font-size:clamp(16px,2vw,26px);font-weight:600;}.tile-name {font-size:calc(14px * var(--bax-font-scale));}.tile small {font-size:calc(12px * var(--bax-font-scale));}
 .tile.small {padding:2px 4px;gap:0;}.small b,.small .tile-name {font-size:calc(12px * var(--bax-font-scale));}.tile.tiny {padding:1px 2px;}.tiny b,.tiny .tile-name,.tiny small {font-size:calc(11px * var(--bax-font-scale));}

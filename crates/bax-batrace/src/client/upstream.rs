@@ -72,7 +72,9 @@ fn normalize_report(value: &mut Value) -> Result<(), ApiError> {
                                     && *n >= i64::MIN as f64
                                     && *n < 9_223_372_036_854_775_808.0
                             })
-                            .ok_or_else(|| ApiError::Decode("单位补给点数不是有效整数".into()))?;
+                            .ok_or_else(|| {
+                                ApiError::Decode("单位补给消耗量（kg）不是有效整数".into())
+                            })?;
                         *v = json!(n as i64);
                     }
                 }

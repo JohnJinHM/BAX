@@ -181,8 +181,11 @@ async function refresh() {
       <div><label>场均时长</label><span class="num">{{ minutes(detail.profile?.ranked?.averageMinutes) }}</span></div>
       <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
     </div>
-    <PlayerRadar title="作战效能" :axes="combatAxes" :values="averages.combat" :games="averages.games" />
-    <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" :warn-small-sample="archiveReady" />
+    <div class="radars">
+      <PlayerRadar title="作战效能" :axes="combatAxes" :values="averages.combat" :games="averages.games" :efficiency-games="averages.efficiencyGames" />
+      <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" />
+      <p v-if="archiveReady && Math.min(averages.efficiencyGames, averages.preferenceGames) < 5" class="sample-warning" role="status">部分统计的有效对局不足 5 场，作战效能与单位偏好可能不准确。可点击「刷新资料」补充近期战报。</p>
+    </div>
     </div>
     <p v-else-if="loading" class="hint">正在读取…</p>
 
@@ -269,9 +272,11 @@ async function refresh() {
 }
 
 .detail {container-type:inline-size;}
-.overview {display:grid;grid-template-columns:minmax(185px,1fr) repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin:20px 0 8px;}
-@container (max-width:760px) {.overview {grid-template-columns:repeat(2,minmax(0,1fr));}.overview .stats {grid-column:1/-1;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));}}
-@container (max-width:470px) {.overview {grid-template-columns:1fr;}.overview .radar {width:100%;}}
+.overview {display:grid;grid-template-columns:minmax(185px,1fr) minmax(0,2fr);align-items:start;gap:16px;margin:20px 0 8px;}
+.radars {min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;}
+.sample-warning {grid-column:1/-1;text-align:center;margin:0;font-size:calc(12px * var(--bax-font-scale));line-height:1.45;color:#f4a261;}
+@container (max-width:760px) {.overview {grid-template-columns:minmax(0,1fr);}.overview .stats {grid-column:1/-1;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));}}
+@container (max-width:470px) {.radars {grid-template-columns:minmax(0,1fr);}.overview .radar {width:100%;}}
 .stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
