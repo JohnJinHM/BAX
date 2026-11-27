@@ -28,10 +28,11 @@ const points = computed(() => ratios.value.map((n,i) => n == null ? null : posit
 const complete = computed(() => points.value.every(p => p != null));
 const shape = computed(() => points.value.flatMap(p => p ? [p.x+","+p.y] : []).join(" "));
 const format = (v:number) => v.toLocaleString("zh-CN",{maximumFractionDigits:1});
-function displayValue(i:number) {
+function displayValue(i:number, compact = false) {
   const value = props.values[i];
   if (!props.games || value == null) return "–";
-  const unit = axes.value[i].unit;
+  const { key, unit } = axes.value[i];
+  if (compact && key === "efficiency") return format(value)+"/分钟";
   return format(value)+(unit === "%" ? "" : " ")+unit;
 }
 const benchmark = computed(() => ring(axes.value.map(axis => 68 * axisRatio(axis, referenceValue(axis)) / max.value)));
@@ -67,8 +68,8 @@ const tips = computed(() => [
       <polyline v-else-if="games" :points="shape" class="data partial" />
       <g v-for="(axis,i) in axes" :key="axis.label" class="axis-tip" role="img" :aria-label="tips[i].title+'，'+tips[i].detail" v-bind="trigger(axis.key)">
         <circle v-if="points[i]" :cx="points[i]!.x" :cy="points[i]!.y" r="2.5" />
-        <text :x="position(i,84).x" :y="position(i,85).y-2" :text-anchor="Math.abs(position(i,1).x-150)<0.1 ? 'middle' : position(i,1).x>150 ? 'start' : 'end'">
-          {{ axis.label }}<tspan :x="position(i,84).x" dy="14">{{ displayValue(i) }}</tspan>
+        <text :class="{ 'efficiency-label': axis.key === 'efficiency' }" :x="position(i,84).x" :y="position(i,85).y-2" :text-anchor="Math.abs(position(i,1).x-150)<0.1 ? 'middle' : position(i,1).x>150 ? 'start' : 'end'">
+          {{ axis.label }}<tspan :x="position(i,84).x" dy="14">{{ displayValue(i, true) }}</tspan>
         </text>
       </g>
     </svg>
@@ -82,6 +83,8 @@ h4 {margin:0;font-size:calc(14px * var(--bax-font-scale));}small,.legend {color:
 svg {display:block;width:100%;max-height:224px;}.grid {stroke:var(--bax-border);fill:none;}.benchmark {fill:none;stroke:var(--bax-muted);stroke-dasharray:4 3;stroke-width:1.6;}
 .data {fill:color-mix(in srgb,var(--bax-accent) 16%,transparent);stroke:var(--bax-accent);stroke-width:2;}.partial {fill:none;}circle {fill:var(--bax-accent);}
 text {fill:var(--bax-fg);font-size:calc(12px * var(--bax-font-scale));}tspan {fill:var(--bax-muted);font-size:calc(11px * var(--bax-font-scale));}
+/* 效率轴标签右对齐于 x=66，长数值向内移，给图表左边留出 2px。 */
+.efficiency-label {transform-box:fill-box;transform:translateX(max(0px, calc(100% - 64px)));}
 .legend {display:flex;align-items:center;justify-content:center;gap:6px;}.legend i {width:15px;border-top:2px solid var(--bax-accent);}.legend .base {margin-left:6px;border-top:2px dashed var(--bax-muted);}
 .axis-tip,.legend span {cursor:help;}
 .axis-tip text {pointer-events:bounding-box;}
