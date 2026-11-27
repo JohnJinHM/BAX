@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
 import type { MatchAnalysis } from "../shared/bindings/MatchAnalysis";
 import type { PlayerReport } from "../shared/bindings/PlayerReport";
 import type { Team } from "../shared/bindings/Team";
@@ -18,6 +18,14 @@ import { useSetting, saveSetting } from "../shared/settings";
 const props = defineProps<{ analysis: MatchAnalysis; players: PlayerReport[]; teams: Team[]; teamLabel: (team: Team) => string; teamColor: (team: Team | null) => string }>();
 const emit = defineEmits<{ range: [start: number, end: number] }>();
 const mode = ref<"tree" | "players" | "life">("life");
+const explorer = ref<HTMLElement | null>(null);
+const controls = ref<HTMLElement | null>(null);
+const laneId = useId();
+const expandedPlayers = ref(new Set<number>());
+function togglePlayer(id: number) {
+  if (expandedPlayers.value.has(id)) expandedPlayers.value.delete(id);
+  else expandedPlayers.value.add(id);
+}
 const team = ref("");
 const selectedPlayers = ref<(string | number)[]>([]);
 const selectedKinds = ref<(string | number)[]>(Object.keys(unitClassNames));
@@ -95,6 +103,8 @@ const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.len
   const units = filtered.value.filter((s) => s.player === p.id && (mode.value === "life"
     ? s.spawnSecs <= end.value && (s.refunded ? s.spawnSecs >= start.value : (s.deathSecs ?? recordEnd.value) >= start.value)
     : inRange(s, start.value, end.value)));
+  const row = { player: p, count: units.length, expanded: expandedPlayers.value.has(p.id) };
+  if (!row.expanded) return { ...row, marks: [], height: 0 };
   const clusters = mode.value === "life" ? units.map((s) => ({ entries: [s], start: s.spawnSecs, end: s.spawnSecs }))
     : clusterNearby(units, span.value, plotWidth.value, batch.value);
   const marks = packLanes(clusters.map((c) => {
@@ -115,8 +125,7 @@ const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.len
   const laneHeights: number[] = [];
   for (const mark of marks) laneHeights[mark.lane] = Math.max(laneHeights[mark.lane] ?? 0, mark.height + 6);
   const positioned = marks.map((mark) => ({ ...mark, top: 6 + laneHeights.slice(0, mark.lane).reduce((sum, height) => sum + height, 0) }));
-  return { player: p, marks: positioned, height: Math.max(48, laneHeights.reduce((sum, height) => sum + height, 0) + 12) };
-
+  return { ...row, marks: positioned, height: Math.max(48, laneHeights.reduce((sum, height) => sum + height, 0) + 12) };
 }));
 function setRange(a: number, b: number) {
   const lo = Math.max(0, Math.min(fullEnd.value, Math.round(Math.min(a, b))));
@@ -227,7 +236,7 @@ let resizeFrame = 0;
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
     cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => { plotWidth.value = Math.max(150, entry.contentRect.width - 164); });
+    resizeFrame = requestAnimationFrame(() => { plotWidth.value = Math.max(1, entry.contentRect.width); });
   });
   if (plot.value) observer.observe(plot.value);
 });
@@ -236,15 +245,22 @@ watch(plot, (current, previous) => {
   if (current) observer?.observe(current);
 });
 onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(resizeFrame); closeSelection(true); });
-watch(() => props.analysis.matchId, () => { start.value = 0; end.value = fullEnd.value; selected.value = []; resetFilters(); }, { immediate: true });
+watch(() => props.analysis.matchId, () => { start.value = 0; end.value = fullEnd.value; selected.value = []; expandedPlayers.value.clear(); resetFilters(); }, { immediate: true });
 watch([scopeStart, scopeEnd], () => emit("range", scopeStart.value, scopeEnd.value), { immediate: true });
 watch([filtered, mode, scopeStart, scopeEnd], () => { closeSelection(); selected.value = []; });
-watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop = 0; });
+watch(mode, async () => {
+  // 在切换内容高度之前，判断工具栏是否已经吸顶。
+  const pinned = explorer.value && controls.value &&
+    controls.value.getBoundingClientRect().top > explorer.value.getBoundingClientRect().top + 1;
+  await nextTick();
+  if (plot.value) plot.value.scrollTop = 0;
+  if (pinned) explorer.value?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+});
 </script>
 
 <template>
-  <section class="explorer" :class="{ compact:mode === 'players' }" aria-label="出兵分析">
-    <div class="explorer-controls">
+  <section ref="explorer" class="explorer" :class="{ compact:mode === 'players' }" aria-label="出兵分析">
+    <div ref="controls" class="explorer-controls">
     <div class="heading"><h3>出兵分析</h3><span v-if="mode !== 'tree'" class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
     <div class="modes" role="group" aria-label="分析视图">
       <button v-for="item in ([['life', '存续时间'], ['players', '出兵批次'], ['tree', '出兵分布']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
@@ -274,16 +290,23 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       </div>
 
       <p v-if="mode === 'life'" class="selection-help muted">空白处拖动框选；Shift + 点击增减选择，Shift + 框选追加。Esc 取消框选。</p>
-      <div class="axis" :style="{ width: `${plotWidth + 164}px` }"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
+      <div class="axis" :style="{ width: `${plotWidth}px` }"><span v-for="(tick, i) in ticks" :key="i">{{ time(tick) }}</span></div>
     </template>
     </div>
     <DeploymentTreemap v-if="mode === 'tree'" :players="players" :teams="teams" :team-label="teamLabel" :team-color="teamColor" />
     <template v-else>
-    <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }" @scroll="moveSelection()">
-        <Transition name="analysis-view" mode="out-in"><div :key="mode" ref="selectionSurface" class="plot-content" :class="{ selecting: box }" :tabindex="mode === 'life' ? 0 : undefined" :aria-label="mode === 'life' ? '存续时间单位选择' : undefined" @pointerdown="beginSelection" @pointermove="moveSelection" @pointerup="finishSelection" @pointercancel="closeSelection(true)" @lostpointercapture="closeSelection(true)" @keydown="escapeSelection">
-        <div v-for="row in rows" :key="row.player.id" class="timeline-row" :style="{ minHeight: `${row.height}px` }">
-          <button class="owner" :style="{ color: teamColor(row.player.team) }" @click="selectedPlayers = [row.player.id]">{{ playerName(row.player.id) }}<small>{{ mode === 'life' ? '记录存续' : `${row.marks.reduce((n, m) => n + m.entries.length, 0)} 次出兵` }}</small></button>
-          <div class="lane" :style="{ height: `${row.height}px` }">
+    <div ref="plot" class="plot" :style="{ maxHeight: `${plotHeight}px` }" @scroll="moveSelection()">
+        <div :key="mode" ref="selectionSurface" class="plot-content" :class="{ selecting: box }" :tabindex="mode === 'life' ? 0 : undefined" :aria-label="mode === 'life' ? '存续时间单位选择' : undefined" @pointerdown="beginSelection" @pointermove="moveSelection" @pointerup="finishSelection" @pointercancel="closeSelection(true)" @lostpointercapture="closeSelection(true)" @keydown="escapeSelection">
+        <div v-for="row in rows" :key="row.player.id" class="timeline-row">
+          <div class="player-heading">
+            <button type="button" class="player-toggle" :aria-expanded="row.expanded" :aria-controls="`${laneId}-${row.player.id}`" @click="togglePlayer(row.player.id)">
+              <span class="chevron" aria-hidden="true"></span>
+              <span class="player-name" :style="{ color: teamColor(row.player.team) }">{{ playerName(row.player.id) }}</span>
+              <small>{{ count(row.count) }} {{ mode === 'life' ? '条记录' : '次出兵' }}</small>
+            </button>
+            <button v-if="row.expanded" class="only-player text-button" @click="selectedPlayers = [row.player.id]">只看此玩家</button>
+          </div>
+          <div v-show="row.expanded" :id="`${laneId}-${row.player.id}`" class="lane" :style="{ height: `${row.height}px` }">
             <i v-for="n in 5" :key="n" class="gridline" :style="{ left: `${(n - 1) * 25}%` }" />
             <button v-for="mark in row.marks" :key="mark.entries[0].key" :data-key="mark.entries[0].key" class="mark" :class="{ batch: mode !== 'life', life: mode === 'life' && !mark.entries[0].refunded, selected: mark.entries.some((s) => selectedSet.has(s.key)) }" :style="{ left: `${mark.x}px`, top: `${mark.top}px`, height: `${mark.height}px`, width: `${mark.width}px`, '--team-color': teamColor(row.player.team) }" :title="title(mark.entries)" :aria-label="title(mark.entries)" :aria-pressed="mark.entries.some((s) => selectedSet.has(s.key))" @click="select(mark.entries, $event)">
               <template v-if="mode === 'life'">
@@ -307,9 +330,9 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       <p v-if="!filtered.length" class="empty">没有符合筛选的出兵记录。<button @click="resetFilters">清除筛选</button></p>
       <p v-else-if="!scoped.length && mode !== 'life'" class="empty">所选时间范围内没有出兵。</p>
         <div v-if="box" class="selection-box" :style="{ left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px` }" aria-hidden="true" />
-        </div></Transition>
+        </div>
     </div>
-    <div class="resize-handle" role="separator" tabindex="0" aria-label="调整出兵时间线高度" aria-orientation="horizontal" :aria-valuenow="plotHeight" :aria-valuemin="240" :aria-valuemax="2400" @pointerdown="resizeBegin" @pointermove="resizeMove" @pointerup="resizeEnd" @pointercancel="resizeEnd" @lostpointercapture="resizeEnd" @keydown="resizeKey"><span /></div>
+    <div class="resize-handle" role="separator" tabindex="0" aria-label="调整出兵时间线最大高度" aria-orientation="horizontal" :aria-valuenow="plotHeight" :aria-valuemin="240" :aria-valuemax="2400" @pointerdown="resizeBegin" @pointermove="resizeMove" @pointerup="resizeEnd" @pointercancel="resizeEnd" @lostpointercapture="resizeEnd" @keydown="resizeKey"><span /></div>
     <p v-if="resizeError" class="error">高度保存失败：{{ resizeError }}</p>
     <div class="symbol-legend" aria-label="图标说明">
       <span><ReturnBadge />已回收</span>
@@ -335,11 +358,6 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 <style scoped>
 .explorer { margin: 24px 0; min-width: 0; font-size: calc(13px * var(--bax-font-scale)); font-variant-numeric: tabular-nums; container-type: inline-size; }
 .explorer-controls { position: sticky; top: 0; z-index: 5; background: var(--bax-surface-solid); padding: 10px 0 2px; border-bottom: 1px solid var(--bax-border); }
-.analysis-view-enter-active { transition: opacity 180ms ease-out, transform 180ms cubic-bezier(.16, 1, .3, 1); }
-.analysis-view-leave-active { transition: opacity 100ms ease-out; }
-.analysis-view-enter-from { opacity: 0; transform: translateY(4px); }
-.analysis-view-leave-to { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .analysis-view-enter-active, .analysis-view-leave-active { transition: none; } .analysis-view-enter-from { transform: none; } }
 .heading, .toolbar, .filters, .modes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .heading { justify-content: space-between; }
 h3, h4 { margin: 0; color: var(--bax-fg); font-size: calc(14px * var(--bax-font-scale)); }
@@ -358,21 +376,29 @@ select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px s
 .ranges { display: flex; gap: 24px; }.ranges label { flex: 1; }.ranges input { width: 100%; }
 .plot { min-width: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-color: var(--bax-faint) var(--bax-surface); }
 .plot-content { position: relative; }
+@media (prefers-reduced-motion: no-preference) { .plot-content { animation: timeline-in 180ms ease-out; } }
+@keyframes timeline-in { from { opacity: 0; } to { opacity: 1; } }
 .plot-content:focus-visible { outline: 1px solid var(--bax-accent); outline-offset: -1px; }
 .plot-content.selecting { user-select: none; cursor: crosshair; }
 .selection-box { position: absolute; z-index: 3; pointer-events: none; border: 1px solid var(--bax-accent); background: color-mix(in srgb, var(--bax-accent) 15%, transparent); }
 .selection-help { margin: 8px 0; }
 .detail-list { scrollbar-color: var(--bax-faint) var(--bax-surface); }
-.timeline-row:hover, .stat-line:hover, .detail-list article:hover, .stat-line:focus-within, .detail-list article:focus-within { background: var(--bax-row-hover); }
+.player-heading:hover, .stat-line:hover, .detail-list article:hover, .stat-line:focus-within, .detail-list article:focus-within { background: var(--bax-row-hover); }
 .resize-handle { height: 18px; display: grid; place-items: center; cursor: ns-resize; touch-action: none; border-top: 1px solid var(--bax-border); }
 .resize-handle span { width: 40px; height: 3px; background: var(--bax-faint); border-radius: min(2px, var(--bax-radius-xs)); }
 .resize-handle:hover span, .resize-handle:focus-visible span { background: var(--bax-accent); }
 .resize-handle:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 2px; }
-.axis, .timeline-row { display: grid; grid-template-columns: 152px minmax(150px, 1fr); gap: 12px; }
-.axis { max-width: 100%; padding: 8px 0; color: var(--bax-soft); font-size: calc(11px * var(--bax-font-scale)); }
-.axis > div { display: flex; justify-content: space-between; }.timeline-row { border-top: 1px solid var(--bax-border); }
-.owner { text-align: left; border: 0; border-radius: 0; background: transparent; padding: 6px 0; overflow-wrap: anywhere; min-width: 0; align-self: start; }.owner small { display: block; font-size: calc(11px * var(--bax-font-scale)); margin-top: 2px; }
-.lane { position: relative; min-width: 150px; }.gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bax-border); pointer-events: none; }
+.axis { display: flex; justify-content: space-between; max-width: 100%; padding: 8px 0; color: var(--bax-soft); font-size: calc(11px * var(--bax-font-scale)); }
+.timeline-row + .timeline-row { border-top: 1px solid var(--bax-border); }
+.player-heading { display: flex; align-items: center; gap: 12px; }
+.player-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 0; text-align: left; background: transparent; }
+.player-toggle:focus-visible { outline-offset: -2px; }
+.player-name { overflow-wrap: anywhere; }
+.player-toggle small { margin-left: auto; white-space: nowrap; }
+.chevron { width: 6px; height: 6px; flex: none; border: solid var(--bax-soft); border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); }
+.player-toggle[aria-expanded="true"] .chevron { transform: rotate(135deg); }
+.only-player { flex: none; margin-right: 8px; font-size: calc(12px * var(--bax-font-scale)); }
+.lane { position: relative; }.gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--bax-border); pointer-events: none; }
 .gridline:last-of-type { transform: translateX(-1px); }
 .mark { position: absolute; display: flex; align-items: center; justify-content: flex-start; gap: 3px; height: 30px; padding: 0 4px; border-radius: var(--bax-radius-xs); border-color: var(--bax-faint); overflow: hidden; font-size: 11px; /* 固定尺寸框，字号不缩放 */ }
 .mark-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.mark b { margin-left: auto; flex-shrink: 0; }
