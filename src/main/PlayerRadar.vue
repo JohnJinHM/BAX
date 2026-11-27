@@ -4,7 +4,7 @@ import HoverTip from "../shared/HoverTip.vue";
 
 import { useSetting } from "../shared/settings";
 import { useSnapshot } from "../shared/engine";
-import { axisRatio, calibratedAxes, type RadarAxis } from "./player-analysis";
+import { axisRatio, calibratedAxes, referenceValue, type RadarAxis } from "./player-analysis";
 
 const props = defineProps<{title:string; axes:RadarAxis[]; values:(number|null)[]; games:number; efficiencyGames?:number}>();
 const baselines = useSetting(useSnapshot(), "ui.radarBaselines");
@@ -34,7 +34,7 @@ function displayValue(i:number) {
   const unit = axes.value[i].unit;
   return format(value)+(unit === "%" ? "" : " ")+unit;
 }
-const referenceLabel = computed(() => ranged.value ? "高值基准" : "参考基准");
+const benchmark = computed(() => ring(axes.value.map(axis => 68 * axisRatio(axis, referenceValue(axis)) / max.value)));
 const combatHints: Record<string,string> = {
   kills:"平均每场击毁的敌方单位数量，取自战报的官方击毁统计。",
   objectives:"每场战报记录的占点次数。",
@@ -44,14 +44,14 @@ const combatHints: Record<string,string> = {
 const tips = computed(() => [
   ...axes.value.map((axis,i) => {
     const rule = combatHints[axis.key] ?? ("每场"+axis.label+"出兵次数占八类作战单位总次数的比例，再取场均。运输、补给和其他单位不计入分母。");
-    const range = axis.low == null ? "参考基准 "+format(axis.base)+axis.unit
-      : "低值 "+axis.low+" · 高值 "+axis.base+" "+axis.unit;
+    const reference = "参考基准 "+referenceValue(axis).toLocaleString("zh-CN",{maximumFractionDigits:3})+" "+axis.unit;
+    const range = axis.low == null ? reference : reference+"（低值 "+axis.low+" · 高值 "+axis.base+"）";
     const sample = axis.key === "efficiency" ? "有效对局 "+(props.efficiencyGames ?? 0)+" 场。" : "";
     return {key:axis.key,title:axis.label,detail:rule+sample+"\n\n玩家场均 "+displayValue(i)+"  ·  "+range};
   }),
   {key:"average",title:"玩家场均",detail:"实线表示玩家在有效归档对局中的场均值。轴旁标注实际数值。"},
-  {key:"baseline",title:referenceLabel.value,detail:ranged.value
-    ? "低值及以下位于中心，高值位于虚线。超过高值时按相同斜率外推，整张图同步扩大量程。上下限可在设置中调整。"
+  {key:"baseline",title:"参考基准",detail:ranged.value
+    ? "虚线表示各轴低值与高值的平均值。低值及以下位于中心。超过高值时按相同斜率外推，整张图同步扩大量程。上下限可在设置中调整。"
     : "虚线表示各兵种的参考出兵占比，可在设置中调整。"},
 ]);
 </script>
@@ -59,10 +59,10 @@ const tips = computed(() => [
   <section class="radar" :aria-label="title">
     <header><h4>{{ title }}</h4><small>{{ games }} 场</small></header>
     <HoverTip v-slot="{ trigger }" :items="tips">
-    <svg viewBox="0 0 300 218" role="group" :aria-label="title + '，实线为玩家场均，虚线为'+referenceLabel">
+    <svg viewBox="0 0 300 218" role="group" :aria-label="title + '，实线为玩家场均，虚线为参考基准'">
       <polygon v-for="fraction in [0.5,1]" :key="fraction" :points="grid(68*fraction)" class="grid" />
       <line v-for="(axis,i) in axes" :key="axis.label" x1="150" y1="106" :x2="position(i,68).x" :y2="position(i,68).y" class="grid" />
-      <polygon :points="grid(68/max)" class="benchmark" />
+      <polygon :points="benchmark" class="benchmark" />
       <polygon v-if="games && complete" :points="shape" class="data" />
       <polyline v-else-if="games" :points="shape" class="data partial" />
       <g v-for="(axis,i) in axes" :key="axis.label" class="axis-tip" role="img" :aria-label="tips[i].title+'，'+tips[i].detail" v-bind="trigger(axis.key)">
@@ -72,7 +72,7 @@ const tips = computed(() => [
         </text>
       </g>
     </svg>
-    <span class="legend"><span v-bind="trigger('average')"><i />玩家场均</span><span v-bind="trigger('baseline')"><i class="base" />{{ referenceLabel }}</span></span>
+    <span class="legend"><span v-bind="trigger('average')"><i />玩家场均</span><span v-bind="trigger('baseline')"><i class="base" />参考基准</span></span>
     </HoverTip>
   </section>
 </template>

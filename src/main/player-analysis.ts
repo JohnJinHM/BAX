@@ -34,6 +34,10 @@ export function calibratedAxes(axes: RadarAxis[], saved: Record<string, number>)
   });
 }
 
+export function referenceValue(axis: RadarAxis) {
+  return axis.low == null ? axis.base : axis.low + (axis.base - axis.low) / 2;
+}
+
 export function axisRatio(axis: RadarAxis, value: number) {
   const low = axis.low ?? 0;
   return Math.max(0,value-low) / (axis.base-low);

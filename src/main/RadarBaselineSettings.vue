@@ -57,7 +57,7 @@ async function persist(reset:boolean) {
 <template>
   <section class="card radar-settings" aria-labelledby="radar-heading">
     <h2 id="radar-heading">玩家雷达图基准</h2>
-    <p class="hint">作战效能从低值起线性绘制，低值及以下在中心，超过高值时扩大量程。单位偏好按各兵种的参考出兵占比绘制。</p>
+    <p class="hint">作战效能从低值起线性绘制，低值及以下在中心，虚线取低值与高值的平均值，超过高值时扩大量程。单位偏好按各兵种的参考出兵占比绘制。</p>
     <form @submit.prevent="persist(false)">
       <fieldset v-for="g in groups" :key="g.title" :disabled="busy">
         <legend>{{ g.title }}</legend>

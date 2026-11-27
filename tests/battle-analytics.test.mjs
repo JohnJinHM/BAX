@@ -77,13 +77,15 @@ test('model details merge variants without mutating source records or losing tim
 });
 
 test('effectiveness uses calibrated ranges while preferences keep independent reference shares', async () => {
-  const {calibratedAxes,combatAxes,preferenceAxes,axisRatio} = await moduleFrom('player-analysis.ts');
+  const {calibratedAxes,combatAxes,preferenceAxes,axisRatio,referenceValue} = await moduleFrom('player-analysis.ts');
   assert.deepEqual(combatAxes.map(a=>[a.low,a.base]),[[10,50],[1,3],[30,70],[200,340]]);
   assert.deepEqual(preferenceAxes.map(a=>a.base),[20,28,6,10,6,8,10,12]);
+  assert.deepEqual(combatAxes.map(referenceValue),[30,2,50,270]);
+  assert.deepEqual(preferenceAxes.map(referenceValue),preferenceAxes.map(a=>a.base));
   for(const axis of combatAxes) {
     assert.equal(axisRatio(axis,axis.low-1),0);
     assert.equal(axisRatio(axis,axis.low),0);
-    assert.equal(axisRatio(axis,(axis.low+axis.base)/2),.5);
+    assert.equal(axisRatio(axis,referenceValue(axis)),.5);
     assert.equal(axisRatio(axis,axis.base),1);
     assert.equal(axisRatio(axis,axis.base+(axis.base-axis.low)/2),1.5);
   }
@@ -91,7 +93,8 @@ test('effectiveness uses calibrated ranges while preferences keep independent re
     'efficiency.high':Infinity,recon:15.5,jet:0};
   const calibrated = calibratedAxes(combatAxes,saved);
   assert.deepEqual(calibrated.map(a=>[a.low,a.base]),[[5,45],[1,3],[30,70],[200,340]]);
-  assert.equal(calibratedAxes(preferenceAxes,saved)[0].base,15.5);
+  assert.equal(referenceValue(calibrated[0]),25);
+  assert.equal(referenceValue(calibratedAxes(preferenceAxes,saved)[0]),15.5);
   assert.equal(calibratedAxes(preferenceAxes,saved).at(-1).base,12);
   assert.equal(axisRatio(preferenceAxes[0],30),1.5);
 });
