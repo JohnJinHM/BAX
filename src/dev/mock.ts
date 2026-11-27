@@ -24,6 +24,7 @@ export function previewOverlayStage(stage: "waitingRoom" | "loading" | "deployme
 export function installMock(options: { locked?: boolean; collapsed?: boolean } = {}) {
   mockWindows("main");
   const params = new URLSearchParams(location.search);
+  const reportMode = params.has("pve") ? "pve" : params.has("custom") ? "custom" : "ranked";
   const previewLogDir = fixtureSnapshot.log.dir;
   if (params.has("missingLog")) {
     fixtureSnapshot.current = null;
@@ -147,23 +148,23 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         const at = localStorage.getItem(`bax.dev.fightQuery.${id}`);
         const fights = fixtureMatches.flatMap(m => {
           const report = fixtureReport(m.matchId);
-          const p = report?.analysis.players.find(row => row.id === id);
-          if (!p || !report) return [];
+          const p = report?.analysis?.players.find(row => row.id === id);
+          if (!p || !report?.analysis) return [];
           const winner = report.analysis.winner;
           const deployedUnits = p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class}));
           return [{
             hasLocalLog: fixtureHistory.some(local => local.matchId === m.matchId),
             relation: player?.matches.find(row => row.matchId === m.matchId)?.relation ?? null,
             playedTogether: id !== fixtureSnapshot.selfId && !!player?.matches.some(row => row.matchId === m.matchId),
-            matchId:m.matchId, start:m.at, durationSecs:report.analysis.durationSecs, map:m.map,
+            mode:reportMode, matchId:m.matchId, start:m.at, durationSecs:report.analysis.durationSecs, map:m.map,
             team:p.team, won:winner == null ? null : p.team === winner, winner,
-            ratingDelta:p.newRating == null || p.oldRating == null ? null : p.newRating-p.oldRating,
+            ratingDelta:reportMode !== "ranked" || p.newRating == null || p.oldRating == null ? null : p.newRating-p.oldRating,
             roster:report.analysis.players.map(({id,name,team}) => ({id,name,team})),
-            performance:{kills:p.destruction ?? 0, losses:p.losses ?? 0, objectives:p.objectives ?? 0, suppliedAllies:p.supplyByAllies ?? 0,
-              spawnedScore:p.units.reduce((sum,u) => sum+u.deployedScore,0)},
-            composition:p.composition, deployedUnits,
-            opening:deployedUnits.filter((_,i) => (p.units[i].firstSpawnSecs ?? Infinity) < 180),
-            specs:report.specs[id] ?? [],
+            performance:reportMode === "ranked" ? {kills:p.destruction ?? 0, losses:p.losses ?? 0, objectives:p.objectives ?? 0, suppliedAllies:p.supplyByAllies ?? 0,
+              spawnedScore:p.units.reduce((sum,u) => sum+u.deployedScore,0)} : null,
+            composition:reportMode === "ranked" ? p.composition : [], deployedUnits:reportMode === "ranked" ? deployedUnits : [],
+            opening:reportMode === "ranked" ? deployedUnits.filter((_,i) => (p.units[i].firstSpawnSecs ?? Infinity) < 180) : null,
+            specs:reportMode === "ranked" ? report.specs[id] ?? [] : [],
           }];
         });
         return { lastQueriedAt: at == null ? null : Number(at), fights };
@@ -192,19 +193,11 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         return null;
       case "match_report": {
         const report = fixtureReport(Number((args as { id?: number } | undefined)?.id));
-        if (report && params.has("custom")) {
-          report.mode = "custom";
-          report.spectators = [{ id: 201, name: "Dune" }];
-          report.analysis.players = report.analysis.players.filter(p => [101, 202].includes(p.id));
-          report.analysis.sorties = report.analysis.sorties.filter(s => [101, 202].includes(s.player));
-          report.analysis.teams = report.analysis.teams.map(t => {
-            const members = report.analysis.players.filter(p => p.team === t.team);
-            const sum = (key: 'deployedValue' | 'destructionScore' | 'lossesScore' | 'destruction' | 'losses' | 'objectives' | 'supplyConsumed') => members.reduce((n, p) => n + (p[key] ?? 0), 0);
-            return { ...t, players: members.length, avgRating: members[0]?.oldRating ?? null,
-              deployedValue: sum('deployedValue'), destructionScore: sum('destructionScore'), lossesScore: sum('lossesScore'),
-              destruction: sum('destruction'), losses: sum('losses'), objectives: sum('objectives'), supplyConsumed: sum('supplyConsumed'),
-              valueByMinute: t.valueByMinute.map((_, i) => members.reduce((n, p) => n + p.valueByMinute[i], 0)) };
-          });
+        if (report && reportMode !== "ranked") {
+          report.mode = reportMode;
+          report.analysis = null;
+          report.supply = [];
+          report.specs = {};
         }
         return report;
       }

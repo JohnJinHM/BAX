@@ -1133,7 +1133,6 @@ async fn importing_history_updates_encounter_counts() {
 
 // ---------------------------------------------------------------- 战后归档
 
-const REPORT: &str = include_str!("../../../fixtures/batrace/match_report.json");
 const UNITS: &str = include_str!("../../../fixtures/batrace/units.json");
 
 fn json(body: &str) -> ResponseTemplate {
@@ -1168,6 +1167,13 @@ async fn a_finished_match_is_archived_once_the_report_appears() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
     // 第一次还没收录，第二次有了
+    let mut ranked: serde_json::Value =
+        serde_json::from_str(include_str!("../../../fixtures/batrace/match_report.json"))
+            .expect("战报样本");
+    ranked["matchInfo"]["Data"]
+        .as_object_mut()
+        .expect("样本玩家名单")
+        .remove("100900");
     Mock::given(method("GET"))
         .and(path("/api/match"))
         .and(query_param("matchid", "9000001"))
@@ -1179,7 +1185,7 @@ async fn a_finished_match_is_archived_once_the_report_appears() {
     Mock::given(method("GET"))
         .and(path("/api/match"))
         .and(query_param("matchid", "9000001"))
-        .respond_with(json(REPORT))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ranked))
         .mount(&fx.server)
         .await;
     Mock::given(method("GET"))
@@ -1249,9 +1255,10 @@ async fn a_finished_match_is_archived_once_the_report_appears() {
     let view = view.expect("单位目录应该已经取到");
     assert_eq!(view.map.as_deref(), Some("Airport"));
     assert_eq!(view.self_id, Some(PlayerId(ME)));
-    assert!(!view.analysis.players.is_empty());
+    let analysis = view.analysis.expect("多人战报");
+    assert!(!analysis.players.is_empty());
     let archived = engine
-        .player_fights(view.analysis.players[0].id)
+        .player_fights(analysis.players[0].id)
         .await
         .expect("玩家归档");
     assert!(
@@ -1407,13 +1414,9 @@ async fn stb_player_history_archives_once_and_keeps_partial_results_after_restar
     assert!(!rows[0].has_local_log);
     assert!(!rows[0].played_together);
     assert_eq!(rows[0].won, Some(true));
-    assert_eq!(
-        rows[0]
-            .specs
-            .iter()
-            .flat_map(|s| s.ids.iter().copied())
-            .collect::<Vec<_>>(),
-        [12, 15]
+    assert_eq!(rows[0].mode, bax_engine::MatchMode::Custom);
+    assert!(
+        rows[0].specs.is_empty() && rows[0].composition.is_empty() && rows[0].opening.is_none()
     );
     let losing = engine
         .player_fights(PlayerId(102))
@@ -1434,7 +1437,8 @@ async fn stb_player_history_archives_once_and_keeps_partial_results_after_restar
             .expect("读取同场标识");
         assert_eq!(fights[0].played_together, together);
     }
-    assert_eq!(rows[0].rating_delta, Some(21.0));
+    assert!(rows[0].performance.is_none());
+    assert_eq!(rows[0].rating_delta, None);
     assert_eq!(rows[0].map.as_deref(), Some("伊格纳利纳核电站"));
     assert_eq!(rows[0].match_id, MatchId(99));
     assert_eq!(rows[0].start, Some(Timestamp::from_secs(1000)));

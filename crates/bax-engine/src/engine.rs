@@ -76,9 +76,10 @@ pub struct OpeningUnit {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlayerFight {
+    pub mode: crate::MatchMode,
     pub roster: Vec<bax_store::FightMember>,
     pub winner: Option<bax_core::Team>,
-    pub performance: bax_store::FightPerformance,
+    pub performance: Option<bax_store::FightPerformance>,
     pub deployed_units: Vec<OpeningUnit>,
     pub composition: Vec<FightClass>,
     /// Distinct opening units, or None when timing or deployments are unavailable.
@@ -464,10 +465,12 @@ impl Engine {
                         deployed_units.push(model);
                     }
                     PlayerFight {
+                        mode: row.mode,
                         composition: composition.into_values().collect(),
                         opening: timed.then_some(opening),
                         deployed_units,
-                        performance: row.performance,
+                        performance: (row.mode == crate::MatchMode::Ranked)
+                            .then_some(row.performance),
                         winner: row.winner,
                         roster: row.roster,
                         match_id: row.id,
@@ -479,7 +482,9 @@ impl Engine {
                         map: crate::postmatch::map_name(row.map_id, row.log_map),
                         won: row.won,
                         team: row.team,
-                        rating_delta: row.rating_delta,
+                        rating_delta: row
+                            .rating_delta
+                            .filter(|_| row.mode == crate::MatchMode::Ranked),
                         specs,
                     }
                 })

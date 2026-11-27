@@ -3,13 +3,14 @@ import type { FightClass } from "./FightClass";
 import type { FightMember } from "./FightMember";
 import type { FightPerformance } from "./FightPerformance";
 import type { MatchId } from "./MatchId";
+import type { MatchMode } from "./MatchMode";
 import type { OpeningUnit } from "./OpeningUnit";
 import type { Relation } from "./Relation";
 import type { SpecPreference } from "./SpecPreference";
 import type { Team } from "./Team";
 import type { Timestamp } from "./Timestamp";
 
-export type PlayerFight = { roster: Array<FightMember>, winner: Team | null, performance: FightPerformance, deployedUnits: Array<OpeningUnit>, composition: Array<FightClass>, 
+export type PlayerFight = { mode: MatchMode, roster: Array<FightMember>, winner: Team | null, performance: FightPerformance | null, deployedUnits: Array<OpeningUnit>, composition: Array<FightClass>, 
 /**
  * Distinct opening units, or None when timing or deployments are unavailable.
  */

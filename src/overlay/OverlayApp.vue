@@ -33,9 +33,9 @@ function setExpanded(value: boolean, automatic = false) {
 }
 const automation = new OverlayAutomation();
 const { report: result, failure: reportFailure } = useCurrentReport(snapshot);
-const specsVisible = computed(() => showOverlaySpecs(current.value));
+const specsVisible = computed(() => showOverlaySpecs(current.value, result.value));
 const specsFor = (p: RosterRow) => matchSpecs(p, current.value, result.value);
-const ratingResults = computed(() => new Map(result.value?.analysis.players.map(p => [p.id, p]) ?? []));
+const ratingResults = computed(() => new Map(result.value?.analysis?.players.map(p => [p.id, p]) ?? []));
 const selfResult = computed(() => ratingResults.value.get(result.value?.selfId ?? snapshot.value?.selfId ?? -1));
 const selfDelta = computed(() => {
   const p = selfResult.value;

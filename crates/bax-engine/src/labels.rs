@@ -181,7 +181,7 @@ pub(crate) struct History {
 fn add(labels: &mut Labels, id: PlayerId, symbol: &str, detail: String) {
     labels.entry(id).or_default().push(PlayerLabel {
         symbol: symbol.into(),
-        detail,
+        detail: format!("仅统计多人对战（5v5）。\n{detail}"),
     })
 }
 

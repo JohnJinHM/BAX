@@ -160,6 +160,20 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE report_player_units ADD COLUMN supplied_allies INTEGER NOT NULL DEFAULT 0;",
     // 玩家效率使用战报的官方累计出兵分，缺失时保留 NULL。
     "ALTER TABLE report_player_units ADD COLUMN spawned_score INTEGER;",
+    // 原文的模式只解析一次，日志后到时通过视图即时修正。
+    "ALTER TABLE matches ADD COLUMN has_ai INTEGER NOT NULL DEFAULT 0;
+     CREATE TABLE report_modes (
+         match_id INTEGER PRIMARY KEY REFERENCES match_reports(match_id) ON DELETE CASCADE,
+         raw_mode TEXT NOT NULL
+     ) STRICT;
+     CREATE VIEW classified_reports AS
+     SELECT r.match_id, CASE
+         WHEN r.raw_mode = 'pve' OR m.has_ai OR lower(substr(m.scenario, -9)) = '_skirmish' THEN 'pve'
+         WHEN r.raw_mode = 'custom' OR m.self_team = 'spectators' OR EXISTS (
+             SELECT 1 FROM match_players p WHERE p.match_id = r.match_id AND p.team = 'spectators'
+         ) THEN 'custom'
+         ELSE r.raw_mode END AS mode
+     FROM report_modes r LEFT JOIN matches m ON m.id = r.match_id;",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -286,6 +300,9 @@ impl Store {
             // 在完整索引结构就绪后统一回填，包括已经使用第 11 版的库。
             if version == 12 {
                 crate::reports::backfill_player_units(conn)?;
+            }
+            if version == 13 {
+                conn.execute_batch(include_str!("reports/index-modes.sql"))?;
             }
             Ok(())
         })?;
@@ -520,6 +537,9 @@ impl Store {
                 merged.end_cause.map(cause_to_db),
             ],
         )?;
+        if state.has_ai {
+            tx.execute("UPDATE matches SET has_ai = 1 WHERE id = ?1", [match_id])?;
+        }
 
         let seen_at = merged.discovered_at.as_millis();
         if !state.roster.is_empty() {

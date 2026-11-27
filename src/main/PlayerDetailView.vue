@@ -218,7 +218,7 @@ async function refresh() {
           <small v-if="!faction.top.length" class="hint">暂无已识别组合</small>
         </section>
       </div>
-      <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
+      <p v-if="detail.profile?.specSampleMatches" class="hint">最近 {{ detail.profile.specSampleMatches }} 场多人战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
       <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
         <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`" class="reading-row">
           <SpecIcon :id="spec.ids[0]!" :label="spec.name" />
@@ -227,7 +227,7 @@ async function refresh() {
           <span class="num spec-count">{{ spec.games }} 场</span>
         </li>
       </ul>
-      <p v-else class="hint">暂无可识别的专精战报。</p>
+      <p v-else class="hint">暂无可识别的多人战报。</p>
 
       <PlayerUnitPreferences :fights="fights" />
 

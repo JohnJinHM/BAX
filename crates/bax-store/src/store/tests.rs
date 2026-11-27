@@ -1124,6 +1124,16 @@ fn version_six_indexes_existing_reports_and_replaces_old_participants_atomically
     drop(old);
     let mut store = Store::open(&path).expect("升级");
     let id = MatchId(7);
+    assert_eq!(
+        store.report_mode(id).expect("迁移后的模式"),
+        Some(crate::MatchMode::Pve)
+    );
+    assert!(
+        store
+            .recent_player_units(PlayerId(101), 20)
+            .expect("迁移后的专精样本")
+            .is_empty()
+    );
     let units = store
         .indexed_report(id)
         .expect("旧资料的索引")

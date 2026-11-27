@@ -48,6 +48,55 @@ fn cancelled_matches_block_old_queues_manual_requests_and_catch_up() {
 }
 
 #[test]
+fn only_multiplayer_reports_fill_recent_samples_after_mode_changes() -> crate::Result<()> {
+    let mut store = Store::open_in_memory()?;
+    let id = PlayerId(11);
+    for (mid, info, mode) in [
+        (1, r#"{"Data":{"11":{}}}"#, MatchMode::Ranked),
+        (2, r#"{"Type":0,"Data":{"11":{}}}"#, MatchMode::Ranked),
+        (3, r#"{"Type":1,"Data":{"11":{}}}"#, MatchMode::Custom),
+        (
+            4,
+            r#"{"Data":{"11":{},"12":{"TeamId":100}}}"#,
+            MatchMode::Custom,
+        ),
+        (5, r#"{"Data":{"11":{},"-1":{}}}"#, MatchMode::Pve),
+        (6, r#"{"Type":7,"Data":{"11":{}}}"#, MatchMode::Unknown),
+    ] {
+        store.save_report(
+            MatchId(mid),
+            &format!(r#"{{"matchInfo":{info}}}"#),
+            Default::default(),
+            t(10),
+        )?;
+        assert_eq!(store.report_mode(MatchId(mid))?, Some(mode));
+    }
+    assert_eq!(store.player_fights(id, None)?.len(), 6);
+    assert_eq!(store.recent_player_units(id, 1)?[0].0, MatchId(2));
+    record(&mut store, 2, 100, true, true);
+    store
+        .conn
+        .execute("UPDATE matches SET scenario='Map_Skirmish' WHERE id=2", [])?;
+    assert_eq!(store.report_mode(MatchId(2))?, Some(MatchMode::Pve));
+    assert_eq!(store.recent_player_units(id, 1)?[0].0, MatchId(1));
+    record(&mut store, 1, 100, true, true);
+    store.conn.execute(
+        "UPDATE match_players SET team='spectators' WHERE match_id=1 AND player_id=101",
+        [],
+    )?;
+    assert_eq!(store.report_mode(MatchId(1))?, Some(MatchMode::Custom));
+    assert!(store.recent_player_units(id, 20)?.is_empty());
+    store.save_report(
+        MatchId(3),
+        r#"{"matchInfo":{"Data":{"11":{}}}}"#,
+        Default::default(),
+        t(20),
+    )?;
+    assert_eq!(store.recent_player_units(id, 1)?[0].0, MatchId(3));
+    Ok(())
+}
+
+#[test]
 fn deployment_index_counts_original_sorties_and_retains_earliest_spawn() {
     let mut store = Store::open_in_memory().expect("打开内存归档");
     let raw = r#"{"matchInfo":{"Data":{

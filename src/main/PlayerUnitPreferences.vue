@@ -11,7 +11,7 @@ const sections = computed(() => [
 </script>
 <template>
   <section v-for="s in sections" :key="s.title" class="preferences">
-    <h3>{{ s.title }}</h3><p class="hint">{{ s.scope }} · 最近 20 场内 {{ s.samples }} 场有效记录 · 按出场率排序</p>
+    <h3>{{ s.title }}</h3><p class="hint">{{ s.scope }} · 最近 20 场多人对战中 {{ s.samples }} 场有效记录 · 按出场率排序</p>
     <ol v-if="s.top.length">
       <li v-for="{unit,games} in s.top" :key="unit.id">
         <UnitIcon :id="unit.id" :name="unit.name" :kind="unit.class" />

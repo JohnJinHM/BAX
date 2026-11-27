@@ -29,7 +29,7 @@ impl Request {
         if !s.log.ready
             || m.phase == Phase::Ended
             || m.connection != Connection::Connected
-            || m.mode == crate::MatchMode::Pve
+            || matches!(m.mode, crate::MatchMode::Pve | crate::MatchMode::Custom)
         {
             return None;
         }
@@ -146,6 +146,9 @@ fn ranked_facts(
     info: &MatchInfo,
     catalog: &HashMap<i64, UnitKind>,
 ) -> Option<Facts> {
+    if store.report_mode(id).ok()? != Some(crate::MatchMode::Ranked) {
+        return None;
+    }
     let mut facts = Facts::ranked(info, catalog)?;
     if (facts.map.is_none() || facts.start.is_none())
         && let Ok(Some(log)) = store.match_record(id)

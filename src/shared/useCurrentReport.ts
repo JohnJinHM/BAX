@@ -12,7 +12,7 @@ export function useCurrentReport(snapshot: Ref<Snapshot | null>) {
     () => snapshot.value?.archive.seq], async () => {
     const request = ++ticket;
     const match = snapshot.value?.current;
-    if (report.value?.analysis.matchId !== match?.matchId || match?.phase !== "ended") report.value = null;
+    if (report.value?.matchId !== match?.matchId || match?.phase !== "ended") report.value = null;
     failure.value = null;
     if (!match || match.phase !== "ended") return;
     try {

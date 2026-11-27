@@ -24,10 +24,10 @@ test('an empty OCR roster retains the reason and the log fallback', () => {
 
 test('overlay shows same-country predictions only during selection, then this match after completion', () => {
   for (const phase of ['waitingRoom', 'loading', 'deployment', 'inBattle', 'ended']) {
-    assert.equal(showOverlaySpecs({ phase, mode: 'custom' }), ['waitingRoom', 'ended'].includes(phase));
+    assert.equal(showOverlaySpecs({ phase, mode: 'unknown' }), ['waitingRoom', 'ended'].includes(phase));
   }
   assert.equal(showOverlaySpecs({ phase: 'waitingRoom', mode: 'pve' }), false);
-  assert.equal(showOverlaySpecs({ phase: 'ended', mode: 'pve' }), true);
+  assert.equal(showOverlaySpecs({ phase: 'ended', mode: 'pve' }), false);
   const player = { id: 101, team: 'alpha', profile: { lastSpecs: ['previous'] } };
   const selection = { phase:'waitingRoom' };
   assert.deepEqual(matchSpecs(player, selection, null), []);
@@ -36,8 +36,8 @@ test('overlay shows same-country predictions only during selection, then this ma
   assert.deepEqual(matchSpecs({ ...known, country:1 }, selection, null), []);
   const match = { matchId: 1, phase: 'ended' };
   assert.deepEqual(matchSpecs(player, match, null), []);
-  assert.deepEqual(matchSpecs(player, match, { analysis: { matchId: 2 }, specs: { 101: ['wrong match'] } }), []);
-  assert.deepEqual(matchSpecs(player, match, { analysis: { matchId: 1 }, specs: { 101: ['current'] } }), ['current']);
+  assert.deepEqual(matchSpecs(player, match, { mode:'ranked', matchId: 2, specs: { 101: ['wrong match'] } }), []);
+  assert.deepEqual(matchSpecs(player, match, { mode:'ranked', matchId: 1, specs: { 101: ['current'] } }), ['current']);
   assert.deepEqual(matchSpecs({ ...player, team: 'spectators' }, { phase: 'waitingRoom' }, null), []);
 });
 

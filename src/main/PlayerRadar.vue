@@ -58,7 +58,7 @@ const tips = computed(() => [
 </script>
 <template>
   <section class="radar" :aria-label="title">
-    <header><h4>{{ title }}</h4><small>{{ games }} 场</small></header>
+    <header><h4>{{ title }}</h4><small>多人对战 · {{ games }} 场</small></header>
     <HoverTip v-slot="{ trigger }" :items="tips">
     <svg viewBox="0 0 300 218" role="group" :aria-label="title + '，实线为玩家场均，虚线为参考基准'">
       <polygon v-for="fraction in [0.5,1]" :key="fraction" :points="grid(68*fraction)" class="grid" />

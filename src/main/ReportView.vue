@@ -108,7 +108,7 @@ const colors = computed(() => {
 
 const selfTeam = computed<Team | null>(() => {
   const v = view.value;
-  if (!v) return null;
+  if (!v?.analysis) return null;
   if (props.perspectiveId != null) return v.analysis.players.find(p => p.id === props.perspectiveId)?.team ?? null;
   const me = v.analysis.players.find((p) => p.id === v.selfId);
   return me?.team ?? v.selfTeam ?? null;
@@ -132,7 +132,7 @@ function teamColor(team: Team | null): string {
 
 const players = computed<PlayerReport[]>(() => {
   const v = view.value;
-  if (!v) return [];
+  if (!v?.analysis) return [];
   const order = teamOrder.value;
   return [...v.analysis.players].sort(
     (a, b) => order.indexOf(a.team ?? "spectators") - order.indexOf(b.team ?? "spectators"),
@@ -148,7 +148,7 @@ function name(p: PlayerReport): string {
 const result = computed(() => {
   const v = view.value;
   const mine = selfTeam.value;
-  if (!v?.analysis.winner || (mine !== "alpha" && mine !== "bravo")) return null;
+  if (!v?.analysis?.winner || (mine !== "alpha" && mine !== "bravo")) return null;
   return v.analysis.winner === mine ? "胜" : "负";
 });
 
@@ -221,7 +221,7 @@ function toggleCurve(key: string) {
 
 const curveOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
-  if (!v) return null;
+  if (!v?.analysis) return null;
   const { minutes, teams, sorties, players } = v.analysis;
   const ownerTeam = new Map(players.map(p => [p.id, p.team]));
   const series = teamOrder.value.flatMap((team, index) => {
@@ -282,7 +282,7 @@ function selectComposition(key: string) {
 }
 const compositionOption = computed<EChartsCoreOption | null>(() => {
   const v = view.value;
-  if (!v) return null;
+  if (!v?.analysis) return null;
   const rows = players.value;
   const totals = rows.map((p) => p.composition.reduce((s, c) => s + c[compositionMetric.value], 0));
   const series = compositionGroups.map((group) => ({
@@ -348,7 +348,11 @@ function pendingText(row: HistoryRow | null | undefined): string {
 <template>
   <section class="card report">
     <p v-if="failure" class="error">{{ failure }}</p>
-    <template v-if="view">
+    <template v-if="view && !view.analysis">
+      <h2>{{ previewMap ?? view.map ?? `比赛 ${id}` }}</h2>
+      <p class="hint">{{ view.mode === "unknown" ? "模式未确认" : matchModeNames[view.mode] }} · 已归档。专精识别和战报统计仅适用于多人对战。</p>
+    </template>
+    <template v-else-if="view?.analysis">
       <div class="row head">
         <h2>{{ perspectiveId != null ? (previewMap ?? view.map ?? "地图待识别") : `比赛 ${view.analysis.matchId}` }}</h2>
         <span class="hint">{{ matchModeNames[view.mode] }} · {{ view.analysis.teams[0]?.players ?? 0 }} v {{ view.analysis.teams[1]?.players ?? 0 }}{{ view.mode === 'pve' ? ' 真人' : '' }}</span>
@@ -479,7 +483,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
       </table></div>
 
       <p class="hint foot">
-        数据来自已归档战报。队伍与玩家的合计使用战报原始统计；单位与兵种的价值按单位目录的基础价格估算，
+        数据来自已归档的多人对战战报。队伍与玩家的合计使用战报原始统计；单位与兵种的价值按单位目录的基础价格估算，
         并按每人官方的出兵价值等比例缩放，不含改装选项的差别。点玩家一行展开他的单位明细。
       </p>
       <p v-if="!view.analysis.catalogComplete" class="error">

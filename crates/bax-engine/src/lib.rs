@@ -42,6 +42,7 @@ mod specs;
 pub use bax_core::report::{
     ClassShare, MatchAnalysis, PlayerReport, Sortie, TeamReport, UnitClass, UnitRow,
 };
+pub use bax_store::MatchMode;
 pub use bax_store::{
     EncounterRow, HistoryRow, Note, PlayerHit, RatingPoint, Relation, ReportState,
 };
@@ -50,7 +51,6 @@ pub use config::{EngineConfig, cache_path, default_data_dir, store_path};
 pub use engine::{
     CommandError, Engine, EngineError, ImportSummary, PlayerFight, PlayerFightArchive,
 };
-pub use match_mode::MatchMode;
 pub use player::PlayerDetail;
 pub use postmatch::MatchReportView;
 pub use profile::{ProfileSummary, RankedStats};

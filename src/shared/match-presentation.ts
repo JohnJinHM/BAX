@@ -23,9 +23,9 @@ export function rosterWaitingText(match: MatchView) {
 }
 
 export function matchSpecs(player: RosterRow, match: MatchView | null, report: MatchReportView | null) {
-  if (player.team === "spectators") return [];
+  if (player.team === "spectators" || match?.mode === "custom" || match?.mode === "pve") return [];
   if (match?.phase === "ended") {
-    return report?.analysis.matchId === match.matchId && player.id != null ? report.specs[player.id] ?? [] : [];
+    return report?.mode === "ranked" && report.matchId === match.matchId && player.id != null ? report.specs[player.id] ?? [] : [];
   }
   return player.country == null ? [] : player.profile?.countrySpecs?.[player.country] ?? [];
 }
@@ -35,20 +35,22 @@ export function predictionHint(player: RosterRow) {
   if (player.country == null) return "等待识别本行国旗";
   const specs = player.profile.countrySpecs?.[player.country];
   const nation = player.country === 1 ? "俄军" : "美军";
-  if (!specs?.length) return `近期战报中暂无可识别的${nation}组合`;
+  if (!specs?.length) return `近期多人战报中暂无可识别的${nation}组合`;
   const ids = specs.map(s => s.ids[0]);
   const pair = player.profile.favoriteSpecPairs.find(p => p.ids.length === ids.length && ids.every(id => p.ids.includes(id)));
-  return `${nation}最近使用：${specs.map(s => s.name).join(" + ")}；近 ${player.profile.specSampleMatches} 份战报中识别到该组合 ${pair?.games ?? 1} 次`;
+  return `${nation}最近使用：${specs.map(s => s.name).join(" + ")}；近 ${player.profile.specSampleMatches} 份多人战报中识别到该组合 ${pair?.games ?? 1} 次`;
 }
 
-export function showOverlaySpecs(match: MatchView | null) {
-  return match?.phase === "ended" || (match?.phase === "waitingRoom" && match.mode !== "pve");
+export function showOverlaySpecs(match: MatchView | null, report: MatchReportView | null = null) {
+  if (!match || match.mode === "custom" || match.mode === "pve") return false;
+  if (match.phase === "ended" && report && report.matchId === match.matchId) return report.mode === "ranked";
+  return match.phase === "ended" || match.phase === "waitingRoom";
 }
 
 export function rosterSummary(match: MatchView | null, report: MatchReportView | null = null) {
   if (!match?.rosterKnown) return "";
   const count = (team: string) => match.players.filter(p => p.team === team).length;
   const spectators = count("spectators");
-  const mode = report && report.analysis.matchId === match.matchId ? report.mode : match.mode;
+  const mode = report && report.matchId === match.matchId ? report.mode : match.mode;
   return `${matchModeNames[mode]} · ${count("alpha")} v ${count("bravo")}${mode === "pve" ? " 真人 · OCR 已暂停" : ""}${spectators ? ` · 旁观 ${spectators} 人` : ""}`;
 }

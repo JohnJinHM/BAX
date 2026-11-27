@@ -14,7 +14,7 @@
 //! 请求调度的做法来自 BA-ELO-Overlay（`src/ba_elo_overlay.py`）：`EloService` 的有限并发、
 //! 先用旧资料兜底和换局后丢弃旧结果，`_warm` 的等待室预热，`_fill_levels` 的延时重试。
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -356,6 +356,14 @@ impl Session {
             // 处理过程中的诊断记录都挂在当前比赛的 span 下
             let span = self.match_span.clone();
             let _entered = span.enter();
+            let recheck_labels = matches!(
+                &input,
+                Input::Command(Command::ReloadArchive)
+                    | Input::Report(ReportEvent {
+                        archived: Some(_),
+                        ..
+                    })
+            );
             match input {
                 Input::Labels(crate::label_worker::Update::Archived(event)) => {
                     self.on_report_event(event)
@@ -405,7 +413,7 @@ impl Session {
             }
             let snapshot = self.build_snapshot();
             let next_key = crate::label_worker::Request::from_snapshot(&snapshot);
-            if label_key != next_key {
+            if recheck_labels || label_key != next_key {
                 label_tasks.abort_all();
                 label_seq += 1;
                 self.labels.clear();
@@ -621,6 +629,8 @@ impl Session {
                 let _ = done.send(result);
             }
             Command::ReloadArchive => {
+                self.archive.seq += 1;
+                self.refresh_report_specs(None);
                 let current = self.tracker.current().map(|m| m.match_id);
                 for index in 0..self.slots.len() {
                     let id = self.slots[index].id;
@@ -1113,27 +1123,31 @@ impl Session {
         archive.seq += 1;
         if let Some((match_id, affected)) = event.archived {
             archive.last_archived = Some(match_id);
-            for slot in &mut self.slots {
-                if affected.contains(&slot.id)
-                    && let Some(profile) = &mut slot.profile
-                {
-                    crate::specs::enrich(profile, &self.store, slot.id);
-                }
-            }
-            for candidate in self
-                .pregame
-                .players
-                .iter_mut()
-                .flat_map(|p| &mut p.candidates)
-            {
-                if affected.contains(&candidate.id)
-                    && let Some(profile) = &mut candidate.profile
-                {
-                    crate::specs::enrich(profile, &self.store, candidate.id);
-                }
-            }
+            self.refresh_report_specs(Some(&affected));
         }
         self.dirty = true;
+    }
+
+    fn refresh_report_specs(&mut self, affected: Option<&BTreeSet<PlayerId>>) {
+        for slot in &mut self.slots {
+            if affected.is_none_or(|ids| ids.contains(&slot.id))
+                && let Some(profile) = &mut slot.profile
+            {
+                crate::specs::enrich(profile, &self.store, slot.id);
+            }
+        }
+        for candidate in self
+            .pregame
+            .players
+            .iter_mut()
+            .flat_map(|p| &mut p.candidates)
+        {
+            if affected.is_none_or(|ids| ids.contains(&candidate.id))
+                && let Some(profile) = &mut candidate.profile
+            {
+                crate::specs::enrich(profile, &self.store, candidate.id);
+            }
+        }
     }
 
     // ------------------------------------------------------------ 对局变化

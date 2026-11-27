@@ -23,7 +23,30 @@ pub struct StoredRaw {
 #[derive(Debug)]
 pub struct IndexedReport {
     pub report: StoredRaw,
+    pub mode: MatchMode,
     pub units: BTreeMap<PlayerId, BTreeSet<i64>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum MatchMode {
+    Unknown,
+    Ranked,
+    Custom,
+    Pve,
+}
+
+impl rusqlite::types::FromSql for MatchMode {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match value.as_str()? {
+            "ranked" => Ok(Self::Ranked),
+            "custom" => Ok(Self::Custom),
+            "pve" => Ok(Self::Pve),
+            "unknown" => Ok(Self::Unknown),
+            _ => Err(rusqlite::types::FromSqlError::InvalidType),
+        }
+    }
 }
 
 /// 从战报里摘出来、列表要用的几项。
@@ -151,6 +174,7 @@ pub struct FightPerformance {
 
 #[derive(Debug)]
 pub struct StoredPlayerFight {
+    pub mode: MatchMode,
     pub roster: Vec<FightMember>,
     pub winner: Option<Team>,
     pub performance: FightPerformance,
@@ -198,11 +222,11 @@ impl Store {
         self_id: Option<PlayerId>,
     ) -> Result<Vec<StoredPlayerFight>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT i.match_id, i.unit_ids, r.start_time, r.duration_secs, r.map_id, m.map,
+            "SELECT i.match_id, CASE WHEN c.mode = 'ranked' THEN i.unit_ids ELSE '[]' END, r.start_time, r.duration_secs, r.map_id, m.map,
                     COALESCE(mp.team, CASE i.team_id WHEN 0 THEN 'alpha' WHEN 1 THEN 'bravo'
                            WHEN 100 THEN 'spectators' END), r.winner, i.rating_delta, m.id IS NOT NULL,
                     COALESCE(m.self_id, ?2) <> i.player_id AND
-                        (own.player_id IS NOT NULL OR own_log.player_id IS NOT NULL), i.deployment,
+                        (own.player_id IS NOT NULL OR own_log.player_id IS NOT NULL), CASE WHEN c.mode = 'ranked' THEN i.deployment ELSE '[]' END,
                     COALESCE(m.self_team, own_log.team, CASE own.team_id WHEN 0 THEN 'alpha' WHEN 1 THEN 'bravo' END),
                     i.kills, i.losses, i.objectives, i.supplied_allies,
                     (SELECT json_group_array(json_object('id', s.player_id,
@@ -211,8 +235,9 @@ impl Store {
                                       WHEN 1 THEN 'bravo' WHEN 100 THEN 'spectators' END)))
                      FROM report_player_units s
                      LEFT JOIN match_players log ON log.match_id=s.match_id AND log.player_id=s.player_id
-                     LEFT JOIN players profile ON profile.id=s.player_id WHERE s.match_id=i.match_id), i.spawned_score
+                     LEFT JOIN players profile ON profile.id=s.player_id WHERE s.match_id=i.match_id), i.spawned_score, c.mode
              FROM report_player_units i JOIN match_reports r USING(match_id)
+             JOIN classified_reports c USING(match_id)
              LEFT JOIN matches m ON m.id=i.match_id
              LEFT JOIN match_players mp ON mp.match_id=i.match_id AND mp.player_id=i.player_id
              LEFT JOIN report_player_units own ON own.match_id=i.match_id AND own.player_id=COALESCE(m.self_id, ?2)
@@ -256,6 +281,7 @@ impl Store {
                 _ => crate::Relation::Other,
             });
             fights.push(StoredPlayerFight {
+                mode: row.get(19)?,
                 winner,
                 roster: serde_json::from_str(&row.get::<_, String>(17)?)
                     .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
@@ -308,8 +334,8 @@ impl Store {
         limit: u32,
     ) -> Result<Vec<(MatchId, BTreeSet<i64>)>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT match_id, unit_ids FROM report_player_units WHERE player_id = ?1
-             ORDER BY start_time DESC, match_id DESC LIMIT ?2",
+            "SELECT i.match_id, i.unit_ids FROM report_player_units i JOIN classified_reports c USING(match_id)
+             WHERE i.player_id = ?1 AND c.mode = 'ranked' ORDER BY i.start_time DESC, i.match_id DESC LIMIT ?2",
         )?;
         let mut rows = stmt.query(params![id_to_db(id.get()), limit])?;
         let mut reports = Vec::new();
@@ -319,11 +345,23 @@ impl Store {
         Ok(reports)
     }
 
+    pub fn report_mode(&self, id: MatchId) -> Result<Option<MatchMode>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT mode FROM classified_reports WHERE match_id=?1",
+                [id_to_db(id.get())],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn indexed_report(&self, id: MatchId) -> Result<Option<IndexedReport>> {
         let tx = self.conn.unchecked_transaction()?;
         let Some(report) = self.report(id)? else {
             return Ok(None);
         };
+        let mode = self.report_mode(id)?.unwrap_or(MatchMode::Unknown);
         let mut stmt = self.conn.prepare_cached(
             "SELECT player_id, unit_ids FROM report_player_units WHERE match_id = ?1",
         )?;
@@ -336,6 +374,7 @@ impl Store {
         tx.commit()?;
         Ok(Some(IndexedReport {
             report,
+            mode,
             units: players,
         }))
     }
@@ -411,6 +450,11 @@ impl Store {
                 last_miss_at,
             ],
         )?;
+        tx.prepare_cached(concat!(
+            include_str!("reports/index-modes.sql"),
+            " WHERE match_id = ?1"
+        ))?
+        .execute([id_to_db(id.get())])?;
         tx.execute(
             "DELETE FROM report_queue WHERE match_id = ?1",
             [id_to_db(id.get())],

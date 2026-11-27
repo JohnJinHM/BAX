@@ -5,6 +5,7 @@ import type { PlayerFight } from "../shared/bindings/PlayerFight";
 import { active, stopping, messages, syncFights, DEFAULT_FIGHT_LIMIT } from "./player-fight-sync";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { mmss, phaseNames } from "../shared/format";
+import { matchModeNames } from "../shared/match-presentation";
 import FightRoster from "./FightRoster.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 import MatchTag from "../shared/MatchTag.vue";
@@ -164,7 +165,7 @@ async function stop() {
             <small>{{ f.at == null ? "时间未知" : time.format(f.at) }}</small>
             <small v-if="f.encounter">{{ phaseNames[f.encounter.phase] }}<template v-if="f.encounter.logName"> · {{ f.encounter.logName }}</template></small>
           </span>
-          <span class="specs" v-if="f.report"><span v-for="s in f.report.specs" :key="s.ids[0]"><SpecIcon :id="s.ids[0]!" :label="s.name" />{{ s.name }}</span><small v-if="!f.report.specs.length">专精未识别</small></span>
+          <span class="specs" v-if="f.report"><span v-for="s in f.report.specs" :key="s.ids[0]"><SpecIcon :id="s.ids[0]!" :label="s.name" />{{ s.name }}</span><small v-if="f.report.mode !== 'ranked'">{{ f.report.mode === "unknown" ? "模式未确认" : matchModeNames[f.report.mode] }} · 不计统计</small><small v-else-if="!f.report.specs.length">专精未识别</small></span>
           <small v-else>仅本地记录</small>
           <span class="numbers"><span>{{ f.seconds == null ? "时长未知" : mmss(f.seconds * 1000) }}</span><small v-if="f.report?.ratingDelta != null" :class="{gain:f.report.ratingDelta > 0, loss:f.report.ratingDelta < 0}">ELO {{ f.report.ratingDelta > 0 ? '+' : '' }}{{ Number(f.report.ratingDelta.toFixed(1)) }}</small></span>
           <FightRoster v-if="f.report" :fight="f.report" :player-id="id" />

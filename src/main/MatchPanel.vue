@@ -36,7 +36,8 @@ function toggleStats(key: string) {
 
 const groups = computed(() => rosterGroups(current.value).map(g => ({
   ...g,
-  specHeading: current.value?.phase === 'ended' ? (g.key === 'spectators' ? null : '本局专精')
+  specHeading: current.value?.mode === 'custom' || current.value?.mode === 'pve' || (report.value && report.value.mode !== 'ranked') ? null
+    : current.value?.phase === 'ended' ? (g.key === 'spectators' ? null : '本局专精')
     : g.tone === 'enemy' ? '专精预测' : null,
   title: g.key === 'spectators' ? `旁观者 · ${g.count} 人` : `${g.title} · ${g.count} 人　均分 ${rating(g.averageValue)}（${g.rated} 人有分）`,
 })));
@@ -79,7 +80,7 @@ async function refresh() {
     <p v-if="message || reportFailure" class="error">{{ message || reportFailure }}</p>
     <p v-if="current.phase === 'ended'" class="hint">
       <template v-if="report || snapshot?.archive.lastArchived === current.matchId">
-        战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">查看战后分析</a>
+        战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">{{ report && report.mode !== 'ranked' ? '查看归档（仅多人对战参与统计）' : '查看战后分析' }}</a>
       </template>
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>

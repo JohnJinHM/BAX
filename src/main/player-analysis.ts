@@ -42,15 +42,15 @@ export function axisRatio(axis: RadarAxis, value: number) {
   const low = axis.low ?? 0;
   return Math.max(0,value-low) / (axis.base-low);
 }
-const playing = (f: PlayerFight) => f.team === "alpha" || f.team === "bravo";
+const playing = (f: PlayerFight) => f.mode === "ranked" && (f.team === "alpha" || f.team === "bravo");
 export function playerAverages(fights: PlayerFight[]) {
   const combat = combatAxes.map(() => 0);
   const preferences = preferenceAxes.map(() => 0);
   let games = 0, preferenceGames = 0, efficiencyGames = 0;
   for (const f of fights.filter(playing)) {
     const total = f.composition.reduce((sum,c) => sum+c.count,0);
-    if (!total) continue;
     const perf = f.performance;
+    if (!total || !perf) continue;
     games++;
     combat[0] += perf.kills;
     combat[1] += perf.objectives;

@@ -414,6 +414,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       sorties,
       unitNames: Object.fromEntries(fixtureUnits.map((u) => [u.id, u.name])),
     },
+    matchId: id,
     mode: "ranked",
     spectators: [],
     aiPlayers: [0, 0],

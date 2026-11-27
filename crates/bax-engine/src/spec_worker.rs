@@ -13,7 +13,7 @@ fn identity(snapshot: &Snapshot) -> Option<(MatchId, Timestamp)> {
     let m = snapshot.current.as_ref()?;
     (snapshot.log.ready
         && m.phase != Phase::Ended
-        && m.mode != crate::MatchMode::Pve
+        && !matches!(m.mode, crate::MatchMode::Pve | crate::MatchMode::Custom)
         && m.connection == Connection::Connected)
         .then_some((m.match_id, m.discovered_at))
 }

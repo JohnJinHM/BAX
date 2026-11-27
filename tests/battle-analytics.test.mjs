@@ -39,11 +39,11 @@ test('team columns keep the perspective team left even on a narrow plot or with 
 
 test('radars average each player-game rate and omit ineligible games', () => {
   const model = {id:5,name:'Scout',class:'recon'};
-  const a = {team:'alpha', durationSecs:600, performance:{kills:8,losses:2,objectives:1,spawnedScore:2000},
+  const a = {mode:'ranked',team:'alpha', durationSecs:600, performance:{kills:8,losses:2,objectives:1,spawnedScore:2000},
     composition:[{class:'recon',count:2},{class:'supply',count:2}],opening:[],deployedUnits:[model]};
   const b = {...a,team:'bravo',durationSecs:1800,performance:{kills:4,losses:0,objectives:3,spawnedScore:10200},
     composition:[{class:'infantry',count:8}],opening:[model]};
-  const fights = [a,b,{...a,team:'spectators'}, {...a,composition:[],opening:null,deployedUnits:[]}];
+  const fights = [...Array(20).fill({...a,mode:'custom'}), {...b,mode:'pve'}, {...a,mode:'unknown'}, a,b,{...a,team:'spectators'}, {...a,composition:[],opening:null,deployedUnits:[]}];
   const result = playerAverages(fights);
   assert.equal(result.games,2);
   assert.deepEqual(result.combat,[6,2,75,270]);

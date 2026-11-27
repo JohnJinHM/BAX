@@ -18,13 +18,14 @@ pub(crate) const UNITS_KEY: &str = "batrace.units";
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchReportView {
+    pub match_id: MatchId,
     pub supply: Vec<supply::SupplyPlayer>,
     pub mode: crate::MatchMode,
     pub spectators: Vec<ReportSpectator>,
     pub ai_players: [u32; 2],
     /// 仅由这一场战报推导出的专精。
     pub specs: BTreeMap<PlayerId, Vec<crate::specs::SpecPreference>>,
-    pub analysis: MatchAnalysis,
+    pub analysis: Option<MatchAnalysis>,
     /// 日志里的地图名。
     pub map: Option<String>,
     pub self_id: Option<PlayerId>,
@@ -187,6 +188,7 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
     }
     let Some(bax_store::IndexedReport {
         report: stored,
+        mode,
         units: deployed,
     }) = store.indexed_report(id).map_err(|e| e.to_string())?
     else {
@@ -198,35 +200,12 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
             .match_info
             .ok_or_else(|| "战报是空的".to_owned())?;
 
-    let units = store.reference(UNITS_KEY).map_err(|e| e.to_string())?;
-    let (kinds, catalog_fetched_at) = match &units {
-        Some(stored) => match serde_json::from_str::<UnitsResponse>(&stored.raw) {
-            Ok(parsed) => (catalog(&parsed), Some(stored.fetched_at)),
-            Err(err) => {
-                tracing::warn!(error = %err, "单位目录无法解析");
-                (HashMap::new(), None)
-            }
-        },
-        None => (HashMap::new(), None),
-    };
-
     let record = store.match_record(id).map_err(|e| e.to_string())?;
     let roster = store.match_players(id).map_err(|e| e.to_string())?;
-    let mut input = report_input(id, &info);
-    for p in &mut input.players {
-        if let Some(team) = roster
-            .iter()
-            .find(|r| r.player == p.id)
-            .and_then(|r| r.team)
-        {
-            p.team = Some(team);
-        }
-    }
-    let mut spectators: BTreeMap<PlayerId, Option<String>> = input
-        .players
-        .iter()
-        .filter(|p| p.team == Some(Team::Spectators))
-        .map(|p| (p.id, p.name.clone()))
+    let mut spectators: BTreeMap<_, _> = info
+        .players()
+        .filter(|(_, p)| p.team() == Some(Team::Spectators))
+        .map(|(id, p)| (id, p.name.clone()))
         .collect();
     for p in roster.iter().filter(|p| p.team == Some(Team::Spectators)) {
         let name = spectators.entry(p.player).or_default();
@@ -234,20 +213,6 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
             *name = p.log_name.clone();
         }
     }
-    input.players.retain(|p| p.team != Some(Team::Spectators));
-    let specs = input
-        .players
-        .iter()
-        .filter_map(|p| {
-            Some((
-                p.id,
-                crate::specs::infer(deployed.get(&p.id)?)?
-                    .into_iter()
-                    .map(|id| crate::specs::entry(vec![id], 1))
-                    .collect(),
-            ))
-        })
-        .collect();
     let mut ai_players = [0; 2];
     for (key, player) in &info.data {
         if player
@@ -262,20 +227,62 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
             }
         }
     }
-    let live_mode = crate::match_mode::live_mode(
-        record.as_ref().and_then(|r| r.scenario.as_deref()),
-        ai_players.iter().any(|n| *n > 0),
-        !spectators.is_empty(),
-    );
-    let mode = if live_mode == crate::MatchMode::Pve {
-        live_mode
-    } else {
-        match info.match_type.unwrap_or(0) {
-            0 if spectators.is_empty() => crate::MatchMode::Ranked,
-            1 => crate::MatchMode::Custom,
-            _ => live_mode,
-        }
+    let mut view = MatchReportView {
+        match_id: id,
+        mode,
+        spectators: spectators
+            .into_iter()
+            .map(|(id, name)| ReportSpectator { id, name })
+            .collect(),
+        ai_players,
+        specs: BTreeMap::new(),
+        analysis: None,
+        supply: Vec::new(),
+        map: record.as_ref().and_then(|m| m.map.clone()),
+        self_id: record.as_ref().and_then(|m| m.self_id),
+        self_team: record.as_ref().and_then(|m| m.self_team),
+        fetched_at: stored.fetched_at,
+        catalog_fetched_at: None,
     };
+    if mode != crate::MatchMode::Ranked {
+        return Ok(Some(view));
+    }
+    let units = store.reference(UNITS_KEY).map_err(|e| e.to_string())?;
+    let (kinds, catalog_fetched_at) = match &units {
+        Some(stored) => match serde_json::from_str::<UnitsResponse>(&stored.raw) {
+            Ok(parsed) => (catalog(&parsed), Some(stored.fetched_at)),
+            Err(err) => {
+                tracing::warn!(error = %err, "单位目录无法解析");
+                (HashMap::new(), None)
+            }
+        },
+        None => (HashMap::new(), None),
+    };
+
+    let mut input = report_input(id, &info);
+    for p in &mut input.players {
+        if let Some(team) = roster
+            .iter()
+            .find(|r| r.player == p.id)
+            .and_then(|r| r.team)
+        {
+            p.team = Some(team);
+        }
+    }
+    input.players.retain(|p| p.team != Some(Team::Spectators));
+    view.specs = input
+        .players
+        .iter()
+        .filter_map(|p| {
+            Some((
+                p.id,
+                crate::specs::infer(deployed.get(&p.id)?)?
+                    .into_iter()
+                    .map(|id| crate::specs::entry(vec![id], 1))
+                    .collect(),
+            ))
+        })
+        .collect();
     let mut analysis = report::analyze(&input, &kinds);
     // 战报里没有名字的，用档案或日志里的名字补上
     for p in &mut analysis.players {
@@ -285,22 +292,10 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
             p.name = record.display_name().map(str::to_owned);
         }
     }
-    Ok(Some(MatchReportView {
-        supply: supply::consumption(&info, &analysis, &kinds),
-        mode,
-        spectators: spectators
-            .into_iter()
-            .map(|(id, name)| ReportSpectator { id, name })
-            .collect(),
-        ai_players,
-        specs,
-        analysis,
-        map: record.as_ref().and_then(|m| m.map.clone()),
-        self_id: record.as_ref().and_then(|m| m.self_id),
-        self_team: record.as_ref().and_then(|m| m.self_team),
-        fetched_at: stored.fetched_at,
-        catalog_fetched_at,
-    }))
+    view.supply = supply::consumption(&info, &analysis, &kinds);
+    view.analysis = Some(analysis);
+    view.catalog_fetched_at = catalog_fetched_at;
+    Ok(Some(view))
 }
 
 #[cfg(test)]
@@ -321,8 +316,7 @@ mod tests {
                            "WasAirdropped":true,"BuildingDestroyedCount":2,"TotalDamageReceived":23.75},
                       "b":{"Id":3,"TotalSupplyPointsConsumed":20,"DeathTime":1040,"TotalDamageReceived":-1},
                       "c":{"Id":3,"KilledCount":5}}},
-            "-1":{"TeamId":1,"UnitData":{"b":{"Id":3,"TotalSupplyPointsConsumed":35}}},
-            "33":{"TeamId":100,"SupplyPointsConsumed":99}
+            "33":{"TeamId":1,"UnitData":{"b":{"Id":3,"TotalSupplyPointsConsumed":35}}}
         }}}).to_string();
         store
             .save_report(
@@ -335,7 +329,7 @@ mod tests {
         let view = load_view(&store, MatchId(77)).expect("读取").expect("战报");
         let by_id: BTreeMap<_, _> = view.supply.iter().map(|p| (p.id, p)).collect();
         assert_eq!(by_id.len(), 3);
-        assert_eq!((by_id[&11].consumed, by_id[&-1].consumed), (0, 35));
+        assert_eq!((by_id[&11].consumed, by_id[&33].consumed), (0, 35));
         let p = by_id[&22];
         assert_eq!((p.consumed, p.from_allies, p.by_allies), (90, 15, 12));
         let model = p.models.iter().find(|m| m.id == Some(3)).expect("具体型号");
@@ -356,6 +350,8 @@ mod tests {
         );
         let sender = view
             .analysis
+            .as_ref()
+            .expect("多人战报")
             .players
             .iter()
             .find(|p| p.id.get() == 11)
@@ -390,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_reports_separate_spectators_and_keep_small_teams() {
+    fn custom_reports_keep_metadata_and_skip_analysis() {
         let mut store = Store::open_in_memory().expect("验证数据");
         let raw = serde_json::json!({"matchInfo": {"Type": 1, "Data": {
             "101": {"Name": "Ash", "TeamId": 0},
@@ -410,15 +406,7 @@ mod tests {
             .expect("验证数据")
             .expect("验证数据");
         assert_eq!(view.mode, crate::MatchMode::Custom);
-        assert_eq!(view.analysis.players.len(), 2);
-        assert_eq!(
-            view.analysis
-                .teams
-                .iter()
-                .map(|t| t.players)
-                .collect::<Vec<_>>(),
-            vec![1, 1]
-        );
+        assert!(view.analysis.is_none() && view.specs.is_empty() && view.supply.is_empty());
         assert_eq!(
             view.spectators,
             vec![ReportSpectator {
@@ -449,7 +437,7 @@ mod tests {
             .expect("验证数据");
         assert_eq!(view.mode, crate::MatchMode::Pve);
         assert_eq!(view.ai_players, [0, 2]);
-        assert_eq!(view.analysis.players.len(), 1);
+        assert!(view.analysis.is_none() && view.supply.is_empty() && view.specs.is_empty());
     }
 
     #[test]
@@ -472,12 +460,13 @@ mod tests {
             )
             .expect("缓存");
         let view = load_view(&store, MatchId(1)).expect("解析").expect("战报");
-        let units = &view.analysis.players[0].units;
+        let analysis = view.analysis.expect("多人战报");
+        let units = &analysis.players[0].units;
         assert_eq!(units.len(), 2);
         assert!(units.iter().any(|u| u.unit_name == "BMP-3"));
         assert!(units.iter().any(|u| u.unit_name == "BMP-3M Epokha"));
         assert!(
-            view.analysis
+            analysis
                 .sorties
                 .iter()
                 .any(|u| u.thumbnail.as_deref() == Some("RU_BMP3_EPOKHA-Label.webp"))
@@ -503,14 +492,15 @@ mod tests {
     #[test]
     fn a_stored_report_loads_into_a_view() {
         let mut store = Store::open_in_memory().expect("长期库");
-        let info = serde_json::from_str::<bax_batrace::model::MatchReportResponse>(REPORT)
+        let raw = r#"{"matchInfo":{"Data":{"101":{"UnitData":{"a":{"Id":3,"SpawnTime":100}}}}}}"#;
+        let info = serde_json::from_str::<bax_batrace::model::MatchReportResponse>(raw)
             .expect("战报")
             .match_info
             .expect("有内容");
         store
             .save_report(
                 MatchId(1),
-                REPORT,
+                raw,
                 report_meta(&info),
                 Timestamp::from_secs(10),
             )
@@ -518,7 +508,10 @@ mod tests {
         let view = load_view(&store, MatchId(1)).expect("读").expect("有战报");
         assert_eq!(view.fetched_at, Timestamp::from_secs(10));
         assert_eq!(view.catalog_fetched_at, None);
-        assert!(!view.analysis.catalog_complete, "没有目录时成本不完整");
+        assert!(
+            !view.analysis.expect("多人战报").catalog_complete,
+            "没有目录时成本不完整"
+        );
 
         store
             .set_reference(UNITS_KEY, UNITS, Timestamp::from_secs(20))
