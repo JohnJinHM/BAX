@@ -355,7 +355,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
     <template v-else-if="view?.analysis">
       <div class="row head">
         <h2>{{ perspectiveId != null ? (previewMap ?? view.map ?? "地图待识别") : `比赛 ${view.analysis.matchId}` }}</h2>
-        <span class="hint">{{ matchModeNames[view.mode] }} · {{ view.analysis.teams[0]?.players ?? 0 }} v {{ view.analysis.teams[1]?.players ?? 0 }}{{ view.mode === 'pve' ? ' 真人' : '' }}</span>
+        <span class="hint">{{ matchModeNames[view.mode] }} · {{ view.analysis.teams[0]?.players ?? 0 }} v {{ view.analysis.teams[1]?.players ?? 0 }}<template v-if="view.mode === 'custom'"> · 不计入玩家统计</template></span>
         <span v-if="result" class="result" :class="result === '胜' ? 'win' : 'loss'">{{ result }}</span>
         <span class="hint">
           <template v-if="perspectiveId == null">{{ view.map ?? (view.analysis.mapId != null ? `地图 #${view.analysis.mapId}` : "地图未知") }} · </template>
@@ -483,7 +483,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
       </table></div>
 
       <p class="hint foot">
-        数据来自已归档的多人对战战报。队伍与玩家的合计使用战报原始统计；单位与兵种的价值按单位目录的基础价格估算，
+        队伍与玩家的合计使用本场战报的原始统计。单位与兵种的价值按单位目录的基础价格估算，
         并按每人官方的出兵价值等比例缩放，不含改装选项的差别。点玩家一行展开他的单位明细。
       </p>
       <p v-if="!view.analysis.catalogComplete" class="error">

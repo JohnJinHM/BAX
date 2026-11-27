@@ -80,7 +80,7 @@ async function refresh() {
     <p v-if="message || reportFailure" class="error">{{ message || reportFailure }}</p>
     <p v-if="current.phase === 'ended'" class="hint">
       <template v-if="report || snapshot?.archive.lastArchived === current.matchId">
-        战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">{{ report && report.mode !== 'ranked' ? '查看归档（仅多人对战参与统计）' : '查看战后分析' }}</a>
+        战报已归档：<a href="#" @click.prevent="openMatch(current.matchId)">查看本场战报</a>
       </template>
       <template v-else>比赛已结束。BATrace 收录战报后会自动归档，通常要几分钟：<a href="#" @click.prevent="openMatch(current.matchId)">比赛记录</a></template>
     </p>

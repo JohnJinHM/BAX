@@ -195,8 +195,10 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         const report = fixtureReport(Number((args as { id?: number } | undefined)?.id));
         if (report && reportMode !== "ranked") {
           report.mode = reportMode;
-          report.analysis = null;
-          report.supply = [];
+            if (reportMode === "pve") {
+              report.analysis = null;
+              report.supply = [];
+            }
           report.specs = {};
         }
         return report;

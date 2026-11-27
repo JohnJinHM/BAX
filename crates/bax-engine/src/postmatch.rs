@@ -244,7 +244,7 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
         fetched_at: stored.fetched_at,
         catalog_fetched_at: None,
     };
-    if mode != crate::MatchMode::Ranked {
+    if !matches!(mode, crate::MatchMode::Ranked | crate::MatchMode::Custom) {
         return Ok(Some(view));
     }
     let units = store.reference(UNITS_KEY).map_err(|e| e.to_string())?;
@@ -270,19 +270,21 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
         }
     }
     input.players.retain(|p| p.team != Some(Team::Spectators));
-    view.specs = input
-        .players
-        .iter()
-        .filter_map(|p| {
-            Some((
-                p.id,
-                crate::specs::infer(deployed.get(&p.id)?)?
-                    .into_iter()
-                    .map(|id| crate::specs::entry(vec![id], 1))
-                    .collect(),
-            ))
-        })
-        .collect();
+    if mode == crate::MatchMode::Ranked {
+        view.specs = input
+            .players
+            .iter()
+            .filter_map(|p| {
+                Some((
+                    p.id,
+                    crate::specs::infer(deployed.get(&p.id)?)?
+                        .into_iter()
+                        .map(|id| crate::specs::entry(vec![id], 1))
+                        .collect(),
+                ))
+            })
+            .collect();
+    }
     let mut analysis = report::analyze(&input, &kinds);
     // 战报里没有名字的，用档案或日志里的名字补上
     for p in &mut analysis.players {
@@ -386,10 +388,11 @@ mod tests {
     }
 
     #[test]
-    fn custom_reports_keep_metadata_and_skip_analysis() {
+    fn custom_reports_show_match_details_but_stay_out_of_player_statistics() {
         let mut store = Store::open_in_memory().expect("验证数据");
         let raw = serde_json::json!({"matchInfo": {"Type": 1, "Data": {
-            "101": {"Name": "Ash", "TeamId": 0},
+            "101": {"Name": "Ash", "TeamId": 0, "SupplyPointsConsumed": 75,
+                    "UnitData": {"a": {"Id": 3, "SpawnTime": 100, "TotalSupplyPointsConsumed": 75}}},
             "102": {"Name": "Birch", "TeamId": 1},
             "103": {"Name": "Cedar", "TeamId": 100}
         }}})
@@ -406,7 +409,17 @@ mod tests {
             .expect("验证数据")
             .expect("验证数据");
         assert_eq!(view.mode, crate::MatchMode::Custom);
-        assert!(view.analysis.is_none() && view.specs.is_empty() && view.supply.is_empty());
+        let analysis = view.analysis.expect("自定义单场战报");
+        assert_eq!(analysis.players.len(), 2);
+        assert_eq!(analysis.sorties.len(), 1);
+        assert!(view.supply.iter().any(|p| p.id == 101 && p.consumed == 75));
+        assert!(view.specs.is_empty());
+        assert!(
+            store
+                .recent_player_units(PlayerId(101), 20)
+                .expect("多人样本")
+                .is_empty()
+        );
         assert_eq!(
             view.spectators,
             vec![ReportSpectator {
@@ -414,7 +427,6 @@ mod tests {
                 name: Some("Cedar".into())
             }]
         );
-        assert!(!view.specs.contains_key(&PlayerId(103)));
     }
 
     #[test]
