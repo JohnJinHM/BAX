@@ -46,11 +46,19 @@ async function updateAction(action: () => Promise<void>) {
 const ocr = useSetting(snapshot, "ui.ocr");
 const appearance = useSetting(snapshot, "ui.overlay");
 const overlaySliders = [
+  { key: "scale", label: "缩放", min: 80, max: 150, step: 5 },
   { key: "opacity", label: "背景不透明度", min: 30, max: 100, step: 1 },
   { key: "fadePosition", label: "渐变起点位置", min: 0, max: 100, step: 1 },
   { key: "fadeEndOpacity", label: "渐变末端不透明度", min: 0, max: 100, step: 1 },
-  { key: "scale", label: "缩放", min: 80, max: 150, step: 5 },
 ] as const;
+function changeWidth(event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (!input.value || !input.validity.valid) {
+    input.value = String(appearance.value.width);
+    return;
+  }
+  void run(() => saveSetting(appearance.value, "ui.overlay", { width: input.valueAsNumber }));
+}
 const alerts = useSetting(snapshot, "ui.alerts");
 const hotkeys = useSetting(snapshot, "ui.hotkeys");
 const skin = useSetting(snapshot, "ui.skin");
@@ -301,7 +309,30 @@ async function exportDiag() {
 
   <section class="card">
     <h2>悬浮窗</h2>
+    <h3>窗口</h3>
     <div class="grid">
+      <label>显示</label>
+      <div class="row">
+        <button @click="run(() => commands.setOverlayVisible(!status?.overlayVisible), '已切换')">
+          {{ status?.overlayVisible ? "隐藏悬浮窗" : "显示悬浮窗" }}
+        </button>
+      </div>
+      <label>锁定</label>
+      <div class="row">
+        <span :class="status?.overlayLocked ? 'ok' : 'hint'">
+          {{ status?.overlayLocked ? "已锁定：鼠标穿透到游戏，只有锁按钮可以点" : "未锁定：可以拖动、点击悬浮窗上的按钮" }}
+        </span>
+        <button @click="run(() => commands.setOverlayLocked(!status?.overlayLocked), '已切换')">
+          {{ status?.overlayLocked ? "解锁" : "锁定" }}
+        </button>
+      </div>
+      <label>吸附边缘</label>
+      <label class="check"><input type="checkbox" :checked="appearance.snapEdges" @change="run(() => saveSetting(appearance, 'ui.overlay', { snapEdges: ($event.target as HTMLInputElement).checked }))" />拖动松手后靠近屏幕边缘时贴边，展开收起时保持贴边</label>
+    </div>
+    <h3>尺寸与外观</h3>
+    <div class="grid">
+      <label for="overlay-width">窗口宽度</label>
+      <div class="row"><input id="overlay-width" type="number" min="280" max="720" :value="appearance.width" @change="changeWidth" /><span class="hint">px</span></div>
       <template v-for="slider in overlaySliders" :key="slider.key">
         <label :for="`overlay-${slider.key}`">{{ slider.label }}</label>
         <div class="row">
@@ -320,14 +351,9 @@ async function exportDiag() {
           <span v-if="slider.key === 'fadeEndOpacity'" class="hint">左边缘保留的背景不透明度比例</span>
         </div>
       </template>
-      <label>显示</label>
-      <div class="row">
-        <button @click="run(() => commands.setOverlayVisible(!status?.overlayVisible), '已切换')">
-          {{ status?.overlayVisible ? "隐藏悬浮窗" : "显示悬浮窗" }}
-        </button>
-      </div>
-      <label>吸附边缘</label>
-      <label class="check"><input type="checkbox" :checked="appearance.snapEdges" @change="run(() => saveSetting(appearance, 'ui.overlay', { snapEdges: ($event.target as HTMLInputElement).checked }))" />拖动松手后靠近屏幕边缘时贴边，展开收起时保持贴边</label>
+    </div>
+    <h3>展开与收起</h3>
+    <div class="grid">
       <label>自动展开</label>
       <label class="check"><input type="checkbox" :checked="appearance.autoExpand" @change="run(() => saveSetting(appearance, 'ui.overlay', { autoExpand: ($event.target as HTMLInputElement).checked }))" />随比赛阶段展开与收起</label>
       <label for="collapse-before">准备剩余秒数</label>
@@ -336,15 +362,9 @@ async function exportDiag() {
       <span class="hint">比赛结束时展开并展示加分，退出房间时收起。选图、选卡、选点时自动展开。</span>
       <label>动效</label>
       <label class="check"><input type="checkbox" :checked="appearance.animations" @change="run(() => saveSetting(appearance, 'ui.overlay', { animations: ($event.target as HTMLInputElement).checked }))" />展开过渡、均分计数与加分动效</label>
-      <label>锁定</label>
-      <div class="row">
-        <span :class="status?.overlayLocked ? 'ok' : 'hint'">
-          {{ status?.overlayLocked ? "已锁定：鼠标穿透到游戏，只有锁按钮可以点" : "未锁定：可以拖动、点击悬浮窗上的按钮" }}
-        </span>
-        <button @click="run(() => commands.setOverlayLocked(!status?.overlayLocked), '已切换')">
-          {{ status?.overlayLocked ? "解锁" : "锁定" }}
-        </button>
-      </div>
+    </div>
+    <h3>提醒</h3>
+    <div class="grid">
       <label>提醒时</label>
       <div class="row">
         <label class="check">

@@ -186,9 +186,17 @@ let observer: ResizeObserver | null = null;
 let lastSize = "";
 let layoutFrame = 0;
 
+const workArea = ref({ width: screen.availWidth, height: screen.availHeight });
+function onWindowResize() {
+  if (workArea.value.width !== screen.availWidth || workArea.value.height !== screen.availHeight) {
+    workArea.value = { width: screen.availWidth, height: screen.availHeight };
+  }
+  reportHotspot();
+}
+
 function fitWindow() {
   const el = panel.value;
-  if (!el) return;
+  if (!el || !snapshot.value) return;
   const rect = el.getBoundingClientRect();
   const width = Math.ceil(rect.width);
   const height = Math.ceil(rect.height);
@@ -210,7 +218,7 @@ onMounted(async () => {
   observer = new ResizeObserver(() => { cancelAnimationFrame(layoutFrame); layoutFrame = requestAnimationFrame(relayout); });
   if (panel.value) observer.observe(panel.value);
   // 换到缩放比例不同的显示器时 devicePixelRatio 会变
-  window.addEventListener("resize", reportHotspot);
+  window.addEventListener("resize", onWindowResize);
   unlistenHover = await getCurrentWebviewWindow().listen<boolean>("bax://overlay-lock-hover", (event) => {
     lockHot.value = event.payload;
   });
@@ -218,7 +226,7 @@ onMounted(async () => {
 onUnmounted(() => {
   observer?.disconnect();
   cancelAnimationFrame(layoutFrame);
-  window.removeEventListener("resize", reportHotspot);
+  window.removeEventListener("resize", onWindowResize);
   unlistenHover?.();
 });
 watch(appearance, () => requestAnimationFrame(relayout));
@@ -234,6 +242,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
       '--bax-fade-position': `${appearance.fadePosition * 100}%`,
       '--bax-edge-opacity': appearance.opacity * appearance.fadeEndOpacity,
       zoom: appearance.scale,
+      width: Math.min(appearance.width, workArea.width / appearance.scale) + 'px',
+      maxHeight: workArea.height / appearance.scale + 'px',
     }"
   >
     <header :data-tauri-drag-region="locked ? undefined : ''">
@@ -369,7 +379,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
 .panel {
   --reveal-duration: 240ms;
   --reveal-easing: cubic-bezier(.16, 1, .3, 1);
-  width: 340px;
+  box-sizing: border-box;
+  overflow-y: auto;
   padding: 8px 10px 10px;
   border-radius: var(--bax-radius);
   background: linear-gradient(to right, rgb(var(--bax-bg-rgb) / var(--bax-edge-opacity)) 0%, rgb(var(--bax-bg-rgb) / var(--bax-opacity)) var(--bax-fade-position));

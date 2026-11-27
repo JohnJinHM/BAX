@@ -8,14 +8,14 @@ import { shallowRef, watch, type ShallowRef } from "vue";
 import { appearanceVars, managedVars, normalizeAppearance, type Appearance } from "./appearance";
 import type { Snapshot } from "./bindings/Snapshot";
 import { useSetting } from "./settings";
-import type { SkinId } from "./skins";
+import { defaultSkin, type SkinId } from "./skins";
 
 const CACHE_KEY = "bax.appearance";
 /** 0.2.2 只记皮肤 ID */
 const LEGACY_CACHE_KEY = "bax.skin";
 
 /** 当前生效的皮肤。 */
-export const activeSkin = shallowRef<SkinId>("default");
+export const activeSkin = shallowRef<SkinId>(defaultSkin);
 /** 外观每变一次加一。图表这类从 CSS 变量取色、取字号的计算依赖它重新生成。 */
 export const appearanceRevision = shallowRef(0);
 

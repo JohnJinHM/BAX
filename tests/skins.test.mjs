@@ -30,8 +30,8 @@ const skinTokens = new Map(
   await Promise.all(skinFiles.map(async (file) => [file.replace(/\.css$/, ''), blocks(await read(`skins/${file}`))])),
 );
 
-test('every built-in skin except the default has exactly one CSS file, imported by index.css', async () => {
-  const ids = skins.map((s) => s.id).filter((id) => id !== defaultSkin);
+test('every built-in skin except the base theme has exactly one CSS file, imported by index.css', async () => {
+  const ids = skins.map((s) => s.id).filter((id) => id !== 'default');
   assert.deepEqual([...skinTokens.keys()].sort(), [...ids].sort());
   const index = await read('skins/index.css');
   for (const id of ids) assert.match(index, new RegExp(`@import "\\./${id}\\.css";`));
@@ -52,6 +52,8 @@ test('skin files only override variables that theme.css declares, inside their o
 });
 
 test('unknown or missing skin ids fall back to the default skin', () => {
+  assert.equal(defaultSkin, 'broken-arrow');
+  assert.deepEqual(skins.map(s => [s.id, s.name]), [['broken-arrow', '断箭'], ['default', '经典']]);
   for (const s of skins) assert.equal(normalizeSkin(s.id), s.id);
   for (const value of [undefined, null, '', 'missing', 3, { id: 'broken-arrow' }]) assert.equal(normalizeSkin(value), defaultSkin);
 });
@@ -59,7 +61,7 @@ test('unknown or missing skin ids fall back to the default skin', () => {
 // ---------------------------------------------------------------- 对比度（WCAG AA，正文 4.5:1）
 
 function tokensOf(id) {
-  const own = id === defaultSkin ? [] : skinTokens.get(id).flatMap((b) => b.declarations);
+  const own = skinTokens.get(id)?.flatMap((b) => b.declarations) ?? [];
   return new Map([...themeTokens, ...own]);
 }
 

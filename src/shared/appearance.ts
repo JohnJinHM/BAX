@@ -2,7 +2,7 @@
 // 设置存在 ui.skin 里，只接受这里列出的变量，不接受任意 CSS。这个文件只引用 skins.ts，
 // tests/appearance.test.mjs 直接读取它。
 
-import { normalizeSkin, skins, type SkinId } from "./skins";
+import { defaultSkin, normalizeSkin, skins, type SkinId } from "./skins";
 
 /** 可以改的颜色。一项可以对应几个皮肤变量：本方同时用于不知道本机队伍时的 Alpha。 */
 export const colorSlots = [
@@ -39,7 +39,7 @@ export interface Appearance {
   density: Density;
 }
 
-export const defaultAppearance: Appearance = { id: "default", colors: {}, fontScale: 1, density: "standard" };
+export const defaultAppearance: Appearance = { id: defaultSkin, colors: {}, fontScale: 1, density: "standard" };
 
 /** 由个人调整控制的变量。应用时先清掉不在本次结果里的，换皮肤或恢复默认后不留旧值。 */
 export const managedVars: readonly string[] = [

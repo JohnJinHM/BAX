@@ -6,7 +6,7 @@
  */
 
 [data-skin="broken-arrow"] {
-  /* 英文与数字用随应用打包的 Inter，中文与默认皮肤一样用微软雅黑 */
+  /* 英文与数字用随应用打包的 Inter，中文与经典皮肤一样用微软雅黑 */
   --bax-font: "Inter Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
 
   --bax-bg-rgb: 15 15 15;
