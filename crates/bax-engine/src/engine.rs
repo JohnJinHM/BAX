@@ -306,7 +306,7 @@ impl Engine {
         query: impl Into<String>,
         limit: u32,
     ) -> Result<Vec<PlayerHit>, CommandError> {
-        self.search_players_filtered(query, limit, 0, "default".into(), "all".into())
+        self.search_players_filtered(query, limit, 0, "recent".into(), "all".into())
             .await
     }
 
@@ -329,6 +329,17 @@ impl Engine {
         })
         .await?;
         reply_with(wait).await
+    }
+
+    pub async fn set_player_favorite(
+        &self,
+        id: PlayerId,
+        favorite: bool,
+    ) -> Result<(), CommandError> {
+        let (done, wait) = oneshot::channel();
+        self.send(Command::SetPlayerFavorite { id, favorite, done })
+            .await?;
+        reply(wait).await
     }
 
     /// 保存一名玩家的备注；内容为空时删除。

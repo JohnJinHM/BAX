@@ -206,15 +206,31 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         }
         return report;
       }
+      case "set_player_favorite": {
+        const { id, favorite } = args as { id: number; favorite: boolean };
+        const key = `bax.dev.favorite.${id}`;
+        if (favorite) localStorage.setItem(key, "1");
+        else localStorage.removeItem(key);
+        return null;
+      }
       case "search_players": {
-        const { query = "", sort = "default", filter = "all", limit = 80, offset = 0 } = args as { query?: string; sort?: string; filter?: string; limit?: number; offset?: number };
+        const { query = "", sort = "recent", filter = "all", limit = 80, offset = 0 } = args as { query?: string; sort?: string; filter?: string; limit?: number; offset?: number };
         const hits = fixtureHits(query).filter(p => filter === "noted" ? p.hasNote : filter === "rated" ? p.rating != null : filter === "encountered" ? p.encounters > 0 : true);
         const relations = currentRelations(fixtureSnapshot.current);
+        const tier = (p: (typeof hits)[number]) => {
+          if (p.id === fixtureSnapshot.selfId) return 0;
+          if (relations.has(p.id)) return 1;
+          return p.isFavorite ? 2 : 3;
+        };
         hits.sort((a, b) => {
+          const exact = Number(b.id === Number(query.trim())) - Number(a.id === Number(query.trim()));
+          if (exact) return exact;
+          if (sort === "recent" || sort === "default") {
+            return tier(a) - tier(b) || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0) || a.id - b.id;
+          }
           const priority = Number(relations.has(b.id)) - Number(relations.has(a.id));
           if (priority) return priority;
           if (sort === "name") return (a.name ?? a.logName ?? "").localeCompare(b.name ?? b.logName ?? "");
-          if (sort === "recent") return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
           if (sort === "ratingDesc" || sort === "ratingAsc") return Number(a.rating == null) - Number(b.rating == null) || ((a.rating ?? 0) - (b.rating ?? 0)) * (sort === "ratingDesc" ? -1 : 1);
           return Number(b.id === fixtureSnapshot.selfId) - Number(a.id === fixtureSnapshot.selfId) || b.encounters - a.encounters;
         });

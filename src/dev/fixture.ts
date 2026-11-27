@@ -208,6 +208,7 @@ export function fixtureHits(query: string): PlayerHit[] {
       lastSeenAt: now - 600_000,
       encounters: p.encounters.total,
       hasNote: p.note != null,
+      isFavorite: localStorage.getItem(`bax.dev.favorite.${p.id}`) === "1",
     }));
 }
 // ------------------------------------------------------------ 比赛记录与战后分析

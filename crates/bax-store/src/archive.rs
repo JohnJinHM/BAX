@@ -32,6 +32,7 @@ pub struct PlayerHit {
     /// 一共同场过多少次。
     pub encounters: u32,
     pub has_note: bool,
+    pub is_favorite: bool,
 }
 
 /// 与本机玩家的关系。
@@ -128,10 +129,20 @@ impl Store {
         Ok(())
     }
 
+    /// 收藏是本机的个人设置，每个玩家单独写入，取消时删除对应键。
+    pub fn set_player_favorite(&mut self, player: PlayerId, favorite: bool) -> Result<()> {
+        let key = format!("players.favorite.{}", id_to_db(player.get()));
+        if favorite {
+            self.set_setting(&key, &true)
+        } else {
+            self.remove_setting(&key).map(|_| ())
+        }
+    }
+
     /// 按名字或 ID 查找玩家。查询为空时列出最近见过的玩家。
     ///
     /// 名字同时在接口资料与日志里的名字中查找，不区分英文大小写。完全匹配 ID 的排在最前，
-    /// 其余按最近一次见到的时间排序。
+    /// 其余先列收藏，再按最近一次见到的时间排序。
     pub fn search_players(&self, query: &str, limit: u32) -> Result<Vec<PlayerHit>> {
         self.search_players_filtered(query, limit, 0, "recent", "all", None)
     }
@@ -161,12 +172,21 @@ impl Store {
         let query = query.trim();
         let exact_id = query.parse::<u64>().ok().map(id_to_db);
         let pattern = like_pattern(query);
-        let ordering = match sort {
-            "recent" => "last_seen_at DESC",
-            "ratingDesc" => "rating IS NULL, rating DESC",
-            "ratingAsc" => "rating IS NULL, rating ASC",
-            "name" => "COALESCE(name, last_log_name, '') COLLATE NOCASE",
-            _ => "(id = ?5) DESC, encounters DESC, last_seen_at DESC",
+        let (priority, ordering) = match sort {
+            "ratingDesc" => ("in_match DESC", "rating IS NULL, rating DESC"),
+            "ratingAsc" => ("in_match DESC", "rating IS NULL, rating ASC"),
+            "name" => (
+                "in_match DESC",
+                "COALESCE(name, last_log_name, '') COLLATE NOCASE",
+            ),
+            "encounters" => (
+                "in_match DESC, (id = ?5) DESC",
+                "encounters DESC, last_seen_at DESC",
+            ),
+            _ => (
+                "CASE WHEN id = ?5 THEN 0 WHEN in_match THEN 1 WHEN is_favorite THEN 2 ELSE 3 END",
+                "last_seen_at DESC",
+            ),
         };
         let condition = match filter {
             "noted" => "has_note = 1",
@@ -177,17 +197,17 @@ impl Store {
         let sql = format!("WITH hits AS (SELECT p.id, p.name, p.last_log_name, p.rating, p.level, p.last_seen_at,
                     (SELECT COUNT(*) FROM match_players mp JOIN matches m ON m.id = mp.match_id
                       WHERE mp.player_id = p.id AND (m.self_id IS NULL OR m.self_id <> mp.player_id)) AS encounters,
-                    EXISTS (SELECT 1 FROM notes n WHERE n.player_id = p.id) AS has_note
+                    EXISTS (SELECT 1 FROM notes n WHERE n.player_id = p.id) AS has_note,
+                    EXISTS (SELECT 1 FROM settings WHERE key = 'players.favorite.' || p.id) AS is_favorite,
+                    EXISTS (SELECT 1 FROM match_players mp WHERE mp.match_id = ?7 AND mp.player_id = p.id
+                            AND mp.team IN ('alpha', 'bravo') AND mp.player_id IS NOT ?5) AS in_match
              FROM players p
              WHERE ?1 = ''
                 OR p.id = ?2
                 OR p.name LIKE ?3 ESCAPE '\\'
                 OR p.last_log_name LIKE ?3 ESCAPE '\\'
              ) SELECT * FROM hits WHERE {condition}
-             ORDER BY (id = ?2) DESC,
-                      (id IN (SELECT player_id FROM match_players WHERE match_id = ?7
-                              AND team IN ('alpha', 'bravo') AND player_id IS NOT ?5)) DESC,
-                      {ordering}, id
+             ORDER BY (id = ?2) DESC, {priority}, {ordering}, id
              LIMIT ?4 OFFSET ?6");
         let mut stmt = self.conn.prepare_cached(&sql)?;
         let rows = stmt.query_map(
@@ -210,6 +230,7 @@ impl Store {
                     last_seen_at: row.get::<_, Option<i64>>(5)?.map(Timestamp::from_millis),
                     encounters: row.get(6)?,
                     has_note: row.get(7)?,
+                    is_favorite: row.get(8)?,
                 })
             },
         )?;
@@ -492,7 +513,55 @@ mod tests {
                 (Some(PlayerId(500)), Some(MatchId(2))),
             )
             .expect("查询本局玩家");
-        assert_eq!(first[0].id, PlayerId(101));
+        assert_eq!(first[0].id, PlayerId(500));
+    }
+
+    #[test]
+    fn favorites_rank_after_self_and_active_players_before_pagination() {
+        let mut store = sample();
+        let page = |store: &Store, active_match, sort, offset| {
+            store
+                .search_players_in_match(
+                    "",
+                    2,
+                    offset,
+                    sort,
+                    "all",
+                    (Some(PlayerId(500)), active_match),
+                )
+                .expect("分页")
+                .into_iter()
+                .map(|p| (p.id.get(), p.is_favorite))
+                .collect::<Vec<_>>()
+        };
+        for _ in 0..2 {
+            store
+                .set_player_favorite(PlayerId(201), true)
+                .expect("收藏");
+        }
+        assert_eq!(page(&store, None, "recent", 0), [(500, false), (201, true)]);
+        assert_eq!(
+            page(&store, Some(MatchId(2)), "recent", 0),
+            [(500, false), (101, false)]
+        );
+        assert_eq!(
+            page(&store, Some(MatchId(2)), "recent", 2),
+            [(301, false), (201, true)]
+        );
+        assert_eq!(page(&store, None, "name", 0), [(301, false), (101, false)]);
+        for _ in 0..2 {
+            store
+                .set_player_favorite(PlayerId(201), false)
+                .expect("取消收藏");
+        }
+        assert_eq!(
+            page(&store, None, "recent", 0),
+            [(500, false), (101, false)]
+        );
+        assert_eq!(
+            page(&store, None, "recent", 2),
+            [(301, false), (201, false)]
+        );
     }
 
     #[test]

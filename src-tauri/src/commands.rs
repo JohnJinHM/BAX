@@ -220,11 +220,24 @@ pub async fn search_players(
             query,
             limit.unwrap_or(50),
             offset.unwrap_or(0),
-            sort.unwrap_or_else(|| "default".into()),
+            sort.unwrap_or_else(|| "recent".into()),
             filter.unwrap_or_else(|| "all".into()),
         )
         .await
         .map_err(rejected("search_players"))
+}
+
+#[tauri::command]
+pub async fn set_player_favorite(
+    state: State<'_, AppState>,
+    id: u64,
+    favorite: bool,
+) -> CommandResult {
+    state
+        .engine
+        .set_player_favorite(PlayerId(id), favorite)
+        .await
+        .map_err(rejected("set_player_favorite"))
 }
 
 /// `body` 为空时删除备注。

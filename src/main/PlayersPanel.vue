@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
 
 import type { PlayerHit } from "../shared/bindings/PlayerHit";
 import { commands, errorText, useSnapshot } from "../shared/engine";
@@ -13,7 +13,8 @@ const now = useNow(60_000);
 const query = ref("");
 const snapshot = useSnapshot();
 const relations = computed(() => currentRelations(snapshot.value?.current));
-const sort = ref("default");
+const sort = ref("recent");
+const savingFavorites = reactive(new Set<number>());
 const filter = ref("all");
 const busy = ref(false);
 const more = ref(false);
@@ -23,15 +24,24 @@ const failure = ref<string | null>(null);
 let timer: number | undefined;
 let latest = 0;
 
-async function search(append = false) {
+async function search(append = false, count = PAGE) {
   const ticket = ++latest;
   busy.value = true;
   try {
-    const result = await commands.searchPlayers(query.value, PAGE, sort.value, filter.value, append ? hits.value.length : 0);
+    const result: PlayerHit[] = [];
+    const offset = append ? hits.value.length : 0;
+    // 收藏可能移动跨页记录，从头重读当前已显示的范围。
+    while (result.length < count) {
+      const limit = Math.min(500, count - result.length);
+      const page = await commands.searchPlayers(query.value, limit, sort.value, filter.value, offset + result.length);
+      if (ticket !== latest) return;
+      result.push(...page);
+      if (page.length < limit) break;
+    }
     // 输入很快时，只采用最后一次查询的结果
     if (ticket === latest) {
       hits.value = append ? [...hits.value, ...result] : result;
-      more.value = result.length === PAGE;
+      more.value = result.length === count;
       failure.value = null;
     }
   } catch (error) {
@@ -52,6 +62,19 @@ watch([() => snapshot.value?.selfId, () => snapshot.value?.current?.matchId,
 onMounted(() => void search());
 onBeforeUnmount(() => { ++latest; window.clearTimeout(timer); });
 
+async function toggleFavorite(hit: PlayerHit) {
+  if (savingFavorites.has(hit.id)) return;
+  savingFavorites.add(hit.id);
+  try {
+    await commands.setPlayerFavorite(hit.id, !hit.isFavorite);
+    await search(false, Math.max(PAGE, Math.ceil(hits.value.length / PAGE) * PAGE));
+  } catch (error) {
+    failure.value = errorText(error);
+  } finally {
+    savingFavorites.delete(hit.id);
+  }
+}
+
 function title(hit: PlayerHit): string {
   return hit.name ?? hit.logName ?? `ID ${hit.id}`;
 }
@@ -63,7 +86,7 @@ function title(hit: PlayerHit): string {
       <input v-model="query" type="text" class="search" aria-label="按名字或 ID 查找" placeholder="按名字或 ID 查找" />
       <div class="list-controls">
         <label>筛选<select v-model="filter"><option value="all">全部玩家</option><option value="noted">有备注</option><option value="encountered">有同场记录</option><option value="rated">有 ELO</option></select></label>
-        <label>排序<select v-model="sort"><option value="default">本机与同场最多</option><option value="recent">最近见过</option><option value="ratingDesc">ELO 从高到低</option><option value="ratingAsc">ELO 从低到高</option><option value="name">名字</option></select></label>
+        <label>排序<select v-model="sort"><option value="recent">最近见过</option><option value="encounters">同场最多</option><option value="ratingDesc">ELO 从高到低</option><option value="ratingAsc">ELO 从低到高</option><option value="name">名字</option></select></label>
       </div>
       <p v-if="failure" class="error">{{ failure }}</p>
       <p class="hint" role="status">{{ busy ? '正在查询…' : `已显示 ${hits.length} 人` }}</p>
@@ -73,12 +96,18 @@ function title(hit: PlayerHit): string {
           :key="hit.id"
           :class="{ active: hit.id === selectedPlayer, teammate: relations.get(hit.id) === '队友', opponent: relations.get(hit.id) === '对手' }"
           tabindex="0"
-          @keydown.enter="selectedPlayer = hit.id"
-          @keydown.space.prevent="selectedPlayer = hit.id"
+          @keydown.enter.self="selectedPlayer = hit.id"
+          @keydown.space.self.prevent="selectedPlayer = hit.id"
           @click="selectedPlayer = hit.id"
         >
           <div class="row-top">
-            <span class="name">{{ title(hit) }}</span>
+            <span class="name" :title="title(hit)">{{ title(hit) }}</span>
+            <button type="button" class="favorite" :aria-pressed="hit.isFavorite" :disabled="savingFavorites.has(hit.id)"
+              :aria-label="`收藏 ${title(hit)}`" :title="hit.isFavorite ? '取消收藏' : '收藏玩家'" @click.stop="toggleFavorite(hit)">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9Z" />
+              </svg>
+            </button>
             <span v-if="hit.id === snapshot?.selfId" class="self-mark">本机</span>
             <span v-if="relations.has(hit.id)" class="relation">本局{{ relations.get(hit.id) }}</span>
             <span v-if="hit.hasNote" class="note-mark" title="有备注">✎</span>
@@ -154,12 +183,26 @@ li.active {
 
 .row-top {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
 
+.favorite {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--bax-muted);
+}
+.favorite path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.favorite:hover, .favorite[aria-pressed="true"] { color: var(--bax-accent); }
+.favorite[aria-pressed="true"] path { fill: currentColor; }
+.favorite:focus-visible { outline: 2px solid var(--bax-accent); }
 .name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -172,6 +215,7 @@ li.active {
 }
 
 .elo {
+  margin-left: auto;
   font-weight: 600;
 }
 

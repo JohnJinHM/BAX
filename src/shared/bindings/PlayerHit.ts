@@ -17,4 +17,4 @@ logName: string | null, rating: number | null, level: number | null, lastSeenAt:
 /**
  * 一共同场过多少次。
  */
-encounters: number, hasNote: boolean, };
+encounters: number, hasNote: boolean, isFavorite: boolean, };

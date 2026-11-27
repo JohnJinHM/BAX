@@ -101,6 +101,11 @@ pub(crate) enum Command {
         filter: String,
         done: oneshot::Sender<Result<Vec<PlayerHit>, String>>,
     },
+    SetPlayerFavorite {
+        id: PlayerId,
+        favorite: bool,
+        done: oneshot::Sender<Result<(), String>>,
+    },
     /// 保存备注；内容为空时删除。
     SetNote {
         id: PlayerId,
@@ -597,6 +602,13 @@ impl Session {
                                     .map(|m| m.match_id),
                             ),
                         )
+                        .map_err(|e| e.to_string()),
+                );
+            }
+            Command::SetPlayerFavorite { id, favorite, done } => {
+                let _ = done.send(
+                    self.store
+                        .set_player_favorite(id, favorite)
                         .map_err(|e| e.to_string()),
                 );
             }

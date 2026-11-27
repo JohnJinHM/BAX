@@ -119,8 +119,9 @@ export const commands = {
   stopPlayerFights: (id: number) => invoke<void>("stop_player_fights", { id }),
   playerDetail: (id: number) => invoke<PlayerDetail | null>("player_detail", { id }),
   /** 默认本机优先，然后按同场次数排序；筛选在分页前执行。 */
-  searchPlayers: (query: string, limit = 50, sort = "default", filter = "all", offset = 0) => invoke<PlayerHit[]>("search_players", { query, limit, sort, filter, offset }),
+  searchPlayers: (query: string, limit = 50, sort = "recent", filter = "all", offset = 0) => invoke<PlayerHit[]>("search_players", { query, limit, sort, filter, offset }),
   /** 内容为空时删除备注。 */
+  setPlayerFavorite: (id: number, favorite: boolean) => invoke<void>("set_player_favorite", { id, favorite }),
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),
   refreshPlayer: (id: number) => invoke<void>("refresh_player", { id }),
   /** 比赛记录，新的在前，带战报状态。 */
