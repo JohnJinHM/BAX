@@ -4,6 +4,7 @@ import type { FightMember } from "./FightMember";
 import type { FightPerformance } from "./FightPerformance";
 import type { MatchId } from "./MatchId";
 import type { OpeningUnit } from "./OpeningUnit";
+import type { Relation } from "./Relation";
 import type { SpecPreference } from "./SpecPreference";
 import type { Team } from "./Team";
 import type { Timestamp } from "./Timestamp";
@@ -12,4 +13,4 @@ export type PlayerFight = { roster: Array<FightMember>, winner: Team | null, per
 /**
  * Distinct opening units, or None when timing or deployments are unavailable.
  */
-opening: Array<OpeningUnit> | null, matchId: MatchId, hasLocalLog: boolean, playedTogether: boolean, start: Timestamp | null, durationSecs: number | null, map: string | null, team: Team | null, won: boolean | null, ratingDelta: number | null, specs: Array<SpecPreference>, };
+opening: Array<OpeningUnit> | null, matchId: MatchId, hasLocalLog: boolean, playedTogether: boolean, relation: Relation | null, start: Timestamp | null, durationSecs: number | null, map: string | null, team: Team | null, won: boolean | null, ratingDelta: number | null, specs: Array<SpecPreference>, };

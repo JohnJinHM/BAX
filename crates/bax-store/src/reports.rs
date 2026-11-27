@@ -157,6 +157,7 @@ pub struct StoredPlayerFight {
     pub id: MatchId,
     pub has_local_log: bool,
     pub played_together: bool,
+    pub relation: Option<crate::Relation>,
     pub start: Option<Timestamp>,
     pub duration_secs: Option<i64>,
     pub map_id: Option<i64>,
@@ -198,11 +199,9 @@ impl Store {
             "SELECT i.match_id, i.unit_ids, r.start_time, r.duration_secs, r.map_id, m.map,
                     COALESCE(mp.team, CASE i.team_id WHEN 0 THEN 'alpha' WHEN 1 THEN 'bravo'
                            WHEN 100 THEN 'spectators' END), r.winner, i.rating_delta, m.id IS NOT NULL,
-                    COALESCE(m.self_id, ?2) <> i.player_id AND (
-                        EXISTS (SELECT 1 FROM report_player_units p WHERE p.match_id=i.match_id
-                                AND p.player_id=COALESCE(m.self_id, ?2))
-                        OR EXISTS (SELECT 1 FROM match_players p WHERE p.match_id=i.match_id
-                                   AND p.player_id=COALESCE(m.self_id, ?2))), i.deployment,
+                    COALESCE(m.self_id, ?2) <> i.player_id AND
+                        (own.player_id IS NOT NULL OR own_log.player_id IS NOT NULL), i.deployment,
+                    COALESCE(m.self_team, own_log.team, CASE own.team_id WHEN 0 THEN 'alpha' WHEN 1 THEN 'bravo' END),
                     i.kills, i.losses, i.objectives, i.supplied_allies,
                     (SELECT json_group_array(json_object('id', s.player_id,
                              'name', COALESCE(s.report_name, log.log_name, profile.name, profile.last_log_name),
@@ -214,6 +213,8 @@ impl Store {
              FROM report_player_units i JOIN match_reports r USING(match_id)
              LEFT JOIN matches m ON m.id=i.match_id
              LEFT JOIN match_players mp ON mp.match_id=i.match_id AND mp.player_id=i.player_id
+             LEFT JOIN report_player_units own ON own.match_id=i.match_id AND own.player_id=COALESCE(m.self_id, ?2)
+             LEFT JOIN match_players own_log ON own_log.match_id=i.match_id AND own_log.player_id=COALESCE(m.self_id, ?2)
              WHERE i.player_id=?1 ORDER BY i.start_time DESC, i.match_id DESC",
         )?;
         let mut rows = stmt.query(params![
@@ -236,21 +237,38 @@ impl Store {
                 .filter(|t| t.is_playing())
                 .zip(winner)
                 .map(|(a, b)| a == b);
+            let played_together = row.get::<_, Option<bool>>(10)?.unwrap_or(false);
+            let own_team = row
+                .get::<_, Option<String>>(12)?
+                .as_deref()
+                .map(team_from_db)
+                .transpose()?;
+            let relation = played_together.then(|| match (team, own_team) {
+                (Some(a), Some(b)) if a.is_playing() && b.is_playing() => {
+                    if a == b {
+                        crate::Relation::Teammate
+                    } else {
+                        crate::Relation::Opponent
+                    }
+                }
+                _ => crate::Relation::Other,
+            });
             fights.push(StoredPlayerFight {
                 winner,
-                roster: serde_json::from_str(&row.get::<_, String>(16)?)
+                roster: serde_json::from_str(&row.get::<_, String>(17)?)
                     .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
                 performance: FightPerformance {
-                    kills: row.get(12)?,
-                    losses: row.get(13)?,
-                    objectives: row.get(14)?,
-                    supplied_allies: row.get(15)?,
+                    kills: row.get(13)?,
+                    losses: row.get(14)?,
+                    objectives: row.get(15)?,
+                    supplied_allies: row.get(16)?,
                 },
                 deployment: serde_json::from_str(&row.get::<_, String>(11)?)
                     .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
                 id: MatchId(id_from_db(row.get(0)?)),
                 has_local_log: row.get(9)?,
-                played_together: row.get::<_, Option<bool>>(10)?.unwrap_or(false),
+                played_together,
+                relation,
                 units: indexed_units(row)?,
                 start: row.get::<_, Option<i64>>(2)?.map(Timestamp::from_millis),
                 duration_secs: row.get(3)?,

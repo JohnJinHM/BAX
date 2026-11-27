@@ -10,7 +10,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::watch;
 
-use crate::{commands, hotkeys, overlay, tray};
+use crate::{commands, hotkeys, overlay, placement, tray};
 
 /// 快照事件：载荷是完整的 [`Snapshot`]。
 pub const SNAPSHOT_EVENT: &str = "bax://snapshot";
@@ -164,6 +164,7 @@ pub fn run() {
                 }),
                 diag: setup_diag,
             });
+            app.manage(placement::WindowMemory::load(&data_dir));
             app.manage(hotkeys::HotkeyState::default());
             app.manage(commands::UiErrorLimiter::default());
 
@@ -185,11 +186,13 @@ pub fn run() {
             std::process::exit(1);
         }
     };
-    app.run(move |_app, event| match event {
+    app.run(move |app, event| match event {
         RunEvent::ExitRequested { api, code, .. } => {
             // 关掉主窗口不退出：BAX 常驻托盘，只有托盘菜单的“退出”才结束
             if code.is_none() {
                 api.prevent_exit();
+            } else {
+                placement::flush(app);
             }
         }
         RunEvent::Exit => {
@@ -286,6 +289,16 @@ fn forward_snapshots(app: AppHandle, mut snapshots: watch::Receiver<Arc<Snapshot
 
 /// 打开主窗口；已经打开时把它带到前台。
 pub fn show_main_window(app: &AppHandle) {
+    // 单例与托盘回调是同步的。让它们先返回，WebView2 才能完成窗口创建。
+    static OPENING: Mutex<()> = Mutex::new(());
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _opening = OPENING.lock().expect("打开主窗口");
+        open_or_focus_main(&app);
+    });
+}
+
+fn open_or_focus_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
@@ -297,7 +310,13 @@ pub fn show_main_window(app: &AppHandle) {
         .title("BAX")
         .inner_size(1120.0, 720.0)
         .min_inner_size(800.0, 480.0)
-        .build();
+        .visible(false)
+        .build()
+        .and_then(|window| {
+            placement::attach(&window, || Ok(()));
+            window.show()?;
+            window.set_focus()
+        });
     if let Err(err) = built {
         tracing::error!(error = %err, "无法打开主窗口");
     }

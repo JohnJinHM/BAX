@@ -50,7 +50,7 @@ export type SkinSettings = Appearance;
 interface Settings {
   "ui.radarBaselines": Record<string, number>;
   "ui.skin": SkinSettings;
-  "ui.sortie": { height: number };
+  "ui.sortie": { height: number; playersHeight: number };
   "ui.ocr": { enabled: boolean };
   "ui.overlay": OverlayAppearance;
   "ui.alerts": AlertSettings;
@@ -61,7 +61,7 @@ interface Settings {
 export const defaults: Settings = {
   "ui.radarBaselines": {},
   "ui.skin": defaultAppearance,
-  "ui.sortie": { height: 600 },
+  "ui.sortie": { height: 600, playersHeight: 400 },
   "ui.ocr": { enabled: true },
   "ui.overlay": {
     opacity: 1, fadePosition: 0.5, fadeEndOpacity: 0.2, scale: 1, width: 340,

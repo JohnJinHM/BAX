@@ -25,11 +25,17 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetWindowLongW, GetWindowRect,
-    GetWindowThreadProcessId, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, LWA_ALPHA,
-    SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER,
-    SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos, ShowWindow,
-    WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    GetWindowThreadProcessId, HWND_TOPMOST, IsIconic, IsWindow, IsWindowVisible, IsZoomed,
+    LWA_ALPHA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongW,
+    SetWindowPos, ShowWindow, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
+
+/// 在 WM_MOVE 与 WM_SIZE 相继送达时，tao 缓存的最大化标志可能仍是旧值。
+pub fn layout_flags(hwnd: HWND) -> (bool, bool) {
+    // SAFETY: 调用方传入存活的窗口句柄，两项查询都不修改窗口。
+    unsafe { (IsIconic(hwnd) != 0, IsZoomed(hwnd) != 0) }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct WindowState {
