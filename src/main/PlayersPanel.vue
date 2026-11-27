@@ -101,13 +101,13 @@ function title(hit: PlayerHit): string {
           @click="selectedPlayer = hit.id"
         >
           <div class="row-top">
-            <span class="name" :title="title(hit)">{{ title(hit) }}</span>
+            <span class="player-identity"><span class="name" :title="title(hit)">{{ title(hit) }}</span>
             <button type="button" class="favorite" :aria-pressed="hit.isFavorite" :disabled="savingFavorites.has(hit.id)"
               :aria-label="`收藏 ${title(hit)}`" :title="hit.isFavorite ? '取消收藏' : '收藏玩家'" @click.stop="toggleFavorite(hit)">
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                 <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9Z" />
               </svg>
-            </button>
+            </button></span>
             <span v-if="hit.id === snapshot?.selfId" class="self-mark">本机</span>
             <span v-if="relations.has(hit.id)" class="relation">本局{{ relations.get(hit.id) }}</span>
             <span v-if="hit.hasNote" class="note-mark" title="有备注">✎</span>
@@ -187,22 +187,27 @@ li.active {
   gap: 4px;
 }
 
+.player-identity {display:inline-flex;align-items:center;min-width:0;gap:0;}
 .favorite {
+  position: relative;
   display: grid;
   place-items: center;
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 1.25em;
+  height: 1.5em;
   padding: 0;
   background: transparent;
   border: 0;
   color: var(--bax-muted);
 }
+.favorite::before {content:"";position:absolute;inset:50% auto auto 50%;width:24px;height:24px;transform:translate(-50%,-50%);}
+.favorite svg {display:block;width:1em;height:1em;}
 .favorite path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 .favorite:hover, .favorite[aria-pressed="true"] { color: var(--bax-accent); }
 .favorite[aria-pressed="true"] path { fill: currentColor; }
 .favorite:focus-visible { outline: 2px solid var(--bax-accent); }
 .name {
+  line-height: 1.5;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

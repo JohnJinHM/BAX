@@ -7,6 +7,7 @@ import { ago, minutes, percent, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
 import type { PlayerFight } from "../shared/bindings/PlayerFight";
 import { playerAverages, combatAxes, preferenceAxes } from "./player-analysis";
+import { syncFights } from "./player-fight-sync";
 import PlayerRadar from "./PlayerRadar.vue";
 import PlayerUnitPreferences from "./PlayerUnitPreferences.vue";
 import PlayerFightArchive from "./PlayerFightArchive.vue";
@@ -19,6 +20,7 @@ import SpecIcon from "../shared/SpecIcon.vue";
 
 const props = defineProps<{ id: number }>();
 
+const archiveReady = ref(false);
 const fights = ref<PlayerFight[]>([]);
 const averages = computed(() => playerAverages(fights.value));
 const now = useNow(60_000);
@@ -39,7 +41,8 @@ const noteDraft = computed({
   },
 });
 const preview = ref<{id:number; map:string | null} | null>(null);
-const refreshing = ref(false);
+const refreshingPlayers = reactive(new Set<number>());
+const refreshing = computed(() => refreshingPlayers.has(props.id));
 const snapshot = useSnapshot();
 let loadSequence = 0;
 
@@ -66,6 +69,7 @@ watch(
     noteMessage.value = null;
     detail.value = null;
     fights.value = [];
+    archiveReady.value = false;
     preview.value = null;
     void load();
   },
@@ -127,17 +131,25 @@ async function saveNote() {
 
 async function refresh() {
   const id = props.id;
-  refreshing.value = true;
+  if (refreshingPlayers.has(id)) return;
+  refreshingPlayers.add(id);
   failure.value = null;
-  let refreshError: string | null = null;
   try {
-    await commands.refreshPlayer(id);
-  } catch (error) {
-    refreshError = errorText(error);
+    // A failed profile lookup must still allow the archive request to finish.
+    const [profile, archive] = await Promise.allSettled([commands.refreshPlayer(id), syncFights(id)]);
+    if (props.id === id) {
+      await load();
+      if (props.id === id) {
+        const errors = [
+          profile.status === "rejected" ? "资料刷新失败："+errorText(profile.reason) : "",
+          archive.status === "rejected" ? "对局刷新失败："+errorText(archive.reason) : "",
+        ].filter(Boolean);
+        if (errors.length) failure.value = errors.join("；");
+      }
+    }
+  } finally {
+    refreshingPlayers.delete(id);
   }
-  if (props.id === id) await load();
-  if (props.id === id && refreshError) failure.value = refreshError;
-  refreshing.value = false;
 }
 </script>
 
@@ -150,7 +162,7 @@ async function refresh() {
       <span class="hint">ID {{ id }}</span>
       <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
       <span v-if="detail?.steamId" class="hint">Steam {{ detail.steamId }}</span>
-      <button class="refresh" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
+      <button class="refresh" title="刷新玩家资料和最近 20 场对局" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
     </div>
     <p v-if="failure" class="error">{{ failure }}</p>
     <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 STB 查一次。</p>
@@ -170,9 +182,8 @@ async function refresh() {
       <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
     </div>
     <PlayerRadar title="作战效能" :axes="combatAxes" :values="averages.combat" :games="averages.games" />
-    <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" />
+    <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" :warn-small-sample="archiveReady" />
     </div>
-    <p v-if="detail" class="hint radar-note">虚线为参考基准，可在设置中调整。存活按损失占出兵次数的比例反算，补给只计队友使用的点数。单位偏好按八类出兵次数占比计算。</p>
     <p v-else-if="loading" class="hint">正在读取…</p>
 
     <template v-if="detail">
@@ -222,7 +233,7 @@ async function refresh() {
 
     </template>
 
-    <PlayerFightArchive v-model:fights="fights" :id="id" :encounters="detail?.isSelf ? [] : (detail?.matches ?? [])" @preview="preview = $event" />
+    <PlayerFightArchive v-model:fights="fights" v-model:ready="archiveReady" :id="id" :encounters="detail?.isSelf ? [] : (detail?.matches ?? [])" @preview="preview = $event" />
     <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
 
   </section>
@@ -259,7 +270,6 @@ async function refresh() {
 
 .detail {container-type:inline-size;}
 .overview {display:grid;grid-template-columns:minmax(185px,1fr) repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin:20px 0 8px;}
-.radar-note {margin:8px 0 16px;}
 @container (max-width:760px) {.overview {grid-template-columns:repeat(2,minmax(0,1fr));}.overview .stats {grid-column:1/-1;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));}}
 @container (max-width:470px) {.overview {grid-template-columns:1fr;}.overview .radar {width:100%;}}
 .stats {

@@ -9,6 +9,7 @@ import AnalysisTreemap from "./AnalysisTreemap.vue";
 import TreemapUnitDetail from "./TreemapUnitDetail.vue";
 
 const props = defineProps<{ players: PlayerReport[]; teams: Team[]; teamLabel: (team: Team) => string; teamColor: (team: Team | null) => string }>();
+const selectedTeam = ref<Team | null>();
 const playerId = ref<number>();
 const unitKey = ref<string>();
 const player = computed(() => props.players.find(p => p.id === playerId.value));
@@ -23,7 +24,8 @@ const groups = computed<TreeGroup[]>(() => {
       key,label:u.unitName,value:u.deployedScore,icon:{id:u.unitId,name:u.unitName,kind:u.class,thumbnail:u.thumbnail},
     }))}];
   }
-  const teams = props.players.some(p => p.team == null) ? [...props.teams,null] : props.teams;
+  const teams = selectedTeam.value !== undefined ? [selectedTeam.value]
+    : props.players.some(p => p.team == null) ? [...props.teams,null] : props.teams;
   return teams.map(t => ({
     key:t ?? "unknown",label:teamName(t),color:props.teamColor(t),
     tiles:props.players.filter(p => p.team === t).map(p => ({
@@ -31,31 +33,42 @@ const groups = computed<TreeGroup[]>(() => {
     })),
   }));
 });
+const path = computed(() => {
+  const parts = ["全场"];
+  if (selectedTeam.value !== undefined) parts.push(teamName(selectedTeam.value));
+  if (player.value) parts.push(playerName(player.value));
+  if (model.value) parts.push(model.value.unitName);
+  return parts;
+});
 const points = computed(() => model.value?.deployedScore ?? groups.value.reduce((n,g) => n+g.tiles.reduce((sum,t) => sum+t.value,0),0));
 const extra = computed(() => {
   const u = model.value;
   if (!u) return [];
   const time = (s:number|null) => s == null ? "–" : mmss(s*1000);
   return [
-    {label:"累计出兵分（估算）",value:count(u.deployedScore)}, {label:"净投入（估算）",value:count(u.value)},
-    {label:"回收分数（估算）",value:count(u.deployedScore-u.value)}, {label:"转交队友",value:count(u.transferred)},
+    {label:"累计出兵分（估算）",value:count(u.deployedScore)+" 分"}, {label:"净投入（估算）",value:count(u.value)+" 分"},
+    {label:"回收分数（估算）",value:count(u.deployedScore-u.value)+" 分"}, {label:"转交队友",value:count(u.transferred)},
     {label:"首次出兵",value:time(u.firstSpawnSecs)}, {label:"末次出兵",value:time(u.lastSpawnSecs)},
   ];
 });
 function choose(_:string, key:string) {
   if (player.value) unitKey.value = key;
-  else { playerId.value = Number(key); unitKey.value = undefined; }
+  else {
+    playerId.value = Number(key);
+    selectedTeam.value = props.players.find(p => p.id === playerId.value)?.team ?? null;
+    unitKey.value = undefined;
+  }
 }
-function back() {
-  if (model.value) unitKey.value = undefined;
-  else playerId.value = undefined;
+function navigate(depth: number) {
+  if (depth < 3) unitKey.value = undefined;
+  if (depth < 2) playerId.value = undefined;
+  if (depth < 1) selectedTeam.value = undefined;
 }
 </script>
 <template>
   <div class="drill">
-    <AnalysisTreemap :groups="groups" unit="分" label="出兵分数矩形树图" :depth="model ? 2 : player ? 1 : 0"
-      :view-key="JSON.stringify([player?.id,model?.variantKey])" :detail="!!model" @choose="choose" @back="back">
-      <template #path>全场<template v-if="player"> › {{ teamName(player.team) }} › {{ playerName(player) }}</template><template v-if="model"> › {{ model.unitName }}</template></template>
+    <AnalysisTreemap :groups="groups" unit="分" label="出兵分数矩形树图" :path="path" :team-view="!player"
+      :view-key="JSON.stringify([selectedTeam,player?.id,unitKey,path.length])" :detail="!!model" @choose="choose" @navigate="navigate">
       <template #total>{{ count(points) }} 分</template>
       <template #detail><TreemapUnitDetail v-if="player && model" :name="model.unitName" :color="teamColor(player.team)"
         :icon="{id:model.unitId,name:model.unitName,kind:model.class,thumbnail:model.thumbnail}" :activity="model"

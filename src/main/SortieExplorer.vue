@@ -17,7 +17,7 @@ import { useSetting, saveSetting } from "../shared/settings";
 
 const props = defineProps<{ analysis: MatchAnalysis; players: PlayerReport[]; teams: Team[]; teamLabel: (team: Team) => string; teamColor: (team: Team | null) => string }>();
 const emit = defineEmits<{ range: [start: number, end: number] }>();
-const mode = ref<"tree" | "players" | "life">("tree");
+const mode = ref<"tree" | "players" | "life">("life");
 const team = ref("");
 const selectedPlayers = ref<(string | number)[]>([]);
 const selectedKinds = ref<(string | number)[]>(Object.keys(unitClassNames));
@@ -89,6 +89,10 @@ const summaries = computed(() => props.teams.map((t) => {
   }).filter((x) => x.count);
   return { team: t, entries: units, value: netValue(units), classes };
 }));
+const teamScores = computed(() => props.teams.map(team => ({
+  team, value: props.players.filter(p => p.team === team)
+    .reduce((sum,p) => sum + p.units.reduce((n,u) => n + u.deployedScore, 0), 0),
+})));
 const overview = computed(() => timeBins(filtered.value, 0, fullEnd.value, fullEnd.value / 80));
 const overviewMax = computed(() => Math.max(1, ...overview.value.map((b) => b.entries.length)));
 const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.length && mode.value !== "tree").map((p) => {
@@ -201,7 +205,7 @@ function escapeSelection(event: KeyboardEvent) {
 function title(units: Entry[]) {
   const first = units[0];
   const last = Math.max(...units.map((s) => s.spawnSecs));
-  return `${playerName(first.player)} · ${time(first.spawnSecs)}${last !== first.spawnSecs ? `–${time(last)}` : ''} · ${[...new Set(units.map((s) => s.unitName))].join("、")} ×${units.length}${units.some((s) => s.refunded) ? ` · 含回收 ${units.filter((s) => s.refunded).length} 次` : ''} · 净估算价值 ${count(netValue(units))}`;
+  return `${playerName(first.player)} · ${time(first.spawnSecs)}${last !== first.spawnSecs ? `–${time(last)}` : ''} · ${[...new Set(units.map((s) => s.unitName))].join("、")} ×${units.length}${units.some((s) => s.refunded) ? ` · 含回收 ${units.filter((s) => s.refunded).length} 次` : ''} · 净估算价值 ${count(netValue(units))} 分`;
 }
 let dragAnchor: number | null = null;
 function pointerTime(event: PointerEvent) {
@@ -247,9 +251,12 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
     <div class="explorer-controls">
     <div class="heading"><h3>出兵分析</h3><span v-if="mode !== 'tree'" class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
     <div class="modes" role="group" aria-label="分析视图">
-      <button v-for="item in ([['tree', '出兵分布'], ['life', '存续时间'], ['players', '出兵批次']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
+      <button v-for="item in ([['life', '存续时间'], ['players', '出兵批次'], ['tree', '出兵分布']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
     </div>
     <template v-if="mode !== 'tree'">
+    <div class="team-scores" aria-label="双方全场累计出兵分数">
+      <span v-for="s in teamScores" :key="s.team" :style="{borderColor:teamColor(s.team)}">{{ teamLabel(s.team) }} <b>{{ count(s.value) }} 分</b></span>
+    </div>
     <div class="filters">
       <label>队伍<select v-model="team" class="dropdown-trigger"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
       <CheckFilter v-model="selectedPlayers" label="玩家" :options="playerOptions" />
@@ -319,13 +326,13 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       <section class="interval" aria-label="区间投入统计">
         <h4>区间投入 <span class="muted">{{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></h4>
         <p class="muted">按当前筛选和出兵时间统计，回收计次数、净价值记 0。</p>
-        <div class="comparison"><div v-for="s in summaries" :key="s.team"><strong :style="{ color: teamColor(s.team) }">{{ teamLabel(s.team) }}</strong><p><b>{{ count(s.entries.length) }}</b> 次 <span class="muted">/</span> <b>{{ count(s.value) }}</b> 净估算价值</p><div v-for="c in s.classes" :key="c.label" class="stat-line"><span>{{ c.label }}</span><span>{{ c.count }} 次 · {{ s.value ? Math.round(c.value / s.value * 100) : 0 }}%</span></div></div></div>
-        <details><summary>各玩家投入</summary><div v-for="p in visiblePlayers" :key="p.id" class="stat-line"><button class="text-button" @click="selectedPlayers = [p.id]">{{ playerName(p.id) }}</button><span>{{ scoped.filter((s) => s.player === p.id).length }} 次 · {{ count(netValue(scoped.filter((s) => s.player === p.id))) }}</span></div></details>
+        <div class="comparison"><div v-for="s in summaries" :key="s.team"><strong :style="{ color: teamColor(s.team) }">{{ teamLabel(s.team) }}</strong><p><b>{{ count(s.entries.length) }}</b> 次 <span class="muted">/</span> <b>{{ count(s.value) }} 分</b> 净估算价值</p><div v-for="c in s.classes" :key="c.label" class="stat-line"><span>{{ c.label }}</span><span>{{ c.count }} 次 · {{ s.value ? Math.round(c.value / s.value * 100) : 0 }}%</span></div></div></div>
+        <details><summary>各玩家投入</summary><div v-for="p in visiblePlayers" :key="p.id" class="stat-line"><button class="text-button" @click="selectedPlayers = [p.id]">{{ playerName(p.id) }}</button><span>{{ scoped.filter((s) => s.player === p.id).length }} 次 · {{ count(netValue(scoped.filter((s) => s.player === p.id))) }} 分</span></div></details>
       </section>
       <section class="detail" aria-label="选中单位详情" aria-live="polite">
         <div class="heading"><h4>单位详情 <span v-if="detail.length" class="muted">{{ detail.length }} 次出兵</span></h4><button v-if="detail.length" @click="selected = []">取消选择</button></div>
         <p v-if="!detail.length" class="muted">点击时间线上的单位，详情固定在这里。</p>
-        <div v-else class="detail-list"><article v-for="s in detail" :key="s.key"><div class="unit-title"><UnitIcon unit-only :id="s.unitId" :thumbnail="s.thumbnail" :name="s.unitName" :kind="s.class" /><button class="text-button" @click="query = s.unitName">{{ s.unitName }}</button><span class="muted">{{ unitClassNames[s.class] }}</span><ReturnBadge v-if="s.refunded" /></div><p>{{ playerName(s.player) }} · {{ time(s.spawnSecs) }} 出兵<br />{{ s.refunded ? '已回收，时间未知' : s.deathSecs != null ? `${time(s.deathSecs)} 阵亡 · 存续 ${time(Math.max(0, s.deathSecs - s.spawnSecs))}` : '未记录阵亡' }}<br />估算成本 {{ count(s.cost) }} · 击毁 {{ s.kills }}<span v-if="s.airdropped"> · 空投</span><span v-if="s.transferredTo != null"><br />转交给 {{ playerName(s.transferredTo) }}</span></p></article></div>
+        <div v-else class="detail-list"><article v-for="s in detail" :key="s.key"><div class="unit-title"><UnitIcon unit-only :id="s.unitId" :thumbnail="s.thumbnail" :name="s.unitName" :kind="s.class" /><button class="text-button" @click="query = s.unitName">{{ s.unitName }}</button><span class="muted">{{ unitClassNames[s.class] }}</span><ReturnBadge v-if="s.refunded" /></div><p>{{ playerName(s.player) }} · {{ time(s.spawnSecs) }} 出兵<br />{{ s.refunded ? '已回收，时间未知' : s.deathSecs != null ? `${time(s.deathSecs)} 阵亡 · 存续 ${time(Math.max(0, s.deathSecs - s.spawnSecs))}` : '未记录阵亡' }}<br />估算成本 {{ count(s.cost) }} 分 · 击毁 {{ s.kills }}<span v-if="s.airdropped"> · 空投</span><span v-if="s.transferredTo != null"><br />转交给 {{ playerName(s.transferredTo) }}</span></p></article></div>
       </section>
     </div>
     </template>
@@ -348,6 +355,9 @@ h4 { font-size: calc(13px * var(--bax-font-scale)); }
 .modes { margin: 12px 0 16px; border-bottom: 1px solid var(--bax-border); gap: 16px; }
 .modes button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 8px 0; color: var(--bax-soft); }
 .modes button[aria-pressed="true"] { color: var(--bax-fg); border-bottom-color: var(--bax-accent); }
+.team-scores {display:flex;gap:16px;margin:0 0 10px;font-size:calc(12px * var(--bax-font-scale));}
+.team-scores span {border-left:3px solid;padding-left:6px;}
+.team-scores b {white-space:nowrap;}
 .filters { align-items: end; gap: 12px; }
 label { display: flex; flex-direction: column; gap: 5px; color: var(--bax-soft); font-size: calc(12px * var(--bax-font-scale)); }
 select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px solid var(--bax-faint); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); color: var(--bax-fg); max-width: 190px; }

@@ -369,15 +369,15 @@ function pendingText(row: HistoryRow | null | undefined): string {
               <strong>{{ teamLabel(team) }}</strong>
               <span v-if="t.won != null" :class="t.won ? 'ok' : 'hint'">{{ t.won ? "获胜" : "失败" }}</span>
               <span class="hint">{{ t.players }} 人 · 均分 {{ rating(t.avgRating) }}</span>
-              <span class="points num">{{ t.points ?? "–" }}</span>
+              <span class="points num">{{ t.points == null ? "–" : count(t.points) + " 分" }}</span>
             </div>
             <dl class="figures">
-              <div><dt>出兵价值</dt><dd class="num">{{ count(t.deployedValue) }}</dd></div>
-              <div><dt>击毁价值</dt><dd class="num">{{ count(t.destructionScore) }}</dd></div>
-              <div><dt>损失价值</dt><dd class="num">{{ count(t.lossesScore) }}</dd></div>
+              <div><dt>出兵价值</dt><dd class="num">{{ count(t.deployedValue) }} 分</dd></div>
+              <div><dt>击毁价值</dt><dd class="num">{{ count(t.destructionScore) }} 分</dd></div>
+              <div><dt>损失价值</dt><dd class="num">{{ count(t.lossesScore) }} 分</dd></div>
               <div><dt>击毁 / 损失</dt><dd class="num">{{ count(t.destruction) }} / {{ count(t.losses) }}</dd></div>
               <div><dt>占点</dt><dd class="num">{{ count(t.objectives) }}</dd></div>
-              <div><dt>补给消耗</dt><dd class="num">{{ count(t.supplyConsumed) }}</dd></div>
+              <div><dt>补给消耗</dt><dd class="num">{{ count(t.supplyConsumed) }} 点</dd></div>
             </dl>
           </template>
         </div>

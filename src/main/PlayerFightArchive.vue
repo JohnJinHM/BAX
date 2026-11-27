@@ -1,15 +1,8 @@
-<script lang="ts">
-import { reactive } from "vue";
-
-// The request continues when switching profiles. Returning to it restores the stop action.
-const active = reactive(new Set<number>());
-const stopping = reactive(new Set<number>());
-const messages = reactive(new Map<number, string>());
-</script>
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import type { EncounterRow } from "../shared/bindings/EncounterRow";
 import type { PlayerFight } from "../shared/bindings/PlayerFight";
+import { active, stopping, messages, syncFights, DEFAULT_FIGHT_LIMIT } from "./player-fight-sync";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { mmss, phaseNames } from "../shared/format";
 import FightRoster from "./FightRoster.vue";
@@ -19,9 +12,10 @@ import MatchTag from "../shared/MatchTag.vue";
 const props = defineProps<{id: number; encounters: EncounterRow[]}>();
 const emit = defineEmits<{preview: [value: {id: number; map: string | null}]}>();
 const snapshot = useSnapshot();
-const limit = ref<number | string>(20);
+const limit = ref<number | string>(DEFAULT_FIGHT_LIMIT);
 const validLimit = computed(() => typeof limit.value === "number" && Number.isInteger(limit.value) && limit.value >= 1 && limit.value <= 100);
 const fights = defineModel<PlayerFight[]>("fights", {required:true});
+const ready = defineModel<boolean>("ready", {required:true});
 const lastQueriedAt = ref<number | null>(null);
 const query = ref("");
 const page = ref(0);
@@ -83,6 +77,7 @@ async function load() {
     const archive = await commands.playerFights(id);
     if (mounted && props.id === id && sequence === seq) {
       fights.value = archive.fights;
+      ready.value = true;
       lastQueriedAt.value = archive.lastQueriedAt;
       failure.value = "";
     }
@@ -96,6 +91,7 @@ watch(() => props.id, () => {
   clearTimeout(timer);
   timer = undefined;
   fights.value = [];
+  ready.value = false;
   lastQueriedAt.value = null;
   query.value = "";
   scope.value = "all";
@@ -110,22 +106,16 @@ watch([() => snapshot.value?.archive.seq, () => snapshot.value?.selfId], () => {
   if (timer == null) timer = setTimeout(() => { timer = undefined; void load(); }, 350);
 });
 watch(() => active.has(props.id), (running, wasRunning) => {
-  if (wasRunning && !running) void load();
+  if (running) lastQueriedAt.value = Date.now();
+  else if (wasRunning) void load();
 });
 onBeforeUnmount(() => { mounted = false; clearTimeout(timer); });
 
 async function search() {
   const id = props.id;
   if (!validLimit.value || active.has(id)) return;
-  active.add(id);
-  lastQueriedAt.value = Date.now();
-  messages.delete(id);
-  try { messages.set(id, await commands.syncPlayerFights(id, Number(limit.value))); }
-  catch (error) { messages.set(id, errorText(error)); }
-  finally {
-    active.delete(id);
-    stopping.delete(id);
-  }
+  // The shared job reports the result beside the archive controls.
+  await syncFights(id,Number(limit.value)).catch(() => {});
 }
 async function stop() {
   const id = props.id;

@@ -11,24 +11,28 @@ import AnalysisTreemap from "./AnalysisTreemap.vue";
 
 const props = defineProps<{ players: SupplyPlayer[]; teams: Team[]; teamLabel: (team: Team) => string; teamColor: (team: Team | null) => string }>();
 const mode = ref<"tree" | "exchange">("tree");
-const selection = ref<{team: Team; kind: UnitClass} | null>(null);
-const selectedUnit = ref<{owner:string; key:string} | null>(null);
+const selectedTeam = ref<Team>();
+const selectedClass = ref<UnitClass>();
+const ownerId = ref<string>();
+const unitKey = ref<string>();
 const sides = computed(() => props.teams.map(team => {
   const players = props.players.filter(p => p.team === team);
   return {team, players, label:props.teamLabel(team), color:props.teamColor(team), total:players.reduce((n,p) => n+p.consumed,0)};
 }));
 const percentage = (v: number, total: number) => total ? (v / total * 100).toLocaleString("zh-CN", {maximumFractionDigits:1}) + "%" : "0%";
 const groups = computed<TreeGroup[]>(() => {
-  const focus = selection.value;
-  if (!focus) return sides.value.map(s => {
+  const focus = selectedClass.value;
+  const visible = sides.value.filter(s => !selectedTeam.value || s.team === selectedTeam.value);
+  if (!focus) return visible.map(s => {
     const totals = new Map<UnitClass,number>();
     for (const p of s.players) for (const m of p.models) totals.set(m.class,(totals.get(m.class) ?? 0)+m.points);
     const tiles = [...totals].map(([key,value]) => ({key,label:unitClassNames[key],value,share:percentage(value,s.total)}));
-    return {key:s.team,label:s.label,color:s.color,tiles};
+    return {key:s.team,label:s.label,color:s.color,total:s.total,tiles};
   });
-  const side = sides.value.find(s => s.team === focus.team)!;
-  return side.players.map(p => {
-    const tiles: TreeTile[] = p.models.filter(m => m.class === focus.kind).map(m => ({
+  const side = visible[0];
+  if (!side) return [];
+  return side.players.filter(p => !ownerId.value || String(p.id) === ownerId.value).map(p => {
+    const tiles: TreeTile[] = p.models.filter(m => m.class === focus).map(m => ({
       key:modelKey(m.id,m.name),label:m.name,value:m.points,share:percentage(m.points,side.total),
       icon:m.id == null ? undefined : {id:m.id, name:m.name, kind:m.class, thumbnail:m.thumbnail},
     }));
@@ -38,25 +42,40 @@ const groups = computed<TreeGroup[]>(() => {
 const total = computed(() => sides.value.reduce((n,s) => n+s.total,0));
 const maxExchange = computed(() => Math.max(0,...props.players.flatMap(p => [p.fromAllies,p.byAllies])));
 const discrepancy = computed(() => props.players.some(p => p.models.reduce((n,m) => n+m.points,0) > p.consumed));
-const owner = computed(() => props.players.find(p => p.team === selection.value?.team && String(p.id) === selectedUnit.value?.owner));
-const model = computed(() => owner.value?.models.find(m => m.class === selection.value?.kind && modelKey(m.id,m.name) === selectedUnit.value?.key));
-const side = computed(() => sides.value.find(s => s.team === selection.value?.team));
+const owner = computed(() => props.players.find(p => p.team === selectedTeam.value && String(p.id) === ownerId.value));
+const model = computed(() => owner.value?.models.find(m => m.class === selectedClass.value && modelKey(m.id,m.name) === unitKey.value));
+const side = computed(() => sides.value.find(s => s.team === selectedTeam.value));
+const path = computed(() => {
+  const parts = ["全场"];
+  if (side.value) parts.push(side.value.label);
+  if (selectedClass.value) parts.push(unitClassNames[selectedClass.value]);
+  if (owner.value) parts.push(owner.value.name);
+  if (model.value) parts.push(model.value.name);
+  return parts;
+});
 const extra = computed(() => {
   if (!model.value || !owner.value || !side.value) return [];
   const m = model.value;
   return [
-    ...(!m.activity ? [{label:"补给消耗（点）",value:count(m.points)}] : []),
+    ...(!m.activity ? [{label:"补给消耗",value:count(m.points)+" 点"}] : []),
     {label:"占本队消耗",value:percentage(m.points,side.value.total)},
     {label:"占该玩家消耗",value:percentage(m.points,owner.value.consumed)},
   ];
 });
 function drill(group:string, key:string) {
-  if (selection.value) selectedUnit.value = {owner:group,key};
-  else { selection.value = {team:group as Team,kind:key as UnitClass}; selectedUnit.value = null; }
+  if (selectedClass.value) {
+    ownerId.value = group;
+    unitKey.value = key;
+  } else {
+    selectedTeam.value = group as Team;
+    selectedClass.value = key as UnitClass;
+  }
 }
-function back() {
-  if (model.value) selectedUnit.value = null;
-  else { selectedUnit.value = null; selection.value = null; }
+function navigate(depth:number) {
+  if (depth < 4) unitKey.value = undefined;
+  if (depth < 3) ownerId.value = undefined;
+  if (depth < 2) selectedClass.value = undefined;
+  if (depth < 1) selectedTeam.value = undefined;
 }
 </script>
 <template>
@@ -70,9 +89,8 @@ function back() {
       <div class="totals"><div><span>全场消耗</span><b>{{ count(total) }} <small>点</small></b></div>
         <div v-for="s in sides" :key="s.team"><span>{{ s.label }}</span><b>{{ count(s.total) }} <small>点</small></b></div>
       </div>
-      <AnalysisTreemap :groups="groups" unit="点" label="补给消耗矩形树图" :depth="model ? 2 : selection ? 1 : 0"
-        :view-key="JSON.stringify([selection,owner?.id,model?.id,model?.name])" :detail="!!model" @choose="drill" @back="back">
-        <template #path>全场<template v-if="selection"> › {{ teamLabel(selection.team) }} › {{ unitClassNames[selection.kind] }}</template><template v-if="owner && model"> › {{ owner.name }} › {{ model.name }}</template></template>
+      <AnalysisTreemap :groups="groups" unit="点" label="补给消耗矩形树图" :path="path" :team-view="!selectedClass"
+        :view-key="JSON.stringify([selectedTeam,selectedClass,ownerId,unitKey])" :detail="!!model" @choose="drill" @navigate="navigate">
         <template #total><template v-if="model">{{ count(model.points) }} 点</template></template>
         <template #detail><TreemapUnitDetail v-if="owner && model && side" :name="model.name" :color="side.color"
           :icon="model.id == null ? undefined : {id:model.id,name:model.name,kind:model.class,thumbnail:model.thumbnail}"
@@ -80,15 +98,15 @@ function back() {
           :scope="owner.name+' · '+(model.activity ? '仅统计消耗过补给的实例，归于最终持有者' : '战报总量与已归类单位消耗的差额')" /></template>
       </AnalysisTreemap>
       <p v-if="discrepancy">部分单位明细超过战报的玩家总量，顶部总量取自玩家记录。</p>
-      <p v-if="!model">{{ selection ? "按消耗补给的玩家和型号分组。选择型号查看消耗明细。" : "百分比为本队占比。选择兵种查看各玩家和型号的消耗。" }}</p>
+      <p v-if="!model">{{ selectedClass ? "按消耗补给的玩家和型号分组。选择型号查看消耗明细。" : "百分比为本队占比。选择兵种查看各玩家和型号的消耗。" }}</p>
     </div>
     <template v-if="mode === 'exchange'">
       <div class="bar-head"><span>玩家</span><span>← 使用队友补给</span><span>队友使用其补给 →</span></div>
       <div v-for="s in sides" :key="s.team" class="exchange"><h4>{{ s.label }}</h4>
         <div v-for="p in s.players" :key="p.id" class="bar-row" :style="{'--team':s.color}">
           <span class="player">{{ p.name }}</span>
-          <span class="half left"><i :style="{width:(p.fromAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.fromAllies) }}</b></span>
-          <span class="half right"><i :style="{width:(p.byAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.byAllies) }}</b></span>
+          <span class="half left"><i :style="{width:(p.fromAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.fromAllies) }} 点</b></span>
+          <span class="half right"><i :style="{width:(p.byAllies/(maxExchange || 1)*100)+'%'}" /><b>{{ count(p.byAllies) }} 点</b></span>
         </div>
       </div>
       <p>每侧刻度为 0–{{ count(maxExchange) }} 点，两侧共用中央零线。</p>

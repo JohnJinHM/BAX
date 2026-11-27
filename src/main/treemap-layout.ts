@@ -13,8 +13,21 @@ export interface TreeGroup {
   label?: string;
   color: string;
   tiles: TreeTile[];
+  total?: number;
 }
 interface Rect { x: number; y: number; width: number; height: number }
+
+/** Keep teams in perspective order on the horizontal axis. Inner tiles still use area packing. */
+export function teamColumns<T extends { value: number }>(teams: T[], width: number, height: number) {
+  const visible = teams.filter(t => t.value > 0);
+  const total = visible.reduce((sum, t) => sum + t.value, 0);
+  let x = 0;
+  return visible.map(item => {
+    const rect = { x, y: 0, width: width * item.value / total, height };
+    x += rect.width;
+    return { item, rect };
+  });
+}
 
 /** Bisect the longer side near half the remaining weight. All leaves retain their exact area. */
 export function treemap<T extends { value: number }>(items: T[], width: number, height: number) {

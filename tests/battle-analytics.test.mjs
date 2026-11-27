@@ -8,7 +8,7 @@ async function moduleFrom(file) {
   const { outputText } = ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}});
   return import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'));
 }
-const { treemap } = await moduleFrom('treemap-layout.ts');
+const { treemap, teamColumns } = await moduleFrom('treemap-layout.ts');
 const { playerAverages, preferredModels } = await moduleFrom('player-analysis.ts');
 
 test('treemap partitions wide and narrow plots with exact, disjoint tile areas', () => {
@@ -24,6 +24,17 @@ test('treemap partitions wide and narrow plots with exact, disjoint tile areas',
       }
     }
   }
+});
+
+test('team columns keep the perspective team left even on a narrow plot or with a smaller score', () => {
+  const sides = [{id:'bravo',value:12},{id:'alpha',value:36}];
+  for (const width of [180,900]) {
+    const [own,opponent] = teamColumns(sides,width,300);
+    assert.equal(own.item.id,'bravo');
+    assert.deepEqual(own.rect,{x:0,y:0,width:width/4,height:300});
+    assert.deepEqual(opponent.rect,{x:width/4,y:0,width:3*width/4,height:300});
+  }
+  assert.deepEqual(teamColumns([{value:0}],200,100),[]);
 });
 
 test('radars average player-games, count only supplies given to allies and omit ineligible games', () => {

@@ -13,13 +13,13 @@ const metrics = computed(() => {
   const a = props.activity;
   if (!a) return props.extra;
   const m = a.metrics;
-  const figures: [string, number][] = [
+  const figures: [string, number, string?][] = [
     ["数量",a.count],["击毁单位",a.kills],["自身阵亡",a.dead],["回收",a.refunded],
-    ["摧毁建筑",m.buildings],["造成伤害",a.damage],["承受伤害",m.damageReceived],["补给消耗（点）",m.supply],
+    ["摧毁建筑",m.buildings],["造成伤害",a.damage],["承受伤害",m.damageReceived],["补给消耗",m.supply," 点"],
     ["造成友伤",m.friendlyDamageDealt],["受到友伤",m.friendlyDamageReceived],
     ["自身伤害",m.selfDamage],["自毁",m.selfDestroyed],["空投",m.airdropped],
   ];
-  return [...figures.map(([label,value]) => ({label,value:number.format(value)})), ...props.extra];
+  return [...figures.map(([label,value,unit = ""]) => ({label,value:number.format(value)+unit})), ...props.extra];
 });
 </script>
 <template>
