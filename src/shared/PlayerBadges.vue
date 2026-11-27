@@ -5,10 +5,10 @@ import type { RosterRow } from "./roster";
 
 const props = defineProps<{ row: Pick<RosterRow, "labels" | "traceCount" | "profile"> }>();
 const names: Record<string, string> = {
-  挂: "出兵分超限", 标: "社区标记", 远: "远程火力异常", 效: "单位击杀效率",
+  作: "作者", 挂: "出兵分超限", 标: "社区标记", 远: "远程火力异常", 效: "单位击杀效率",
   小: "疑似小号", 空: "固定翼补给占比", 车: "疑似组排",
 };
-const order = "挂标远效小空车";
+const order = "作挂标远效小空车";
 const badges = computed(() => {
   const { labels, traceCount, profile } = props.row;
   const list = [...labels];
@@ -104,6 +104,7 @@ onBeforeUnmount(() => clearTimeout(timer));
 
 <style scoped>
 .badge { display:inline-grid; place-items:center; flex:none; width:1.45em; height:1.45em; border:1px solid currentColor; border-radius:3px; font-size:.86em; line-height:1; color:#f2c14e; background:var(--bax-surface); cursor:help; }
+.badge[data-symbol="作"] { color: #2b2005; background: #edc462; border-color: #ffdf8a; font-weight: 700; }
 .badge[data-symbol="挂"] { color:var(--bax-danger,#ff7575); }
 .badge[data-symbol="车"] { color:var(--bax-info,#77baff); }
 .label-tip { position:fixed; z-index:1000; box-sizing:border-box; overflow:auto; overscroll-behavior:contain; padding:8px 10px; border:1px solid var(--bax-border); border-radius:var(--bax-radius-sm); background:var(--bax-surface,#18212a); color:var(--bax-fg); text-align:left; font-size:calc(12px * var(--bax-font-scale)); line-height:1.5; }

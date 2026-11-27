@@ -2,6 +2,16 @@ import type { MatchView } from './bindings/MatchView';
 import type { PlayerView } from './bindings/PlayerView';
 import type { Team } from './bindings/Team';
 
+import type { PlayerLabel } from './bindings/PlayerLabel';
+
+/** Starfall 的游戏账号；改名后仍按同一名玩家识别。 */
+export const authorPlayerId = 52102;
+
+export function playerLabels(id: number | undefined, labels: MatchView["labels"] | undefined): PlayerLabel[] {
+  const existing = id == null ? [] : labels?.[id] ?? [];
+  return id === authorPlayerId ? [{ symbol: "作", detail: "是作者哟=w=" }, ...existing] : existing;
+}
+
 /** Rendering only: matching and identity authority remain in the Rust engine. */
 export type RosterRow = Omit<PlayerView, 'id' | 'name'> & {
   id: number | null;
@@ -9,7 +19,7 @@ export type RosterRow = Omit<PlayerView, 'id' | 'name'> & {
   key: string;
   provisional: boolean;
   country?: number | null;
-  labels: Array<{symbol:string, detail:string}>;
+  labels: PlayerLabel[];
   displayLevel: number | null;
 };
 export interface RosterGroup {
@@ -38,7 +48,7 @@ export function currentRelations(match: MatchView | null | undefined) {
 }
 
 function confirmed(p: PlayerView, labels: MatchView["labels"]): RosterRow {
-  return { ...p, labels: labels?.[p.id] ?? [], name: p.name?.trim() || p.logName?.trim() || '资料读取中', key: `player-${p.id}`,
+  return { ...p, labels: playerLabels(p.id, labels), name: p.name?.trim() || p.logName?.trim() || '资料读取中', key: `player-${p.id}`,
     provisional: false, displayLevel: p.profile?.level ?? null };
 }
 export function rosterGroups(m: MatchView | null): RosterGroup[] {
@@ -61,7 +71,7 @@ export function rosterGroups(m: MatchView | null): RosterGroup[] {
       if (!groups.has(key)) groups.set(key, group(key, title, friendly == null ? 'waiting' : friendly ? 'mine' : 'enemy', []));
       const candidate = p.ambiguous ? null : p.candidates[0];
       groups.get(key)!.players.push({ id: null, key: `ocr-${p.observed.side}-${p.observed.row}`,
-        labels: candidate ? m.labels?.[candidate.id] ?? [] : [], name: p.observed.name, traceCount: candidate ? p.traceCount : null, logName: null, team: null, isSelf: false, provisional: true,
+        labels: playerLabels(candidate?.id, m.labels), name: p.observed.name, traceCount: candidate ? p.traceCount : null, logName: null, team: null, isSelf: false, provisional: true,
         country: p.observed.country, displayLevel: p.observed.level, profile: candidate?.profile ?? null, profileFetchedAt: null,
         profileCurrent: false, fetch: { state: 'idle' }, note: null,
         encounters: { total: 0, asTeammate: 0, asOpponent: 0, firstAt: null, lastAt: null } });

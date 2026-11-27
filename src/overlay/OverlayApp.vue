@@ -344,8 +344,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
                 <a v-if="p.id != null" class="nickname" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
                 <span v-else class="nickname">{{ p.name }}</span>
                 <PlayerBadges :row="p" />
-                <span v-if="p.note" class="note"> · {{ p.note }}</span>
               </span>
+              <span v-if="p.note" class="note" :title="p.note">{{ p.note }}</span>
               <span class="spec-reveal" :class="{ visible: specsVisible && specsFor(p).length }" :aria-hidden="!specsVisible || !specsFor(p).length">
                 <span class="spec-hint" :title="current.phase === 'ended' ? specsFor(p).map(s => s.name).join(' + ') : predictionHint(p)"><span>{{ current.phase === 'ended' ? '本局专精' : '专精预测' }}</span><SpecIcon v-for="spec in specsFor(p).slice(0, 2)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /></span>
               </span>
@@ -682,8 +682,9 @@ li.stale .elo {
   white-space: nowrap;
 }
 
-.name-line { display: flex; align-items: baseline; }
-.nickname, .note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
+.nickname, .note { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.note { display: block; }
 .note {
   color: var(--bax-warn);
   font-size: 11px;

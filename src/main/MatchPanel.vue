@@ -209,7 +209,7 @@ table {
   width: 18%;
 }
 
-.name-line { display: flex; align-items: baseline; }
+.name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
 td.left .name {
   min-width: 0;
   white-space: nowrap;

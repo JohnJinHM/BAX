@@ -12,6 +12,7 @@ import PlayerRadar from "./PlayerRadar.vue";
 import PlayerUnitPreferences from "./PlayerUnitPreferences.vue";
 import PlayerFightArchive from "./PlayerFightArchive.vue";
 import PlayerReportPreview from "./PlayerReportPreview.vue";
+import { playerLabels } from "../shared/roster";
 import PlayerBadges from "../shared/PlayerBadges.vue";
 import Sparkline from "./Sparkline.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
@@ -138,7 +139,7 @@ async function refresh() {
   <section class="card detail">
     <div class="row head">
       <h2>{{ title }}</h2>
-      <PlayerBadges v-if="detail" :row="{ profile: detail.profile, traceCount: detail.traceCount, labels: snapshot?.current?.labels[id] ?? [] }" />
+      <PlayerBadges v-if="detail" :row="{ profile: detail.profile, traceCount: detail.traceCount, labels: playerLabels(detail.id, snapshot?.current?.labels) }" />
       <span v-if="detail?.isSelf" class="tag">本机</span>
       <span class="hint">ID {{ id }}</span>
       <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
