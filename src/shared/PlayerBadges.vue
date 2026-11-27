@@ -13,12 +13,21 @@ const badges = computed(() => {
   const { labels, traceCount, profile } = props.row;
   const list = [...labels];
   if (traceCount != null && traceCount > 0) {
-    list.push({ symbol: "标", detail: `BATrace 社区标记次数大于 0。\n共 ${traceCount} 次标记` });
+    list.push({ symbol: "标", detail: `BATrace 社区标记次数大于 0。\n\n共 ${traceCount} 次标记` });
   }
   const level = profile?.level;
   const rating = profile?.rating;
   if (level != null && rating != null && ((level < 30 && rating > 2000) || (level < 50 && rating > 2500))) {
-    list.push({ symbol: "小", detail: `等级低于 30 且 ELO 高于 2000，或等级低于 50 且 ELO 高于 2500。\n当前等级 ${level}  ·  ELO ${rating}` });
+    list.push({
+      symbol: "小",
+      detail: [
+        "满足以下任一项：",
+        "① 等级低于 30，且 ELO 高于 2000。",
+        "② 等级低于 50，且 ELO 高于 2500。",
+        "",
+        `当前等级 ${level}  ·  ELO ${rating}`,
+      ].join("\n"),
+    });
   }
   return list.sort((a, b) => order.indexOf(a.symbol) - order.indexOf(b.symbol));
 });

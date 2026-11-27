@@ -188,6 +188,9 @@ fn add(labels: &mut Labels, id: PlayerId, symbol: &str, detail: String) {
 fn with_games(rule: &str, mut games: Vec<(&Facts, String)>) -> String {
     games.sort_by_key(|(game, _)| Reverse(game.start));
     let mut detail = rule.to_owned();
+    if !games.is_empty() {
+        detail.push('\n');
+    }
     for (game, value) in games {
         let date = game
             .start
@@ -278,7 +281,7 @@ pub(crate) fn evaluate(
                 id,
                 "挂",
                 with_games(
-                    "出兵分扣除 80% 的退款后，超过 1000 ＋ 5 × 对局秒数。",
+                    "净出兵分 = 出兵分 − 退款分 × 80%\n净出兵分超过 1000 ＋ 5 × 对局秒数时显示。",
                     scores,
                 ),
             )
@@ -289,7 +292,15 @@ pub(crate) fn evaluate(
                 id,
                 "远",
                 with_games(
-                    "疑似透视挂。至少 3 场排位各打满 25 分钟，并满足其中一项：\n① 炮兵击杀加七成固定翼击杀至少 30，占本人击杀至少 45%。\n② 本人至少 10 杀，炮兵占比超过 40%，并符合一项队友对比条件（队友最高占比不超过 20%，或本人占比超过队友最高值的两倍）。",
+                    concat!(
+                        "疑似透视挂。至少 3 场排位，每场至少 25 分钟。\n",
+                        "每场满足以下任一项：\n",
+                        "① 折算击杀至少 30，占本人击杀至少 45%。\n",
+                        "　 折算击杀 = 炮兵击杀 ＋ 固定翼击杀 × 0.7\n",
+                        "② 本人至少 10 杀，炮兵击杀占比超过 40%。\n",
+                        "　 同时满足：队友最高炮兵占比不超过 20%，\n",
+                        "　 或本人占比超过队友最高值的两倍。",
+                    ),
                     remote,
                 ),
             )
@@ -300,7 +311,12 @@ pub(crate) fn evaluate(
                 id,
                 "效",
                 with_games(
-                    "至少 5 场排位中，每场派出至少 5 个单位，每个单位平均击杀至少 0.8 个敌人，且达到其余九人平均值的 1.6 倍。",
+                    concat!(
+                        "至少 5 场排位，每场同时满足：\n",
+                        "① 派出至少 5 个单位。\n",
+                        "② 每单位平均击杀至少 0.8 个敌人，\n",
+                        "　 且达到同场其余九人平均值的 1.6 倍。",
+                    ),
                     eff,
                 ),
             )
@@ -327,7 +343,7 @@ pub(crate) fn evaluate(
                 .filter(|m| g.contains(&m.id))
                 .map(|m| m.name.as_str())
                 .collect::<Vec<_>>()
-                .join("、");
+                .join("\n• ");
             let games = ms
                 .iter()
                 .filter_map(|id| facts.get(id)?.as_ref())
@@ -339,7 +355,7 @@ pub(crate) fn evaluate(
                 "车",
                 with_games(
                     &format!(
-                        "本局同队的 2–4 人曾整组同队至少 3 场，或 5 人曾整组同队至少 2 场。\n疑似 {} 人车队 · {names}（整组同队 {} 场）",
+                        "本局同队，且曾整组同队：\n2–4 人：至少 3 场\n5 人：至少 2 场\n\n疑似 {} 人车队 · 整组同队 {} 场\n• {names}",
                         g.len(),
                         ms.len()
                     ),
@@ -361,7 +377,7 @@ pub(crate) fn evaluate(
                 "空",
                 with_games(
                     &format!(
-                        "最近连续 3 场，本人固定翼飞机每场消耗全队超过 40% 的补给。本局敌方有疑似 {} 人车队（至少 3 人）。",
+                        "最近连续 3 场，本人固定翼飞机每场消耗全队超过 40% 的补给。\n本局敌方有疑似 {} 人车队（至少 3 人）。",
                         g.len()
                     ),
                     jets,
