@@ -50,6 +50,7 @@ function player(
             statsUpdatedAt: null,
             favoriteSpecs: [{ ids: [12], name: "俄罗斯国民近卫军", games: 14 }, { ids: [15], name: "机械化步兵", games: 10 }, { ids: [8], name: "近卫坦克旅", games: 4 }],
             favoriteSpecPairs: [{ ids: [12, 15], name: "俄罗斯国民近卫军 + 机械化步兵", games: 10 }],
+            countrySpecs: {1: [{ids:[12],name:"俄罗斯国民近卫军",games:1},{ids:[15],name:"机械化步兵",games:1}]},
             lastSpecs: [{ ids: [12], name: "俄罗斯国民近卫军", games: 1 }, { ids: [15], name: "机械化步兵", games: 1 }],
             lastSpecMatch: 8999927, specSampleMatches: 16, specIdentifiedMatches: 14,
           },
@@ -106,6 +107,10 @@ export const fixtureSnapshot: Snapshot = {
   ui: {},
   current: {
     mode: "unknown",
+    labels: { 102: [
+      { symbol: "效", detail: "至少 5 场排位中，每场派出至少 5 个单位，每个单位平均击杀至少 0.8 个敌人，且达到其余九人平均值的 1.6 倍。\n11/24 20:15  煤山  ·  本人 1.24 / 其余九人 0.62\n11/23 18:10  黑海岸  ·  本人 1.20 / 其余九人 0.70\n11/22 12:40  煤山  ·  本人 0.95 / 其余九人 0.56\n11/20 09:15  死亡中心  ·  本人 1.43 / 其余九人 0.70\n11/18 13:00  煤山  ·  本人 1.08 / 其余九人 0.61" },
+      { symbol: "车", detail: "本局同队的 2–4 人曾整组同队至少 3 场，或 5 人曾整组同队至少 2 场。\n疑似 2 人车队 · Birch、Ash（整组同队 3 场）\n11/24 20:15  煤山\n11/23 18:10  黑海岸\n11/22 12:40  煤山" },
+    ] },
     matchId: 9000001,
     phase: "inBattle",
     connection: "connected",
@@ -187,7 +192,7 @@ export function fixtureHits(query: string): PlayerHit[] {
 // 最后一个是虚构的长地图名，用来检查比赛记录列表的省略
 const maps = ["Airport", "Central Village", "Suwalki", "Baltiisk", "Coast", "Northern Industrial Harbor District"];
 
-export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) => {
+export const fixtureMatches: HistoryRow[] = Array.from({ length: 13 }, (_, i) => {
   const matchId = 9000001 - i * 37;
   const report: HistoryRow["report"] =
     i === 0
@@ -212,6 +217,9 @@ export const fixtureHistory: HistoryRow[] = Array.from({ length: 12 }, (_, i) =>
   };
 });
 
+// 最后一场只有 STB 战报，本机日志未记录。
+export const fixtureHistory = fixtureMatches.slice(0, -1);
+
 /** 固定种子的伪随机数，预览每次一样。 */
 function seeded(seed: number) {
   let x = seed;
@@ -235,7 +243,7 @@ const fixtureUnits: { id: number; name: string; cls: UnitClass; cost: number }[]
 ];
 
 export function fixtureReport(id: number): MatchReportView | null {
-  const row = fixtureHistory.find((r) => r.matchId === id);
+  const row = fixtureMatches.find((r) => r.matchId === id);
   if (!row || row.report.state !== "ready") return null;
   const rand = seeded(id);
   const minutes = Math.ceil((row.durationMs ?? 1_500_000) / 60_000);

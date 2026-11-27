@@ -145,6 +145,7 @@ pub struct ApiErrorView {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchView {
+    pub labels: std::collections::BTreeMap<PlayerId, Vec<crate::labels::PlayerLabel>>,
     pub mode: crate::MatchMode,
     /// 画面候选，与正式 ID 名单分开；日志到达即退出。
     pub pregame: crate::pregame::PregameView,

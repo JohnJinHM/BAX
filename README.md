@@ -28,7 +28,7 @@
 - 风格统计：常用单位、兵种构成、出兵节奏、占点与补给倾向
 - 自定义皮肤：在内置皮肤之外开放主题、颜色、字号与间距配置
 
-首阶段不包含作弊、小号或异常行为的判定，见 [ADR-0002](docs/adr/0002-exclude-cheat-detection.md)。
+玩家单字标签、判定规则与 STB 历史战报见 [ADR-0016](docs/adr/0016-player-labels-and-stb-history.md)。
 
 ## 数据来源
 
@@ -37,7 +37,7 @@
 | 本机 GameLogs | 识别对局、阶段、正式名单、本机队伍与比赛结束 |
 | `api.brokenarrowgame.tech` | 优先获取已知玩家 ID 的基础资料、近期比赛 ID 和部分累计统计 |
 | `s3.brokenarrowgame.tech` | 优先读取完整战报，包括比赛结果、玩家统计和单位实例 |
-| [BATrace](https://bot.batrace.top/) | 补充昵称搜索、统计字段、分页比赛列表和单位／专精目录；主源失败时回退 |
+| [BATrace](https://bot.batrace.top/) | 提供社区标记、昵称搜索和单位／专精目录 |
 
 BAX 在本机转换字段、合并缺失资料，复用缓存并合并重复请求；各来源分别处理限流和故障暂停。网络失败时保留已有玩家资料和已归档战报。Full 的赛前 OCR 在本地处理截图，昵称匹配仍可能使用 BATrace 搜索。
 

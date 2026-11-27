@@ -1,6 +1,6 @@
 # ADR-0015：游戏数据源优先，BATrace 补充与回退
 
-- 状态：已采纳
+- 状态：相关范围被 [ADR-0016](0016-player-labels-and-stb-history.md) 取代
 - 日期：2026-11-21
 - 相关：[数据源参考](../reference/batrace-api.md)、[兼容性验证](../validation/upstream-api-compatibility.md)
 

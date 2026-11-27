@@ -129,7 +129,103 @@ pub(crate) fn backfill_player_units(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
+pub struct StoredPlayerFight {
+    /// Unit id, original deployment count, earliest Unix spawn second.
+    pub deployment: Vec<(i64, u32, Option<i64>)>,
+    pub id: MatchId,
+    pub has_local_log: bool,
+    pub played_together: bool,
+    pub start: Option<Timestamp>,
+    pub duration_secs: Option<i64>,
+    pub map_id: Option<i64>,
+    pub log_map: Option<String>,
+    pub team: Option<Team>,
+    pub won: Option<bool>,
+    pub rating_delta: Option<f64>,
+    pub units: BTreeSet<i64>,
+}
+
 impl Store {
+    pub fn record_fight_query(&self, id: PlayerId, at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO player_fight_queries(player_id, queried_at) VALUES (?1, ?2)
+             ON CONFLICT(player_id) DO UPDATE SET queried_at = MAX(queried_at, excluded.queried_at)",
+            params![id_to_db(id.get()), at.as_millis()],
+        )?;
+        Ok(())
+    }
+
+    pub fn last_fight_query(&self, id: PlayerId) -> Result<Option<Timestamp>> {
+        let at = self
+            .conn
+            .query_row(
+                "SELECT queried_at FROM player_fight_queries WHERE player_id = ?1",
+                [id_to_db(id.get())],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(at.map(Timestamp::from_millis))
+    }
+
+    pub fn player_fights(
+        &self,
+        id: PlayerId,
+        self_id: Option<PlayerId>,
+    ) -> Result<Vec<StoredPlayerFight>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT i.match_id, i.unit_ids, r.start_time, r.duration_secs, r.map_id, m.map,
+                    COALESCE(mp.team, CASE i.team_id WHEN 0 THEN 'alpha' WHEN 1 THEN 'bravo'
+                           WHEN 100 THEN 'spectators' END), r.winner, i.rating_delta, m.id IS NOT NULL,
+                    COALESCE(m.self_id, ?2) <> i.player_id AND (
+                        EXISTS (SELECT 1 FROM report_player_units p WHERE p.match_id=i.match_id
+                                AND p.player_id=COALESCE(m.self_id, ?2))
+                        OR EXISTS (SELECT 1 FROM match_players p WHERE p.match_id=i.match_id
+                                   AND p.player_id=COALESCE(m.self_id, ?2))), i.deployment
+             FROM report_player_units i JOIN match_reports r USING(match_id)
+             LEFT JOIN matches m ON m.id=i.match_id
+             LEFT JOIN match_players mp ON mp.match_id=i.match_id AND mp.player_id=i.player_id
+             WHERE i.player_id=?1 ORDER BY i.start_time DESC, i.match_id DESC",
+        )?;
+        let mut rows = stmt.query(params![
+            id_to_db(id.get()),
+            self_id.map(|p| id_to_db(p.get()))
+        ])?;
+        let mut fights = Vec::new();
+        while let Some(row) = rows.next()? {
+            let team = row
+                .get::<_, Option<String>>(6)?
+                .as_deref()
+                .map(team_from_db)
+                .transpose()?;
+            let winner = row
+                .get::<_, Option<String>>(7)?
+                .as_deref()
+                .map(team_from_db)
+                .transpose()?;
+            let won = team
+                .filter(|t| t.is_playing())
+                .zip(winner)
+                .map(|(a, b)| a == b);
+            fights.push(StoredPlayerFight {
+                deployment: serde_json::from_str(&row.get::<_, String>(11)?)
+                    .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
+                id: MatchId(id_from_db(row.get(0)?)),
+                has_local_log: row.get(9)?,
+                played_together: row.get(10)?,
+                units: indexed_units(row)?,
+                start: row.get::<_, Option<i64>>(2)?.map(Timestamp::from_millis),
+                duration_secs: row.get(3)?,
+                map_id: row.get(4)?,
+                log_map: row.get(5)?,
+                team,
+                won,
+                rating_delta: row.get(8)?,
+            });
+        }
+        Ok(fights)
+    }
+
     /// 玩家最近已有的完整战报，不依赖同场日志是否存在。
     pub fn recent_player_reports(
         &self,
@@ -211,7 +307,9 @@ impl Store {
         meta: ReportMeta,
         at: Timestamp,
     ) -> Result<BTreeSet<PlayerId>> {
-        let tx = self.conn.transaction()?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         // 队列里记着等了多久、失败过几次，一并留下（验证 3 要用）
         let queued: Option<(i64, u32, i64)> = tx
             .query_row(

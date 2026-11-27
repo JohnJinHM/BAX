@@ -107,7 +107,7 @@ public:
         return decoded;
     }
 };
-struct Player { int side, row; Text name; int level; std::string alternative; int friendly; };
+struct Player { int side, row; Text name; int level; std::string alternative; int friendly; int country; };
 bool supported(const Image& image) {
     double aspect = double(image.width) / std::max(1, image.height);
     return image.width >= 1280 && image.height >= 720 && aspect >= 1.74 && aspect <= 1.84;
@@ -120,6 +120,41 @@ Region card_region(const Image& image, Region r) {
     double scale = (1987.0 / 3576.0) * image.width / image.height;
     r.y = 0.5 + (r.y - 0.5) * scale; r.height *= scale;
     return r;
+}
+// Sample the flag beside this individual card. Country ids match spec-units.json.
+int card_country(const Image& image, int side, int row) {
+    auto flag = crop(image, card_region(image, {side ? .8795 : .2123, .285 + row * .14255, .034, .031}));
+    if (flag.width < 28 || flag.height < 16) return 0;
+    // Interior bands avoid the feathered right edge and shadows around the flag.
+    auto fraction = [&](double x0, double x1, double y0, double y1, char color) {
+        int hits = 0, total = 0;
+        for (int y = int(y0*flag.height); y < int(y1*flag.height); ++y)
+            for (int x = int(x0*flag.width); x < int(x1*flag.width); ++x) {
+                auto pixel = &flag.pixels[3*(y*flag.width+x)];
+                int b=pixel[0], g=pixel[1], r=pixel[2];
+                bool red=r>45 && r>g*1.5 && r>b*1.3;
+                bool blue=b>28 && b>r*1.28 && b>g*1.12;
+                bool white=std::min({r,g,b})>78 && std::max({r,g,b})-std::min({r,g,b})<59;
+                hits += color=='r' ? red : color=='b' ? blue : white;
+                ++total;
+            }
+        return double(hits)/std::max(1,total);
+    };
+    if (fraction(.08,.78,.11,.29,'w')>.64 && fraction(.08,.78,.42,.62,'b')>.64
+        && fraction(.08,.78,.75,.94,'r')>.64) return 1;
+    if (fraction(.04,.30,.08,.46,'b')>.44 && fraction(.48,.82,.08,.91,'r')>.22
+        && fraction(.48,.82,.08,.91,'w')>.22) {
+        // Confirm alternating bright and red stripes down the fly.
+        int transitions=0, previous=0;
+        for (int y=1; y<flag.height-1; ++y) {
+            double y0=double(y)/flag.height, y1=double(y+1)/flag.height;
+            int stripe=fraction(.48,.82,y0,y1,'r')>.55 ? 1 : fraction(.48,.82,y0,y1,'w')>.55 ? 2 : 0;
+            if (stripe && previous && previous!=stripe) ++transitions;
+            if (stripe) previous=stripe;
+        }
+        if (transitions>=5) return 2;
+    }
+    return 0;
 }
 int friendly_side(const Image& image, int side) {
     auto header = crop(image, card_region(image, {side ? 0.72 : 0.055, 0.205, 0.20, 0.055}));
@@ -167,13 +202,50 @@ std::vector<Player> extract(Recognizer& general, Recognizer& russian, const Imag
         auto rank = level(level_text[i]);
         if (diagnostic) std::cerr << i << " " << quote(name_text[i].value) << " " << name_text[i].confidence << " " << quote(level_text[i].value) << " " << level_text[i].confidence << '\n';
         if (rank && name_text[i].confidence >= 0.85f && !name_text[i].value.empty() && wide(name_text[i].value).size() <= 80)
-            players.push_back({int(i / 5), int(i % 5), name_text[i], *rank, alt[i], friendly[i/5]});
+            players.push_back({int(i / 5), int(i % 5), name_text[i], *rank, alt[i], friendly[i/5], card_country(image,int(i/5),int(i%5))});
     }
     bool left = false, right = false;
     for (const auto& p : players) { left |= p.side == 0; right |= p.side == 1; }
     if (!left || !right) return {};
     return players;
 }
+// Consecutive captures often differ only in the map, timer or chat. Retain only
+// the exact pixels used by the text recognizers, never the full capture.
+class RosterReader {
+    std::vector<uint8_t> previous_text;
+    std::vector<Player> previous_players;
+    int previous_width = 0, previous_height = 0;
+public:
+    std::vector<Player> read(Recognizer& general, Recognizer& russian, const Image& image) {
+        if (!supported(image)) {
+            previous_text.clear();
+            previous_players.clear();
+            return {};
+        }
+        std::vector<uint8_t> text;
+        for (int side = 0; side < 2; ++side) for (int row = 0; row < 5; ++row) {
+            for (auto r : {name_region(side,row), level_region(side,row)}) {
+                auto region = crop(image, card_region(image,r));
+                text.insert(text.end(), region.pixels.begin(), region.pixels.end());
+            }
+        }
+        if (!previous_players.empty() && image.width == previous_width &&
+            image.height == previous_height && text == previous_text) {
+            int friendly[2] = {friendly_side(image,0), friendly_side(image,1)};
+            if (friendly[0] == friendly[1]) friendly[0] = friendly[1] = -1;
+            for (auto& p : previous_players) {
+                p.friendly = friendly[p.side];
+                p.country = card_country(image,p.side,p.row);
+            }
+        } else {
+            previous_players = extract(general,russian,image);
+            previous_text = std::move(text);
+            previous_width = image.width;
+            previous_height = image.height;
+        }
+        return previous_players;
+    }
+};
 void emit(const std::vector<Player>& players, const std::string& status, double ms) {
     std::cout << "{\"players\":[";
     bool first = true;
@@ -181,7 +253,7 @@ void emit(const std::vector<Player>& players, const std::string& status, double 
         if (!first) std::cout << ','; first = false;
         std::cout << "{\"side\":" << quote(p.side ? "right" : "left") << ",\"row\":" << p.row << ",\"name\":" << quote(p.name.value) << ",\"level\":" << p.level << ",\"alternatives\":[";
         if (!p.alternative.empty()) std::cout << quote(p.alternative);
-        std::cout << "],\"friendly\":" << (p.friendly < 0 ? "null" : (p.friendly ? "true" : "false")) << "}";
+        std::cout << "],\"country\":" << (p.country ? std::to_string(p.country) : "null") << ",\"friendly\":" << (p.friendly < 0 ? "null" : (p.friendly ? "true" : "false")) << "}";
     }
     std::cout << "],\"status\":" << quote(status) << ",\"elapsedMs\":" << ms << "}" << std::endl;
 }
@@ -222,14 +294,17 @@ int wmain(int argc, wchar_t** argv) {
             Image image = load_image(argv[3]);
             int repeats = argc >= 5 ? std::clamp(_wtoi(argv[4]), 1, 100) : 1;
             bool diagnostic = argc >= 6 && std::wstring(argv[5]) == L"--diagnostic";
-            for (int i = 0; i < repeats; ++i) { start = Clock::now(); auto players = extract(general, russian, image, diagnostic); emit(players, "离线图片测试", std::chrono::duration<double, std::milli>(Clock::now() - start).count()); }
+            RosterReader reader;
+            bool cached = argc >= 6 && std::wstring(argv[5]) == L"--cached";
+            for (int i = 0; i < repeats; ++i) { start = Clock::now(); auto players = cached ? reader.read(general, russian, image) : extract(general, russian, image, diagnostic); emit(players, "离线图片测试", std::chrono::duration<double, std::milli>(Clock::now() - start).count()); }
         } else {
+            RosterReader reader;
             for (std::string command; std::getline(std::cin, command);) {
                 if (command.size() > 65536) break;
                 start = Clock::now();
                 try {
                     auto image = capture_game();
-                    auto players = extract(general, russian, image);
+                    auto players = reader.read(general, russian, image);
                     auto status = image.empty() ? "等待可采集的游戏窗口" : (!supported(image) ? "暂不支持此分辨率或比例" : (players.empty() ? "等待固定双侧玩家卡片" : "已识别卡片"));
                     emit(players, status, std::chrono::duration<double, std::milli>(Clock::now() - start).count());
                 } catch (const std::exception&) { emit({}, "画面识别失败，将重试", 0); }

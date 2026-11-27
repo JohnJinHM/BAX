@@ -39,6 +39,38 @@ pub struct ReportSpectator {
     pub name: Option<String>,
 }
 
+/// STB fight IDs from BA Hub backend/src/data/constants.ts and locally matched logs.
+/// Display strings use the game's Simplified Chinese map_loc entries.
+pub(crate) fn map_name(id: Option<i64>, logged: Option<String>) -> Option<String> {
+    let Some(id) = id else { return logged };
+    let name = match id {
+        1 => "测试地图",
+        3 => "波罗的斯克半岛",
+        4 => "黑海岸",
+        5 => "里加机场",
+        6 => "蜿蜒之河",
+        7 => "考纳斯水坝",
+        8 => "寒水港",
+        9 => "契卡洛夫斯克空军基地",
+        10 => "死亡公路",
+        11 => "死亡中心",
+        12 => "石油热潮",
+        13 => "苏瓦乌基走廊",
+        14 => "叶尔加瓦",
+        15 => "纳尔瓦冰雪城堡",
+        16 => "克莱佩达裂谷",
+        17 => "鲁达森林",
+        20 => "风啸湾",
+        21 => "切尔尼亚霍夫斯克",
+        22 => "伊格纳利纳核电站",
+        23 => "加里宁格勒",
+        25 => "卡达加军事基地",
+        28 => "煤山",
+        _ => return logged,
+    };
+    Some(name.to_owned())
+}
+
 /// 摘出列表要用的几项。
 pub(crate) fn report_meta(info: &MatchInfo) -> ReportMeta {
     ReportMeta {

@@ -23,6 +23,8 @@ pub struct Observation {
     /// 由画面队伍标题颜色判定；未知时不发起 OCR 网络查询。
     #[serde(default)]
     pub friendly: Option<bool>,
+    #[serde(default)]
+    pub country: Option<u8>,
     pub name: String,
     pub level: i64,
     #[serde(default)]
@@ -222,6 +224,7 @@ mod tests {
         Observation {
             side: "left".into(),
             row: 0,
+            country: None,
             friendly: Some(false),
             name: name.into(),
             level,

@@ -84,7 +84,7 @@ async fn empty_report_is_not_cached_and_later_archive_can_succeed() {
         .expect(1)
         .mount(&primary)
         .await;
-    mock(&fallback, "/api/match", json!({"matchInfo":null}), 1).await;
+    mock(&fallback, "/api/match", json!({"matchInfo":null}), 0).await;
     let client = client(&primary, &fallback);
     assert!(matches!(
         client.match_report(MatchId(88)).await,
@@ -94,31 +94,22 @@ async fn empty_report_is_not_cached_and_later_archive_can_succeed() {
 }
 
 #[tokio::test]
-async fn an_empty_fallback_is_retried_and_only_the_complete_report_is_cached() {
+async fn missing_primary_report_does_not_request_batrace() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
-    Mock::given(path("/api/match"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"matchInfo": null})))
-        .up_to_n_times(1)
-        .with_priority(1)
-        .expect(1)
-        .mount(&fallback)
-        .await;
-    mock(
-        &fallback,
-        "/api/match",
-        json!({"matchInfo": {"Data": {"12": {"Id": 12}}}}),
-        1,
-    )
-    .await;
-    let client = client(&primary, &fallback);
-    assert!(matches!(
-        client.match_report(MatchId(88)).await,
-        Err(ApiError::NotFound)
-    ));
-    for _ in 0..2 {
-        assert!(client.match_report(MatchId(88)).await.is_ok());
-    }
+    assert!(
+        client(&primary, &fallback)
+            .match_report(MatchId(88))
+            .await
+            .is_err()
+    );
+    assert!(
+        fallback
+            .received_requests()
+            .await
+            .expect("recorded requests")
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -138,21 +129,11 @@ async fn expired_cache_is_refreshed_and_primary_recovers_after_cooldown() {
         &fallback,
         "/api/players/info",
         json!({"info":{"id":12,"rating":1234}}),
-        1,
+        0,
     )
     .await;
     let client = client(&primary, &fallback);
-    assert_eq!(
-        client
-            .player_info(PlayerId(12))
-            .await
-            .expect("valid fixture or successful mock response")
-            .data
-            .info
-            .expect("valid fixture or successful mock response")
-            .rating,
-        Some(1234.0)
-    );
+    assert!(client.player_info(PlayerId(12)).await.is_err());
     client
         .shared
         .lock()
@@ -235,7 +216,7 @@ async fn report_normalization_cache_and_concurrent_dedup_preserve_modes() {
 }
 
 #[tokio::test]
-async fn fractional_integer_target_falls_back_without_truncation() {
+async fn fractional_integer_target_is_rejected_without_fallback() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
     let mut data = report();
@@ -245,18 +226,15 @@ async fn fractional_integer_target_falls_back_without_truncation() {
         &fallback,
         "/api/match",
         json!({"matchInfo":{"Data":{"12":{"Id":12}}}}),
-        1,
+        0,
     )
     .await;
-    let result = client(&primary, &fallback)
-        .match_report(MatchId(88))
-        .await
-        .expect("valid fixture or successful mock response");
-    assert!(result.data.data["12"].unit_data.is_empty());
+    let result = client(&primary, &fallback).match_report(MatchId(88)).await;
+    assert!(matches!(result, Err(ApiError::Decode(_))));
 }
 
 #[tokio::test]
-async fn primary_profile_overrides_basics_and_preserves_supplement_fields() {
+async fn primary_profile_uses_only_stb_endpoints() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
     mock(
@@ -268,7 +246,7 @@ async fn primary_profile_overrides_basics_and_preserves_supplement_fields() {
     .await;
     mock(&primary, "/user/12/last_fights", json!(["88"]), 1).await;
     mock(&primary,"/statistic/personal/steam12",json!({"statisticByLobbyType":{"Rating":{"winsCount":0,"killsCount":30},"Custom":{}},"updateDate":"unverified response time"}),1).await;
-    mock(&fallback,"/api/players/info",json!({"info":{"id":12,"name":"Old","rating":1000},"statInfo":{"winCountRt":5,"unitsKilledCostRt":9000,"fightsCountCt":20,"specExp":{"3":400}},"last_fights_data":["77"]}),1).await;
+    mock(&fallback,"/api/players/info",json!({"info":{"id":12,"name":"Old","rating":1000},"statInfo":{"winCountRt":5,"unitsKilledCostRt":9000,"fightsCountCt":20,"specExp":{"3":400}},"last_fights_data":["77"]}),0).await;
     let client = client(&primary, &fallback);
     let a = client
         .player_info(PlayerId(12))
@@ -296,9 +274,9 @@ async fn primary_profile_overrides_basics_and_preserves_supplement_fields() {
         .stat_info
         .expect("valid fixture or successful mock response");
     assert_eq!(stats.win_count_rt, Some(0));
-    assert_eq!(stats.units_killed_cost_rt, Some(9000));
-    assert_eq!(stats.fights_count_ct, Some(20));
-    assert_eq!(stats.spec_exp["3"], 400);
+    assert_eq!(stats.units_killed_cost_rt, None);
+    assert_eq!(stats.fights_count_ct, None);
+    assert!(stats.spec_exp.is_empty());
     assert_eq!(stats.updated_at, None);
     assert_eq!(a.data.last_fights_data, vec!["88"]);
     client
@@ -312,7 +290,7 @@ async fn missing_supplements_do_not_hide_primary_profile() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
     mock(&primary, "/user/12", json!({"id":12,"rt":2000}), 1).await;
-    mock(&fallback, "/api/players/info", json!({"info":null}), 1).await;
+    mock(&fallback, "/api/players/info", json!({"info":null}), 0).await;
     let result = client(&primary, &fallback)
         .player_info(PlayerId(12))
         .await
@@ -332,7 +310,7 @@ async fn missing_supplements_do_not_hide_primary_profile() {
 }
 
 #[tokio::test]
-async fn independent_cooldowns_allow_fallback_and_reports() {
+async fn independent_cooldowns_keep_reports_available() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
     Mock::given(path("/user/12"))
@@ -344,23 +322,13 @@ async fn independent_cooldowns_allow_fallback_and_reports() {
         &fallback,
         "/api/players/info",
         json!({"info":{"id":12,"rating":1234}}),
-        1,
+        0,
     )
     .await;
     mock(&primary, "/fights/fight_88.json", report(), 1).await;
     let client = client(&primary, &fallback);
     for _ in 0..2 {
-        assert_eq!(
-            client
-                .player_info(PlayerId(12))
-                .await
-                .expect("valid fixture or successful mock response")
-                .data
-                .info
-                .expect("valid fixture or successful mock response")
-                .rating,
-            Some(1234.0)
-        );
+        assert!(client.player_info(PlayerId(12)).await.is_err());
     }
     assert!(client.match_report(MatchId(88)).await.is_ok());
 }
@@ -373,7 +341,7 @@ async fn primary_outage_is_not_masked_as_missing_by_fallback() {
         .respond_with(ResponseTemplate::new(503))
         .mount(&primary)
         .await;
-    mock(&fallback, "/api/players/info", json!({"info":null}), 1).await;
+    mock(&fallback, "/api/players/info", json!({"info":null}), 0).await;
     assert!(matches!(
         client(&primary, &fallback).player_info(PlayerId(12)).await,
         Err(ApiError::Server { status: 503 })
@@ -381,18 +349,18 @@ async fn primary_outage_is_not_masked_as_missing_by_fallback() {
 }
 
 #[tokio::test]
-async fn empty_primary_user_falls_back_and_plain_legacy_404_is_outage() {
+async fn empty_primary_user_returns_not_found() {
     let primary = MockServer::start().await;
     let fallback = MockServer::start().await;
     mock(&primary, "/user/12", json!({}), 1).await;
     Mock::given(path("/api/players/info"))
         .respond_with(ResponseTemplate::new(404).set_body_string("404 page not found"))
-        .expect(1)
+        .expect(0)
         .mount(&fallback)
         .await;
     assert!(matches!(
         client(&primary, &fallback).player_info(PlayerId(12)).await,
-        Err(ApiError::Server { status: 404 })
+        Err(ApiError::NotFound)
     ));
 }
 
@@ -402,7 +370,7 @@ async fn source_checks_validate_payloads_and_throttle_button_presses() {
     let fallback = MockServer::start().await;
     mock(&primary, "/user/367171", json!({"id":367171}), 1).await;
     mock(&primary, "/fights/fight_9845804.json", report(), 1).await;
-    mock(&fallback, "/api/players/info", json!({"info":null}), 1).await;
+    mock(&fallback, "/api/players/info", json!({"info":null}), 0).await;
     mock(&fallback, "/api/players/search", json!({"players":[]}), 1).await;
     mock(&fallback, "/api/units", json!({"units":[{"id":1}]}), 1).await;
     let client = client(&primary, &fallback);

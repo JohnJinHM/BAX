@@ -21,7 +21,8 @@ pub use archive::{EncounterRow, Note, PlayerHit, Relation};
 pub use cache::{CacheStore, CachedEntry};
 pub use error::StoreError;
 pub use reports::{
-    HistoryRow, IndexedReport, QueuedReport, ReportMeta, ReportState, ReportTiming, StoredRaw,
+    HistoryRow, IndexedReport, QueuedReport, ReportMeta, ReportState, ReportTiming,
+    StoredPlayerFight, StoredRaw,
 };
 pub use store::{
     EncounterSummary, MatchPlayerRow, MatchRecord, PlayerRecord, ProfileUpdate, RatingPoint, Store,

@@ -82,22 +82,6 @@ fn normalize_report(value: &mut Value) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn merge(base: &mut Value, incoming: Value) {
-    if incoming.is_null() {
-        return;
-    }
-    if let Value::Object(fields) = incoming {
-        if !base.is_object() {
-            *base = json!({});
-        }
-        for (key, value) in fields {
-            merge(&mut base[&key], value);
-        }
-    } else {
-        *base = incoming;
-    }
-}
-
 fn profile(user: &Value, id: PlayerId) -> Result<Value, ApiError> {
     if user.as_object().is_some_and(|o| o.is_empty()) {
         return Err(ApiError::NotFound);
@@ -159,15 +143,6 @@ fn statistics(value: &Value) -> Value {
     }
     // updateDate is a response-generation time, not a verified snapshot timestamp.
     stats
-}
-
-fn fallback_error(primary: ApiError, secondary: ApiError) -> ApiError {
-    // A missing record on the fallback must not turn a primary outage into permanent absence.
-    if matches!(secondary, ApiError::NotFound) {
-        primary
-    } else {
-        secondary
-    }
 }
 
 impl BatraceClient {
@@ -317,19 +292,27 @@ impl BatraceClient {
         result
     }
 
-    async fn batrace_player(&self, id: PlayerId) -> Result<Fetched<Value>, ApiError> {
-        let r: Fetched<Value> = self
-            .get(
-                "players.info",
-                &format!("/api/players/info?stbid={id}"),
+    pub async fn recent_fights(&self, id: PlayerId) -> Result<Vec<MatchId>, ApiError> {
+        let upstream = self
+            .upstream
+            .as_ref()
+            .ok_or_else(|| ApiError::Config("未配置 STB 数据源".into()))?;
+        let raw = self
+            .fetch_at::<Vec<String>>(
+                "upstream",
+                &upstream.api_url,
+                "players.recent",
+                &format!("/user/{id}/last_fights"),
                 Some(self.player_info_timeout),
             )
             .await?;
-        let parsed: Fetched<PlayerInfoResponse> = decode(r.data.clone())?;
-        if parsed.data.info.as_ref().and_then(|p| p.id) != Some(id.get()) {
-            return Err(ApiError::NotFound);
-        }
-        Ok(r)
+        let mut seen = std::collections::BTreeSet::new();
+        Ok(raw
+            .data
+            .iter()
+            .filter_map(|s| s.trim().parse::<MatchId>().ok())
+            .filter(|id| id.0 > 0 && seen.insert(*id))
+            .collect())
     }
 
     pub(super) async fn combined_player(
@@ -358,13 +341,9 @@ impl BatraceClient {
                         "{}/user/{id}",
                         upstream.api_url.trim_end_matches('/')
                     ));
-                return match self.batrace_player(id).await {
-                    Ok(r) => decode(r.data),
-                    Err(other) => Err(fallback_error(err, other)),
-                };
+                return Err(err);
             }
         };
-        let recent_path = format!("/user/{id}/last_fights");
         let stats_path = user.get("marketId").and_then(Value::as_str).map(|market| {
             let mut url = reqwest::Url::parse("https://localhost").expect("static URL");
             url.path_segments_mut()
@@ -387,26 +366,15 @@ impl BatraceClient {
                 None => None,
             }
         };
-        let (supplement, recent, stats) = tokio::join!(
-            self.batrace_player(id),
-            self.fetch_at::<Vec<String>>(
-                "upstream",
-                &upstream.api_url,
-                "players.recent",
-                &recent_path,
-                Some(self.player_info_timeout)
-            ),
-            stats_request
-        );
-        let mut result = supplement.map(|r| r.data).unwrap_or_else(|_| json!({}));
+        let (recent, stats) = tokio::join!(self.recent_fights(id), stats_request);
         if let Some(stats) = stats {
             primary["statInfo"] = statistics(&stats.data);
         }
         if let Ok(recent) = recent {
-            primary["last_fights_data"] = json!(recent.data);
+            primary["last_fights_data"] =
+                json!(recent.iter().map(ToString::to_string).collect::<Vec<_>>());
         }
-        merge(&mut result, primary);
-        decode(result)
+        decode(primary)
     }
 
     pub(super) async fn combined_report(
@@ -434,33 +402,11 @@ impl BatraceClient {
                 },
             )
             .await;
-        match primary {
-            Ok(report) => {
-                let (data, value) = report.data;
-                Ok(Fetched {
-                    data,
-                    raw: json!({"matchInfo": value}).to_string(),
-                })
-            }
-            Err(err) => self
-                .fetch_parsed(
-                    "batrace",
-                    &self.base_url,
-                    "match",
-                    &format!("/api/match?matchid={id}"),
-                    None,
-                    |raw| {
-                        let response: MatchReportResponse = serde_json::from_str(raw)
-                            .map_err(|e| ApiError::Decode(e.to_string()))?;
-                        response
-                            .match_info
-                            .filter(|info| !info.is_empty())
-                            .ok_or(ApiError::NotFound)
-                    },
-                )
-                .await
-                .map_err(|other| fallback_error(err, other)),
-        }
+        let (data, value) = primary?.data;
+        Ok(Fetched {
+            data,
+            raw: json!({"matchInfo": value}).to_string(),
+        })
     }
 
     /// Manual, endpoint-specific checks. Fresh requests, shared 30s cooldown between button presses.
@@ -474,8 +420,8 @@ impl BatraceClient {
         }
         let mut targets = vec![
             (
-                "BATrace · 玩家补充",
-                format!("{}/api/players/info?stbid=367171", self.base_url),
+                "BATrace · 社区标记",
+                format!("{}/api/players/367171/trace", self.base_url),
                 2,
             ),
             (
@@ -536,8 +482,7 @@ impl BatraceClient {
                                 && decode::<MatchInfo>(value.clone())
                                     .is_ok_and(|r| !r.data.is_empty())
                         }
-                        2 => decode::<PlayerInfoResponse>(value.clone())
-                            .is_ok_and(|r| r.data.info.is_some()),
+                        2 => value.get("traceCount").and_then(Value::as_u64).is_some(),
                         3 => value.get("players").is_some_and(Value::is_array),
                         _ => decode::<UnitsResponse>(value).is_ok_and(|r| !r.data.units.is_empty()),
                     };

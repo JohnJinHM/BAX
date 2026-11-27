@@ -143,6 +143,15 @@ const MIGRATIONS: &[&str] = &[
     // 第 7 版：BATrace 标记能独立于基本资料更新，旧档案的次数为未知。
     "ALTER TABLE players ADD COLUMN trace_count INTEGER CHECK(trace_count >= 0);
      ALTER TABLE players ADD COLUMN trace_checked_at INTEGER;",
+    // Version 8 indexes the participant perspective for archived player history.
+    "ALTER TABLE report_player_units ADD COLUMN team_id INTEGER;
+     ALTER TABLE report_player_units ADD COLUMN rating_delta REAL;",
+    // 第 9 版：手动刷新过往对局的时间独立于资料更新和战报收录。
+    "CREATE TABLE player_fight_queries (
+        player_id INTEGER PRIMARY KEY,
+        queried_at INTEGER NOT NULL
+    ) STRICT;",
+    "ALTER TABLE report_player_units ADD COLUMN deployment TEXT NOT NULL DEFAULT '[]';",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -266,7 +275,7 @@ impl Store {
 
     fn open_at(path: Option<&Path>) -> Result<Store> {
         let conn = db::open_with_data_migrations(path, MIGRATIONS, true, |conn, version| {
-            if version == 6 {
+            if version == 10 {
                 crate::reports::backfill_player_units(conn)?;
             }
             Ok(())
@@ -324,7 +333,9 @@ impl Store {
     ///
     /// ELO、等级、排名或排位场次与上一次记录不同时，追加一条历史。
     pub fn save_profile(&mut self, profile: &ProfileUpdate, at: Timestamp) -> Result<()> {
-        let tx = self.conn.transaction()?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let id = id_to_db(profile.id.get());
         let previous = tx
             .query_row(

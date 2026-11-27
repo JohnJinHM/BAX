@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import type { HistoryRow } from "../shared/bindings/HistoryRow";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { mmss, phaseNames } from "../shared/format";
+import MatchTag from "../shared/MatchTag.vue";
 import { historyPlayer, selectedMatch } from "./navigation";
 
 // 战后分析带着图表库，打开这一页时才加载
@@ -111,9 +112,9 @@ function reportTitle(row: HistoryRow): string | undefined {
           <button type="button" class="match-entry" :aria-current="row.matchId === selectedMatch ? 'true' : undefined"
             @click="selectedMatch = row.matchId">
             <span class="row-top">
-              <span v-if="row.selfTeam === 'spectators'" class="result spectator" title="旁观比赛" aria-label="旁观比赛">旁</span>
-              <span v-else-if="row.report.state === 'cancelled'" class="result cancelled">弃</span>
-              <span v-else-if="row.won != null" class="result" :class="row.won ? 'win' : 'loss'">{{ row.won ? "胜" : "负" }}</span>
+              <MatchTag v-if="row.selfTeam === 'spectators'" kind="spectator" />
+              <MatchTag v-else-if="row.report.state === 'cancelled'" kind="cancelled" />
+              <MatchTag v-else-if="row.won != null" :kind="row.won ? 'win' : 'loss'" />
               <span class="map">{{ row.map ?? "地图未知" }}</span>
               <span class="when num">{{ date(row.at) }}</span>
             </span>
@@ -220,31 +221,6 @@ ul {
 
 .row-sub > span {
   flex-shrink: 0;
-}
-
-.result {
-  flex-shrink: 0;
-  padding: 0 5px;
-  border-radius: min(3px, var(--bax-radius-xs));
-  font-size: calc(12px * var(--bax-font-scale));
-  font-weight: 600;
-}
-
-.result.win {
-  background: color-mix(in srgb, var(--bax-good) 15%, transparent);
-  color: var(--bax-good);
-}
-
-.result.loss {
-  background: color-mix(in srgb, var(--bax-bad) 15%, transparent);
-  color: var(--bax-bad);
-}
-
-.result.cancelled,
-.result.spectator {
-  background: color-mix(in srgb, var(--bax-muted) 15%, transparent);
-  color: var(--bax-muted);
-  white-space: nowrap;
 }
 
 .state {

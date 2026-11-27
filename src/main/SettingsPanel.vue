@@ -171,7 +171,7 @@ async function exportDiag() {
 <template>
   <section class="card" aria-labelledby="sources-heading" :aria-busy="sourcesBusy">
     <h2 id="sources-heading">数据源</h2>
-    <p>玩家基础资料与战报优先使用主源；BATrace 补充昵称搜索、完整统计和单位目录，主源失败时自动回退。</p>
+    <p>玩家资料、近期比赛和战报来自 STB。BATrace 提供社区标记、昵称搜索和单位目录。</p>
     <p class="hint">优先复用缓存。服务异常时暂停重试，已保存的资料与战报仍可查看。</p>
     <button :disabled="sourcesBusy" @click="checkSources">{{ sourcesBusy ? "正在查询…" : "查询数据源状态" }}</button>
     <p v-if="!sourceChecks && !sourcesBusy" class="hint">尚未查询。手动检查会请求少量公开样本，结果保留 30 秒。</p>

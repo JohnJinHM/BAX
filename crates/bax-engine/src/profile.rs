@@ -23,13 +23,14 @@ pub struct ProfileSummary {
     pub stats_updated_at: Option<String>,
     pub favorite_specs: Vec<crate::specs::SpecPreference>,
     pub favorite_spec_pairs: Vec<crate::specs::SpecPreference>,
+    pub country_specs: std::collections::BTreeMap<u8, Vec<crate::specs::SpecPreference>>,
     pub last_specs: Vec<crate::specs::SpecPreference>,
     pub last_spec_match: Option<bax_core::MatchId>,
     pub spec_sample_matches: u32,
     pub spec_identified_matches: u32,
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
-    pub(crate) recent_match_id: Option<bax_core::MatchId>,
+    pub(crate) recent_matches: Vec<bax_core::MatchId>,
 }
 
 /// 排位赛的累计统计。比率在分母为零或数据缺失时为 `None`。
@@ -68,11 +69,12 @@ impl ProfileSummary {
                 .and_then(|s| s.updated_at.clone()),
             favorite_specs: vec![],
             favorite_spec_pairs: vec![],
+            country_specs: Default::default(),
             last_specs: vec![],
             last_spec_match: None,
             spec_sample_matches: 0,
             spec_identified_matches: 0,
-            recent_match_id: response.recent_match_ids().next(),
+            recent_matches: response.recent_match_ids().take(100).collect(),
         })
     }
 

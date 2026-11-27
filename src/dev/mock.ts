@@ -5,7 +5,7 @@ import { emit } from "@tauri-apps/api/event";
 import type { JsonValue } from "../shared/bindings/serde_json/JsonValue";
 
 import { currentRelations } from "../shared/roster";
-import { fixtureDetail, fixtureHistory, fixtureHits, fixtureReport, fixtureSnapshot } from "./fixture";
+import { fixtureDetail, fixtureHistory, fixtureHits, fixtureMatches, fixtureReport, fixtureSnapshot } from "./fixture";
 
 /** 预览页控制按钮使用虚构快照模拟阶段变化，不进入正式构建。 */
 export function previewOverlayStage(stage: "waitingRoom" | "loading" | "deployment" | "battle" | "ended" | "exited") {
@@ -79,7 +79,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
     fixtureSnapshot.alert = null;
     m.phase = "waitingRoom"; m.rosterKnown = false; m.clock = null;
     m.pregame = { status: "候选待日志确认", players: m.players.map((p, i) => ({
-      observed: { side: i < 5 ? "left" : "right", row: i % 5, friendly: i < 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
+      observed: { country: 1, side: i < 5 ? "left" : "right", row: i % 5, friendly: i < 5, name: p.name ?? "Raven", level: p.profile?.level ?? 50, alternatives: [] },
       candidates: i === 4 ? [] : [{ id: p.id, name: p.name ?? "Raven", level: p.profile?.level ?? 50, local: i % 2 === 0, profile: p.profile }],
       ambiguous: i === 3,
       traceCount: i === 3 || i === 4 ? null : p.traceCount,
@@ -111,7 +111,7 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         return new Promise(resolve => setTimeout(() => resolve([
           { name: "主源 · 玩家资料", available: true, message: "预览样本：查询成功", latencyMs: 180, checkedAt: Math.floor(Date.now() / 1000) },
           { name: "主源 · 战报样本", available: true, message: "预览样本：查询成功", latencyMs: 240, checkedAt: Math.floor(Date.now() / 1000) },
-          ...["玩家补充", "昵称搜索", "单位目录"].map(name => ({ name: `BATrace · ${name}`, available: false, message: "预览样本：HTTP 404", latencyMs: 120, checkedAt: Math.floor(Date.now() / 1000) })),
+          ...["社区标记", "昵称搜索", "单位目录"].map(name => ({ name: `BATrace · ${name}`, available: false, message: "预览样本：HTTP 404", latencyMs: 120, checkedAt: Math.floor(Date.now() / 1000) })),
         ]), 900));
       case "get_snapshot":
         return structuredClone(fixtureSnapshot);
@@ -141,6 +141,25 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       case "install_update":
       case "open_releases":
         return null;
+      case "player_fights": {
+        const id = Number((args as {id:number}).id);
+        const player = fixtureDetail(id);
+        const at = localStorage.getItem(`bax.dev.fightQuery.${id}`);
+        const fights = fixtureMatches.filter(m => m.report.state === "ready").map((m,i) => ({
+          hasLocalLog: fixtureHistory.some(local => local.matchId === m.matchId),
+          playedTogether: id !== fixtureSnapshot.selfId && !!player?.matches.some(row => row.matchId === m.matchId),
+          matchId:m.matchId, start:m.at, durationSecs:m.durationMs == null ? null : m.durationMs/1000,
+          map:["煤山","黑海岸","死亡中心"][i%3], team:"alpha", won:i%2===0, ratingDelta:i%2===0 ? 18 : -12,
+          composition: fixtureReport(m.matchId)?.analysis.players.find(p => p.id === id)?.composition ?? [],
+          opening: [...new Set(fixtureReport(m.matchId)?.analysis.sorties.filter(s => s.player === id && s.spawnSecs < 180).map(s => s.unitName))],
+          specs:player?.profile?.lastSpecs ?? [],
+        }));
+        return { lastQueriedAt: at == null ? null : Number(at), fights };
+      }
+      case "stop_player_fights": return null;
+      case "sync_player_fights":
+        localStorage.setItem(`bax.dev.fightQuery.${(args as {id:number}).id}`, String(Date.now()));
+        return "查询完成 · 预览战报已收录";
       case "player_detail":
         return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
       case "match_history": {

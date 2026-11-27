@@ -54,6 +54,33 @@ pub fn open_batrace_player(id: PlayerId) -> CommandResult {
 }
 
 #[tauri::command]
+pub async fn player_fights(
+    state: State<'_, AppState>,
+    id: PlayerId,
+) -> Result<bax_engine::PlayerFightArchive, String> {
+    state
+        .engine
+        .player_fights(id)
+        .await
+        .map_err(rejected("player_fights"))
+}
+#[tauri::command]
+pub fn stop_player_fights(state: State<'_, AppState>, id: PlayerId) {
+    state.engine.stop_player_fights(id);
+}
+#[tauri::command]
+pub async fn sync_player_fights(
+    state: State<'_, AppState>,
+    id: PlayerId,
+    limit: u32,
+) -> Result<String, String> {
+    state
+        .engine
+        .sync_player_fights(id, limit)
+        .await
+        .map_err(rejected("sync_player_fights"))
+}
+#[tauri::command]
 pub async fn refresh_players(state: State<'_, AppState>) -> CommandResult {
     tracing::info!(via = %"界面", "刷新玩家资料");
     state

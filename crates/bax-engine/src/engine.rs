@@ -54,6 +54,53 @@ pub struct ImportSummary {
     pub failed: u32,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct FightClass {
+    pub class: bax_core::report::UnitClass,
+    pub count: u32,
+    pub value: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct PlayerFight {
+    pub composition: Vec<FightClass>,
+    /// Distinct opening units, or None when timing or deployments are unavailable.
+    pub opening: Option<Vec<String>>,
+    pub match_id: MatchId,
+    pub has_local_log: bool,
+    pub played_together: bool,
+    pub start: Option<bax_core::Timestamp>,
+    pub duration_secs: Option<i64>,
+    pub map: Option<String>,
+    pub team: Option<bax_core::Team>,
+    pub won: Option<bool>,
+    pub rating_delta: Option<f64>,
+    pub specs: Vec<crate::specs::SpecPreference>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct PlayerFightArchive {
+    pub last_queried_at: Option<bax_core::Timestamp>,
+    pub fights: Vec<PlayerFight>,
+}
+
+type FightSearches = Mutex<BTreeMap<PlayerId, watch::Sender<bool>>>;
+struct FightSearch<'a> {
+    jobs: &'a FightSearches,
+    id: PlayerId,
+}
+impl Drop for FightSearch<'_> {
+    fn drop(&mut self) {
+        self.jobs.lock().expect("fight searches").remove(&self.id);
+    }
+}
+
 /// 正在运行的引擎。丢弃句柄会让引擎停下；需要等它收尾时用 [`Engine::shutdown`]。
 #[derive(Debug)]
 pub struct Engine {
@@ -67,6 +114,8 @@ pub struct Engine {
     /// 战后归档任务。
     reports: JoinHandle<()>,
     spec_reports: JoinHandle<()>,
+    fight_searches: FightSearches,
+    archive_events: mpsc::UnboundedSender<crate::reports::ReportEvent>,
     report_notify: Arc<Notify>,
     /// 按需读取比赛记录与战报用的连接，不经过对局会话。
     reader: Arc<Mutex<Store>>,
@@ -118,7 +167,7 @@ impl Engine {
             clock: Arc::clone(&clock),
             timing: ReportTiming::from_config(&config),
             notify: Arc::clone(&report_notify),
-            events: report_tx,
+            events: report_tx.clone(),
         };
         let reader = Arc::new(Mutex::new(Store::open(&config.store_path)?));
 
@@ -159,6 +208,8 @@ impl Engine {
             log_zone,
             reports,
             spec_reports,
+            fight_searches: Mutex::default(),
+            archive_events: report_tx,
             report_notify,
             reader,
             clock,
@@ -331,6 +382,193 @@ impl Engine {
         );
         self.send(Command::ReloadArchive).await?;
         Ok(summary)
+    }
+
+    pub async fn player_fights(&self, id: PlayerId) -> Result<PlayerFightArchive, CommandError> {
+        let self_id = self.snapshot().self_id;
+        self.read(move |store| {
+            let last_queried_at = store.last_fight_query(id).map_err(|err| err.to_string())?;
+            let rows = store
+                .player_fights(id, self_id)
+                .map_err(|err| err.to_string())?;
+            let catalog = store
+                .reference(postmatch::UNITS_KEY)
+                .map_err(|e| e.to_string())?
+                .and_then(|r| serde_json::from_str(&r.raw).ok())
+                .map(|units| postmatch::catalog(&units))
+                .unwrap_or_default();
+            let fights = rows
+                .into_iter()
+                .map(|row| {
+                    let specs = crate::specs::infer(&row.units)
+                        .into_iter()
+                        .flatten()
+                        .map(|id| crate::specs::entry(vec![id], 1))
+                        .collect();
+                    let mut composition = BTreeMap::new();
+                    let mut opening = std::collections::BTreeSet::new();
+                    let start = row.start.map(|s| s.as_millis() / 1000);
+                    let mut timed = false;
+                    for (unit, n, spawned) in row.deployment {
+                        let kind = catalog.get(&unit);
+                        let class = kind.map_or(bax_core::report::UnitClass::Other, |k| {
+                            bax_core::report::UnitClass::of(k.category, k.role)
+                        });
+                        let share = composition.entry(class).or_insert(FightClass {
+                            class,
+                            count: 0,
+                            value: 0,
+                        });
+                        share.count += n;
+                        share.value +=
+                            i64::from(n) * kind.and_then(|k| k.base_cost).unwrap_or(0).max(0);
+                        if let Some((at, begin)) = spawned.zip(start) {
+                            timed = true;
+                            if at < begin + 180 {
+                                opening.insert(
+                                    kind.and_then(|k| k.name.clone())
+                                        .unwrap_or_else(|| format!("单位 #{unit}")),
+                                );
+                            }
+                        }
+                    }
+                    PlayerFight {
+                        composition: composition.into_values().collect(),
+                        opening: timed.then(|| opening.into_iter().collect()),
+                        match_id: row.id,
+                        has_local_log: row.has_local_log,
+                        played_together: row.played_together,
+                        start: row.start,
+                        duration_secs: row.duration_secs,
+                        map: crate::postmatch::map_name(row.map_id, row.log_map),
+                        won: row.won,
+                        team: row.team,
+                        rating_delta: row.rating_delta,
+                        specs,
+                    }
+                })
+                .collect();
+            Ok(PlayerFightArchive {
+                last_queried_at,
+                fights,
+            })
+        })
+        .await
+    }
+
+    pub fn stop_player_fights(&self, id: PlayerId) {
+        if let Some(stop) = self.fight_searches.lock().expect("fight searches").get(&id) {
+            stop.send_replace(true);
+        }
+    }
+
+    pub async fn sync_player_fights(
+        &self,
+        id: PlayerId,
+        limit: u32,
+    ) -> Result<String, CommandError> {
+        if !(1..=100).contains(&limit) {
+            return Err(CommandError::Rejected("查询数量须为 1 至 100 场".into()));
+        }
+        let (tx, mut stop) = watch::channel(false);
+        {
+            let mut jobs = self.fight_searches.lock().expect("fight searches");
+            let std::collections::btree_map::Entry::Vacant(slot) = jobs.entry(id) else {
+                return Err(CommandError::Rejected("该玩家的查询正在进行".into()));
+            };
+            slot.insert(tx);
+        }
+        let _job = FightSearch {
+            jobs: &self.fight_searches,
+            id,
+        };
+        let queried_at = self.clock.now();
+        self.read(move |store| {
+            store
+                .record_fight_query(id, queried_at)
+                .map_err(|err| err.to_string())
+        })
+        .await?;
+        let ids = tokio::select! {biased;
+            _=stop.changed()=>return Ok("查询已停止".into()),
+            r=self.client.recent_fights(id)=>r.map_err(|e|CommandError::Rejected(e.to_string()))?,
+        };
+        let ids: Vec<_> = ids.into_iter().take(limit as usize).collect();
+        let total = ids.len();
+        let (ids, existing) = self
+            .read(move |s| {
+                let mut existing = std::collections::BTreeSet::new();
+                for mid in &ids {
+                    if s.has_report(*mid).map_err(|e| e.to_string())? {
+                        existing.insert(*mid);
+                    }
+                }
+                Ok((ids, existing))
+            })
+            .await?;
+        let mut saved = 0;
+        let mut reused = 0;
+        let mut failure = None;
+        for mid in ids {
+            if *stop.borrow() {
+                break;
+            }
+            if existing.contains(&mid) {
+                reused += 1;
+                continue;
+            }
+            let report = tokio::select! {biased;
+                _=stop.changed()=>break,
+                report=self.client.match_report(mid)=>report,
+            };
+            match report {
+                Ok(r) if r.data.players().any(|(player, _)| player == id) => {
+                    let now = self.clock.now();
+                    let event = self
+                        .read(move |s| {
+                            let players = s
+                                .save_report_with_players(
+                                    mid,
+                                    &r.raw,
+                                    postmatch::report_meta(&r.data),
+                                    now,
+                                )
+                                .map_err(|e| e.to_string())?;
+                            Ok(crate::reports::ReportEvent {
+                                pending: s.pending_reports().map_err(|e| e.to_string())?,
+                                archived: Some((mid, players)),
+                            })
+                        })
+                        .await?;
+                    let _ = self.archive_events.send(event);
+                    saved += 1;
+                }
+                Ok(_) => failure = Some("战报名单与玩家不符".into()),
+                Err(e) => {
+                    failure = Some(e.to_string());
+                    if e.is_transient() {
+                        break;
+                    }
+                }
+            }
+            tokio::select! {biased;
+                _=stop.changed()=>break,
+                _=tokio::time::sleep(std::time::Duration::from_millis(120))=>{},
+            }
+        }
+        let finished = if *stop.borrow() {
+            "已停止"
+        } else {
+            "查询完成"
+        };
+        let mut status = format!("{finished} · 已有 {reused} 场 · 本次收录 {saved} 场");
+        if let Some(reason) = failure {
+            status.push_str(&format!(
+                " · 未处理或未收录 {} 场（{reason}）",
+                total - saved - reused
+            ));
+        }
+        Ok(status)
     }
 
     /// 比赛记录，新的在前，带战报状态。

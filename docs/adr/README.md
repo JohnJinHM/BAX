@@ -7,7 +7,7 @@
 | 编号 | 标题 | 状态 | 日期 |
 |---|---|---|---|
 | [0001](0001-desktop-stack.md) | 桌面技术栈暂定 Tauri＋Rust | 已采纳（暂定） | 2026-11-16 |
-| [0002](0002-exclude-cheat-detection.md) | 首阶段排除作弊与异常行为判定 | 已采纳 | 2026-11-16 |
+| [0002](0002-exclude-cheat-detection.md) | 首阶段排除作弊与异常行为判定 | 被 ADR-0016 取代 | 2026-11-16 |
 | [0003](0003-workspace-layout.md) | 用 Cargo workspace 分离核心库、后台运行时与 Tauri 外壳 | 提议 | 2026-11-16 |
 | [0004](0004-state-ownership.md) | 业务状态只存在于 Rust，窗口通过快照和事件订阅 | 提议 | 2026-11-16 |
 | [0005](0005-storage-separation.md) | 长期数据与缓存分成两个数据库文件 | 提议 | 2026-11-16 |
@@ -20,7 +20,8 @@
 | [0012](0012-signed-github-updates.md) | GitHub Release 签名更新与双版本发布 | 已采纳 | 2026-11-19 |
 | [0013](0013-last-match-specializations.md) | 通过最近战报补充敌方上次专精 | 已采纳 | 2026-11-19 |
 | [0014](0014-skins.md) | 皮肤是内置的 CSS 变量组 | 提议 | 2026-11-21 |
-| [0015](0015-primary-source-with-batrace-fallback.md) | 游戏数据源优先，BATrace 补充与回退 | 已采纳 | 2026-11-21 |
+| [0015](0015-primary-source-with-batrace-fallback.md) | 游戏数据源优先，BATrace 补充与回退 | 回退策略被 ADR-0016 取代 | 2026-11-21 |
+| [0016](0016-player-labels-and-stb-history.md) | 玩家标签与 STB 历史战报 | 已采纳 | 2026-11-26 |
 
 ## 什么时候写
 

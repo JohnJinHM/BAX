@@ -27,7 +27,18 @@ export function matchSpecs(player: RosterRow, match: MatchView | null, report: M
   if (match?.phase === "ended") {
     return report?.analysis.matchId === match.matchId && player.id != null ? report.specs[player.id] ?? [] : [];
   }
-  return player.profile?.lastSpecs ?? [];
+  return player.country == null ? [] : player.profile?.countrySpecs?.[player.country] ?? [];
+}
+
+export function predictionHint(player: RosterRow) {
+  if (!player.profile) return "等待玩家身份和近期战报";
+  if (player.country == null) return "等待识别本行国旗";
+  const specs = player.profile.countrySpecs?.[player.country];
+  const nation = player.country === 1 ? "俄军" : "美军";
+  if (!specs?.length) return `近期战报中暂无可识别的${nation}组合`;
+  const ids = specs.map(s => s.ids[0]);
+  const pair = player.profile.favoriteSpecPairs.find(p => p.ids.length === ids.length && ids.every(id => p.ids.includes(id)));
+  return `${nation}最近使用：${specs.map(s => s.name).join(" + ")}；近 ${player.profile.specSampleMatches} 份战报中识别到该组合 ${pair?.games ?? 1} 次`;
 }
 
 export function showOverlaySpecs(match: MatchView | null) {

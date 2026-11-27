@@ -48,6 +48,24 @@ fn cancelled_matches_block_old_queues_manual_requests_and_catch_up() {
 }
 
 #[test]
+fn deployment_index_counts_original_sorties_and_retains_earliest_spawn() {
+    let mut store = Store::open_in_memory().expect("打开内存归档");
+    let raw = r#"{"matchInfo":{"Data":{
+        "11":{"UnitData":{"a":{"Id":5,"SpawnTime":203}},"TransferredUnits":{"b":{"Id":5,"SpawnTime":201}}},
+        "22":{"UnitData":{"b":{"Id":5,"SpawnTime":201},"c":{"Id":6}}}
+    }}}"#;
+    store
+        .save_report(MatchId(9), raw, meta(Team::Alpha), t(300))
+        .expect("保存转交单位的战报");
+    let origin = store
+        .player_fights(PlayerId(11), None)
+        .expect("查询原出兵者");
+    let recipient = store.player_fights(PlayerId(22), None).expect("查询接收者");
+    assert_eq!(origin[0].deployment, vec![(5, 2, Some(201))]);
+    assert_eq!(recipient[0].deployment, vec![(6, 1, None)]);
+}
+
+#[test]
 fn cancellation_requires_a_normal_start_and_an_end_signal() {
     let mut store = Store::open_in_memory().expect("库");
     record(&mut store, 1, 100, true, true);

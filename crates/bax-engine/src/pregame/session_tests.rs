@@ -82,6 +82,7 @@ fn message(s: &Session) -> Message {
                 observed: Observation {
                     side: "left".into(),
                     row: 0,
+                    country: None,
                     friendly: Some(false),
                     name: "Raven".into(),
                     level: 57,

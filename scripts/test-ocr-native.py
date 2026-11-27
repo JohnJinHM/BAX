@@ -56,10 +56,21 @@ for i, (name, level) in enumerate(zip(names, levels)):
     y = round(1080/2 + (.3121 + row * .14255 - .5) * (1987/3576) * 1920)
     draw.text((x, y), 'lvl', font=small, fill=(240, 205, 30), anchor='lt')
     draw.text((x+20, y), str(level), font=small, fill=(235, 235, 220), anchor='lt')
+    # Alternate countries independently of sides and leave two flags occluded.
+    x = round((.8795 if side else .2123) * 1920)
+    y = round(540 + (.285 + row * .14255 - .5) * (1987/3576) * 1920)
+    w, h = 65, 33
+    if row < 4:
+        bands = ['white', 'navy', 'firebrick'] if i % 2 == 0 else ['firebrick', 'white'] * 6 + ['firebrick']
+        for j, color in enumerate(bands):
+            draw.rectangle((x, y + h*j//len(bands), x+w-1, y + h*(j+1)//len(bands)-1), fill=color)
+        if i % 2:
+            draw.rectangle((x, y, x+24, y+16), fill='navy')
 _, results = run(canvas, 'synthetic-four-languages')
 players = results[0]['players']
 assert len(players) == 10, 'synthetic roster incomplete'
 for i, player in enumerate(players):
+    assert player['country'] == (None if i % 5 == 4 else 1 + i % 2)
     assert player['friendly'] is (i < 5)
     assert player['level'] == levels[i], 'incorrect synthetic level'
     assert names[i] in [player['name'], *player['alternatives']], 'expected name not in OCR hypotheses'

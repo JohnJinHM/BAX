@@ -6,7 +6,9 @@ import type { Relation } from "../shared/bindings/Relation";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
-import { openMatch, openPlayerHistory } from "./navigation";
+import PlayerFightArchive from "./PlayerFightArchive.vue";
+import PlayerReportPreview from "./PlayerReportPreview.vue";
+import PlayerBadges from "../shared/PlayerBadges.vue";
 import Sparkline from "./Sparkline.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 
@@ -29,6 +31,7 @@ const noteDraft = computed({
     noteMessage.value = null;
   },
 });
+const preview = ref<{id:number; map:string | null} | null>(null);
 const refreshing = ref(false);
 const snapshot = useSnapshot();
 let loadSequence = 0;
@@ -55,6 +58,7 @@ watch(
   () => {
     noteMessage.value = null;
     detail.value = null;
+    preview.value = null;
     void load();
   },
   { immediate: true },
@@ -127,31 +131,35 @@ async function refresh() {
   <section class="card detail">
     <div class="row head">
       <h2>{{ title }}</h2>
+      <PlayerBadges v-if="detail" :row="{ profile: detail.profile, traceCount: detail.traceCount, labels: snapshot?.current?.labels[id] ?? [] }" />
       <span v-if="detail?.isSelf" class="tag">本机</span>
       <span class="hint">ID {{ id }}</span>
       <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
       <span v-if="detail?.steamId" class="hint">Steam {{ detail.steamId }}</span>
-      <button @click="openPlayerHistory(id, title)">查询过往对局</button>
       <button class="refresh" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
     </div>
     <p v-if="failure" class="error">{{ failure }}</p>
-    <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 BATrace 查一次。</p>
+    <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 STB 查一次。</p>
+
+    <div v-if="detail" class="stats">
+      <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
+      <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
+      <div v-if="detail.traceCount != null && detail.traceCount > 0" :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount }} 次</span></div>
+      <div><label>排名</label><span class="num">{{ detail.profile?.rank ?? "–" }}</span></div>
+      <div><label>排位场次</label><span class="num">{{ detail.profile?.ratingGames ?? "–" }}</span></div>
+      <div><label>胜率</label><span class="num">{{ percent(detail.profile?.ranked?.winRate) }}</span></div>
+      <div><label>离场</label><span class="num">{{ detail.profile?.ranked?.leaves ?? "–" }}</span></div>
+      <div><label>损毁比</label><span class="num">{{ ratio(detail.profile?.ranked?.killLossRatio) }}</span></div>
+      <div><label>价值比</label><span class="num">{{ ratio(detail.profile?.ranked?.costRatio) }}</span></div>
+      <div><label>场均时长</label><span class="num">{{ minutes(detail.profile?.ranked?.averageMinutes) }}</span></div>
+      <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
+    </div>
+    <p v-else-if="loading" class="hint">正在读取…</p>
+
+    <PlayerFightArchive :id="id" @preview="preview = $event" />
+    <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
 
     <template v-if="detail">
-      <div class="stats">
-        <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
-        <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
-        <div v-if="detail.traceCount != null && detail.traceCount > 0" :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount }} 次</span></div>
-        <div><label>排名</label><span class="num">{{ detail.profile?.rank ?? "–" }}</span></div>
-        <div><label>排位场次</label><span class="num">{{ detail.profile?.ratingGames ?? "–" }}</span></div>
-        <div><label>胜率</label><span class="num">{{ percent(detail.profile?.ranked?.winRate) }}</span></div>
-        <div><label>离场</label><span class="num">{{ detail.profile?.ranked?.leaves ?? "–" }}</span></div>
-        <div><label>损毁比</label><span class="num">{{ ratio(detail.profile?.ranked?.killLossRatio) }}</span></div>
-        <div><label>价值比</label><span class="num">{{ ratio(detail.profile?.ranked?.costRatio) }}</span></div>
-        <div><label>场均时长</label><span class="num">{{ minutes(detail.profile?.ranked?.averageMinutes) }}</span></div>
-        <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
-      </div>
-
       <h3>专精使用</h3>
       <div v-if="detail.profile?.lastSpecs.length" class="last-specs">
         <span class="hint">上次专精</span>
@@ -211,13 +219,12 @@ async function refresh() {
             <td class="left">{{ m.logName ?? "–" }}</td>
             <td class="num">{{ m.durationMs != null ? mmss(m.durationMs) : "–" }}</td>
             <td>{{ phaseNames[m.phase] }}</td>
-            <td class="num"><a href="#" class="match" title="打开这场比赛" @click.prevent="openMatch(m.matchId)">{{ m.matchId }}</a></td>
+            <td class="num"><a href="#" class="match" title="打开这场比赛" @click.prevent="preview = {id:m.matchId, map:m.map}">查看战报</a></td>
           </tr>
         </tbody>
       </table>
       <p v-else class="hint">还没有同场记录。</p>
     </template>
-    <p v-else-if="loading" class="hint">正在读取…</p>
   </section>
 </template>
 

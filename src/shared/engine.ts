@@ -114,6 +114,9 @@ export const commands = {
   reportUiError: (kind: string, message: string, stack: string | null) =>
     invoke<void>("report_ui_error", { kind, message, stack }),
   /** 长期库里没有这名玩家时为 null。 */
+  playerFights: (id:number) => invoke<import("./bindings/PlayerFightArchive").PlayerFightArchive>("player_fights",{id}),
+  syncPlayerFights: (id: number, limit: number) => invoke<string>("sync_player_fights", { id, limit }),
+  stopPlayerFights: (id: number) => invoke<void>("stop_player_fights", { id }),
   playerDetail: (id: number) => invoke<PlayerDetail | null>("player_detail", { id }),
   /** 默认本机优先，然后按同场次数排序；筛选在分页前执行。 */
   searchPlayers: (query: string, limit = 50, sort = "default", filter = "all", offset = 0) => invoke<PlayerHit[]>("search_players", { query, limit, sort, filter, offset }),

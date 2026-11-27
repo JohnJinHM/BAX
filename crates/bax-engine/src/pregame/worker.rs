@@ -89,6 +89,7 @@ impl Process {
             || rows.iter().any(|r| {
                 !["left", "right"].contains(&r.side.as_str())
                     || r.row > 4
+                    || r.country.is_some_and(|id| !matches!(id, 1 | 2))
                     || r.name.trim().is_empty()
                     || r.name.chars().count() > 80
                     || r.alternatives.len() > 1
@@ -236,6 +237,7 @@ struct CaptureLatch {
     previous: Vec<Observation>,
     stable: Vec<Observation>,
     complete: bool,
+    full_frames: u8,
 }
 impl CaptureLatch {
     fn select(&mut self, identity: &Ticket) -> bool {
@@ -263,15 +265,21 @@ impl CaptureLatch {
                 .find(|p| p.side == row.side && p.row == row.row)
             {
                 // 已稳定的身份不因动画或遮挡反复替换；允许后续补全敌我判定。
-                if old.friendly.is_none() && old.name == row.name && old.level == row.level {
-                    old.friendly = row.friendly;
+                if old.name == row.name && old.level == row.level {
+                    old.friendly = old.friendly.or(row.friendly);
+                    old.country = old.country.or(row.country);
                 }
             } else {
                 self.stable.push(row.clone());
             }
         }
         self.stable.sort_by_key(|p| (p.side.clone(), p.row));
-        self.complete = self.stable.len() == 10 && self.stable.iter().all(|r| r.friendly.is_some());
+        if self.stable.len() == 10 && self.stable.iter().all(|r| r.friendly.is_some()) {
+            self.full_frames += 1;
+            // A covered flag or older sidecar must not keep capturing a complete roster forever.
+            self.complete =
+                self.full_frames >= 4 || self.stable.iter().all(|r| r.country.is_some());
+        }
         self.previous = rows;
         before != self.stable
     }
@@ -488,6 +496,7 @@ mod tests {
         Observation {
             side: "left".into(),
             row: 0,
+            country: None,
             friendly: Some(false),
             name: "Raven".into(),
             level: 57,

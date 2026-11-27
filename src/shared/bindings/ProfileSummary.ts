@@ -22,4 +22,4 @@ ranked: RankedStats | null,
 /**
  * 站点更新这份统计的时间，原样保留站点给出的文本。
  */
-statsUpdatedAt: string | null, favoriteSpecs: Array<SpecPreference>, favoriteSpecPairs: Array<SpecPreference>, lastSpecs: Array<SpecPreference>, lastSpecMatch: MatchId | null, specSampleMatches: number, specIdentifiedMatches: number, };
+statsUpdatedAt: string | null, favoriteSpecs: Array<SpecPreference>, favoriteSpecPairs: Array<SpecPreference>, countrySpecs: { [key in number]: Array<SpecPreference> }, lastSpecs: Array<SpecPreference>, lastSpecMatch: MatchId | null, specSampleMatches: number, specIdentifiedMatches: number, };

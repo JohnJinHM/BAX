@@ -22,7 +22,7 @@ import SortieExplorer from "./SortieExplorer.vue";
 import { openPlayer } from "./navigation";
 import { matchModeNames } from "../shared/match-presentation";
 
-const props = defineProps<{ id: number; row?: HistoryRow | null }>();
+const props = defineProps<{ id: number; perspectiveId?: number; previewMap?: string | null; row?: HistoryRow | null }>();
 const emit = defineEmits<{ requested: [] }>();
 
 const snapshot = useSnapshot();
@@ -108,6 +108,7 @@ const colors = computed(() => {
 const selfTeam = computed<Team | null>(() => {
   const v = view.value;
   if (!v) return null;
+  if (props.perspectiveId != null) return v.analysis.players.find(p => p.id === props.perspectiveId)?.team ?? null;
   const me = v.analysis.players.find((p) => p.id === v.selfId);
   return me?.team ?? v.selfTeam ?? null;
 });
@@ -117,6 +118,7 @@ const teamOrder = computed<Team[]>(() => (selfTeam.value === "bravo" ? ["bravo",
 
 function teamLabel(team: Team): string {
   const mine = selfTeam.value;
+  if (props.perspectiveId != null && (mine === "alpha" || mine === "bravo")) return team === mine ? `玩家所在队（${teamNames[team]}）` : `对手（${teamNames[team]}）`;
   if (mine === "alpha" || mine === "bravo") return team === mine ? `本方（${teamNames[team]}）` : `对方（${teamNames[team]}）`;
   return teamNames[team];
 }
@@ -166,6 +168,7 @@ function eloDelta(p: PlayerReport): string {
 
 // ------------------------------------------------------------ 图表
 
+const curveRange = computed(() => lossMinute.value == null ? selectedRange.value : [lossMinute.value * 60, (lossMinute.value + 1) * 60]);
 const axisCommon = computed(() => ({
   axisLine: { lineStyle: { color: colors.value.faint } },
   axisTick: { show: false },
@@ -219,10 +222,10 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
       color: teamColor(team),
       endLabel: { show: true, color: colors.value.muted, fontSize: 11 * colors.value.fontScale, formatter: (p: { seriesName: string }) => p.seriesName },
       emphasis: { focus: "series" },
-      markArea: selectedRange.value ? {
+      markArea: curveRange.value ? {
         silent: true,
         itemStyle: { color: colors.value.fg, opacity: 0.05 },
-        data: [[{ xAxis: selectedRange.value[0] / 60 }, { xAxis: selectedRange.value[1] / 60 }]],
+        data: [[{ xAxis: curveRange.value[0] / 60 }, { xAxis: curveRange.value[1] / 60 }]],
       } : undefined,
     };
   });
@@ -246,6 +249,43 @@ const curveOption = computed<EChartsCoreOption | null>(() => {
     series,
   };
 });
+
+const lossMinute = ref<number | null>(null);
+watch(() => props.id, () => { lossMinute.value = null; });
+const losses = computed(() => {
+  if (!view.value) return [];
+  const byId = new Map(players.value.map(p => [p.id, p]));
+  return view.value.analysis.sorties.flatMap(s => {
+    const player = byId.get(s.player);
+    if (s.refunded || s.deathSecs == null || !player || !player.team || player.team === "spectators") return [];
+    return [{ minute: Math.floor(s.deathSecs / 60), unit: s.unitName, owner: name(player), team: player.team, cost: s.cost }];
+  });
+});
+const lossMinutes = computed(() => [...new Set(losses.value.map(l => l.minute))].sort((a,b) => a-b));
+const selectedLosses = computed(() => losses.value.filter(l => l.minute === lossMinute.value).sort((a,b) => b.cost-a.cost));
+const lossAxis = computed(() => [...new Set([...Array.from({length:view.value?.analysis.minutes ?? 0}, (_,i) => i), ...lossMinutes.value])].sort((a,b) => a-b));
+const lossOption = computed<EChartsCoreOption | null>(() => {
+  if (!view.value || !losses.value.length) return null;
+  const minutes = lossAxis.value;
+  const totals = new Map<string,number>();
+  for (const l of losses.value) {
+    const key = l.team + l.minute;
+    totals.set(key,(totals.get(key) ?? 0) + l.cost);
+  }
+  return {
+    grid: {left:58,right:18,top:36,bottom:28},
+    tooltip: {...tooltipCommon.value, trigger:"axis"},
+    legend: {textStyle:{color:colors.value.muted}},
+    xAxis: {...axisCommon.value,type:"category",data:minutes.map(m => m+"′")},
+    yAxis: {...axisCommon.value,type:"value"},
+    series: teamOrder.value.map(team => ({id:team,name:teamLabel(team),type:"bar",color:teamColor(team),
+      data:minutes.map(m => totals.get(team+m) ?? 0)})),
+  };
+});
+function selectLoss(_: string, index: number) {
+  const minute = lossAxis.value[index];
+  if (lossMinutes.value.includes(minute)) lossMinute.value = minute;
+}
 
 /** 每人的兵种构成。 */
 const visibleComposition = ref(compositionGroups.map(g => g.key));
@@ -335,11 +375,11 @@ function pendingText(row: HistoryRow | null | undefined): string {
     <p v-if="failure" class="error">{{ failure }}</p>
     <template v-if="view">
       <div class="row head">
-        <h2>比赛 {{ view.analysis.matchId }}</h2>
+        <h2>{{ perspectiveId != null ? (previewMap ?? view.map ?? "地图待识别") : `比赛 ${view.analysis.matchId}` }}</h2>
         <span class="hint">{{ matchModeNames[view.mode] }} · {{ view.analysis.teams[0]?.players ?? 0 }} v {{ view.analysis.teams[1]?.players ?? 0 }}{{ view.mode === 'pve' ? ' 真人' : '' }}</span>
         <span v-if="result" class="result" :class="result === '胜' ? 'win' : 'loss'">{{ result }}</span>
         <span class="hint">
-          {{ view.map ?? (view.analysis.mapId != null ? `地图 #${view.analysis.mapId}` : "地图未知") }} ·
+          <template v-if="perspectiveId == null">{{ view.map ?? (view.analysis.mapId != null ? `地图 #${view.analysis.mapId}` : "地图未知") }} · </template>
           {{ date(view.analysis.startTime) }} ·
           时长 {{ view.analysis.durationSecs != null ? mmss(view.analysis.durationSecs * 1000) : "–" }}
         </span>
@@ -371,7 +411,13 @@ function pendingText(row: HistoryRow | null | undefined): string {
       <h3>累计净出兵价值</h3>
       <EChart v-if="curveOption" :option="curveOption" :height="220" label="双方累计净出兵价值随时间的变化" />
 
-      <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => selectedRange = [start, end]" />
+      <h3>损失时间线</h3>
+      <p class="hint">每分钟阵亡单位的估算价值，按原出兵者归队。回收单位除外。</p>
+      <EChart v-if="lossOption" :option="lossOption" :height="200" label="双方每分钟损失价值，可选择分钟查看单位" @select="selectLoss" />
+      <label class="loss-picker" v-if="lossMinutes.length">损失明细 <select v-model="lossMinute"><option :value="null">选择分钟</option><option v-for="m in lossMinutes" :key="m" :value="m">{{ mmss(m*60000) }}–{{ mmss((m+1)*60000) }}</option></select></label>
+      <ul v-if="selectedLosses.length"><li v-for="(l,i) in selectedLosses" :key="i">{{ teamLabel(l.team) }} · {{ l.owner }} · {{ l.unit }} · {{ count(l.cost) }}</li></ul>
+      <p v-if="!lossMinutes.length" class="hint">暂无带阵亡时间的单位记录。</p>
+      <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => { selectedRange = [start, end]; lossMinute = null; }" />
 
       <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
       <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击类型排除或恢复，点击柱条只看该类型。</p>
@@ -399,7 +445,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
         </thead>
         <tbody>
           <template v-for="p in players" :key="p.id">
-            <tr class="player" tabindex="0" :aria-expanded="expanded === p.id" :aria-controls="`player-units-${p.id}`" :class="{ self: p.id === view.selfId, open: expanded === p.id }" @click="expanded = expanded === p.id ? null : p.id" @keydown.enter.self="expanded = expanded === p.id ? null : p.id" @keydown.space.self.prevent="expanded = expanded === p.id ? null : p.id">
+            <tr class="player" tabindex="0" :aria-expanded="expanded === p.id" :aria-controls="`player-units-${p.id}`" :class="{ self: p.id === (perspectiveId ?? view.selfId), open: expanded === p.id }" @click="expanded = expanded === p.id ? null : p.id" @keydown.enter.self="expanded = expanded === p.id ? null : p.id" @keydown.space.self.prevent="expanded = expanded === p.id ? null : p.id">
               <td class="left">
                 <span class="swatch" :style="{ background: teamColor(p.team) }" />
                 <a href="#" class="name" title="打开玩家档案" @click.prevent.stop="openPlayer(p.id)">{{ name(p) }}</a>
@@ -464,7 +510,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
       </p>
     </template>
     <template v-else-if="!loading">
-      <h2>比赛 {{ id }}</h2>
+      <h2>{{ perspectiveId == null ? `比赛 ${id}` : (previewMap ?? "战报预览") }}</h2>
       <p class="hint">{{ pendingText(row) }}</p>
       <button v-if="row?.report.state !== 'cancelled'" class="primary" :disabled="requesting" @click="requestNow">{{ requesting ? "正在请求…" : "立即获取战报" }}</button>
     </template>
@@ -473,6 +519,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
 </template>
 
 <style scoped>
+.loss-picker select {color-scheme:dark;color:var(--bax-fg);background:var(--bax-surface-2);border:1px solid var(--bax-border);border-radius:var(--bax-radius-xs);padding:4px 6px;font:inherit;}
 .composition-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; margin: 12px 0 4px; list-style: none; color: var(--bax-fg); font-size: calc(12px * var(--bax-font-scale)); }
 .report h3 { color: var(--bax-fg); font-size: calc(14px * var(--bax-font-scale)); }
 .composition-head { margin-top: 20px; font-size: calc(12px * var(--bax-font-scale)); }

@@ -16,9 +16,9 @@ import {
 import { useNow } from "../shared/useNow";
 import { openMatch, openPlayer } from "./navigation";
 import SpecIcon from "../shared/SpecIcon.vue";
-import TraceBadge from "../shared/TraceBadge.vue";
+import PlayerBadges from "../shared/PlayerBadges.vue";
 import { useCurrentReport } from "../shared/useCurrentReport";
-import { matchSpecs, rosterSummary, rosterWaitingText } from "../shared/match-presentation";
+import { matchSpecs, predictionHint, rosterSummary, rosterWaitingText } from "../shared/match-presentation";
 import LogDirectory from "./LogDirectory.vue";
 
 const snapshot = useSnapshot();
@@ -99,7 +99,7 @@ async function refresh() {
           <tr>
             <th class="left">玩家</th>
             <th>ELO</th>
-            <th class="spec-heading">{{ current.phase === 'ended' ? '本局专精' : '上场专精' }}</th>
+            <th class="spec-heading">{{ current.phase === 'ended' ? '本局专精' : '专精预测' }}</th>
             <th>以前同场</th>
             <th>资料状态</th>
             <th>排位统计</th>
@@ -112,13 +112,13 @@ async function refresh() {
                 <div class="name-line">
                   <a v-if="p.id != null && !p.provisional" class="name" href="#" title="打开玩家档案" @click.prevent="openPlayer(p.id)">{{ p.name }}</a>
                   <span v-else class="name" title="赛前识别，等待日志确认">{{ p.name }}</span>
-                  <TraceBadge :count="p.traceCount" />
+                  <PlayerBadges :row="p" />
                 </div>
                 <div v-if="p.logName && p.logName !== p.name" class="hint">{{ p.logName }}</div>
                 <div v-if="p.note" class="note" :title="p.note">✎ {{ p.note }}</div>
               </td>
               <td class="num strong">{{ rating(p.profile?.rating) }}</td>
-              <td><span class="specs"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
+              <td><span class="specs" :title="current.phase === 'ended' ? undefined : predictionHint(p)"><SpecIcon v-for="spec in specsFor(p)" :key="spec.ids[0]" :id="spec.ids[0]!" :label="spec.name" /><span v-if="!specsFor(p).length" class="hint" :title="current.phase === 'ended' && p.team !== 'spectators' ? (report ? '本场战报尚不能确定专精组合' : '等待本场战报') : ''">–</span></span></td>
               <td class="num">
                 {{ p.provisional ? '待确认' : `${p.encounters.total} 次` }}
                 <div v-if="p.encounters.total" class="hint">友 {{ p.encounters.asTeammate }} / 敌 {{ p.encounters.asOpponent }}</div>

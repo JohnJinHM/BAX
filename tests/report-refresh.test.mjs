@@ -38,6 +38,7 @@ test('saving a note preserves edits made in flight and ignores completion on ano
     useSnapshot: () => shallowRef(snapshotData()),
     commands: {
       setNote: (id, body) => new Promise(resolve => pending.push(() => { saved.set(id, body); resolve(); })),
+      playerFights: async () => [],
       playerDetail: async id => ({ note: { body: saved.get(id) ?? '' } }),
     },
   }, { '../shared/useNow': { useNow: () => ref(0) } });

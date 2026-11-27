@@ -4,6 +4,8 @@ import type { Connection } from "./Connection";
 import type { MatchId } from "./MatchId";
 import type { MatchMode } from "./MatchMode";
 import type { Phase } from "./Phase";
+import type { PlayerId } from "./PlayerId";
+import type { PlayerLabel } from "./PlayerLabel";
 import type { PlayerView } from "./PlayerView";
 import type { PregameView } from "./PregameView";
 import type { Team } from "./Team";
@@ -13,7 +15,7 @@ import type { Timestamp } from "./Timestamp";
 /**
  * 当前比赛。
  */
-export type MatchView = { mode: MatchMode, 
+export type MatchView = { labels: { [key in PlayerId]: Array<PlayerLabel> }, mode: MatchMode, 
 /**
  * 画面候选，与正式 ID 名单分开；日志到达即退出。
  */

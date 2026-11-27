@@ -1219,6 +1219,16 @@ async fn a_finished_match_is_archived_once_the_report_appears() {
     assert_eq!(view.map.as_deref(), Some("Airport"));
     assert_eq!(view.self_id, Some(PlayerId(ME)));
     assert!(!view.analysis.players.is_empty());
+    let archived = engine
+        .player_fights(view.analysis.players[0].id)
+        .await
+        .expect("玩家归档");
+    assert!(
+        archived
+            .fights
+            .iter()
+            .any(|f| f.match_id == MatchId(9_000_001) && f.has_local_log && f.played_together)
+    );
 
     // 已经有战报：手动请求什么也不做
     engine
@@ -1322,5 +1332,189 @@ async fn a_match_cancelled_at_deployment_never_requests_a_report() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(report_requests(&fx).await, 0);
     assert_eq!(engine.snapshot().archive.pending, 0);
+    engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn stb_player_history_archives_once_and_keeps_partial_results_after_restart() {
+    let fx = Fixture::new().await;
+    let stb = MockServer::start().await;
+    Mock::given(path("/user/101/last_fights"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!(["99", "99", "98"])),
+        )
+        .mount(&stb)
+        .await;
+    Mock::given(path("/fights/fight_99.json")).respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"Data":{"101":{"Id":101,"TeamId":1,"OldRating":1800,"NewRating":1821,"UnitData":{"a":{"Id":195},"b":{"Id":123}}},"102":{"Id":102},"103":{"Id":103,"TeamId":100}},"WinnerTeam":1,"MapId":22,"TotalPlayTimeInSec":300,"StartTime":1000}))).expect(1).mount(&stb).await;
+    Mock::given(path("/fights/fight_98.json"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&stb)
+        .await;
+    let mut config = fx.config();
+    config.api.upstream = Some(bax_batrace::client::UpstreamConfig {
+        api_url: stb.uri(),
+        reports_url: stb.uri(),
+    });
+    let id = PlayerId(101);
+    let engine = fx.start_with(config.clone());
+    assert!(
+        engine
+            .sync_player_fights(id, 20)
+            .await
+            .expect("sync")
+            .contains("本次收录 1 场")
+    );
+    engine.shutdown().await;
+    let engine = fx.start_with(config);
+    let archive = engine.player_fights(id).await.expect("persisted list");
+    assert_eq!(
+        archive.last_queried_at,
+        Some(bax_engine::Clock::now(&fx.clock))
+    );
+    let rows = archive.fights;
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].has_local_log);
+    assert!(!rows[0].played_together);
+    assert_eq!(rows[0].won, Some(true));
+    assert_eq!(
+        rows[0]
+            .specs
+            .iter()
+            .flat_map(|s| s.ids.iter().copied())
+            .collect::<Vec<_>>(),
+        [12, 15]
+    );
+    let losing = engine
+        .player_fights(PlayerId(102))
+        .await
+        .expect("other side");
+    assert_eq!(losing.last_queried_at, None);
+    assert_eq!(losing.fights[0].won, Some(false));
+    let spectators = engine
+        .player_fights(PlayerId(103))
+        .await
+        .expect("spectator");
+    assert_eq!(spectators.fights[0].won, None);
+    assert_eq!(spectators.fights[0].team, Some(Team::Spectators));
+    let store = Store::open(&fx.store_path()).expect("归档");
+    for (self_id, together) in [(PlayerId(102), true), (id, false), (PlayerId(999), false)] {
+        let fights = store
+            .player_fights(id, Some(self_id))
+            .expect("读取同场标识");
+        assert_eq!(fights[0].played_together, together);
+    }
+    assert_eq!(rows[0].rating_delta, Some(21.0));
+    assert_eq!(rows[0].map.as_deref(), Some("伊格纳利纳核电站"));
+    assert_eq!(rows[0].match_id, MatchId(99));
+    assert_eq!(rows[0].start, Some(Timestamp::from_secs(1000)));
+    assert!(
+        engine
+            .match_report(MatchId(99))
+            .await
+            .expect("analysis")
+            .is_some()
+    );
+    assert!(
+        engine
+            .sync_player_fights(id, 20)
+            .await
+            .expect("repeat")
+            .contains("已有 1 场")
+    );
+    assert!(
+        fx.server
+            .received_requests()
+            .await
+            .expect("requests")
+            .iter()
+            .all(|r| r.url.path() == "/api/units")
+    );
+    engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn archive_search_can_stop_an_inflight_report_and_restart_with_a_limit() {
+    let fx = Fixture::new().await;
+    let stb = MockServer::start().await;
+    let id = PlayerId(101);
+    for (route, body, delay, calls) in [
+        (
+            "/user/101/last_fights",
+            serde_json::json!(["40", "39", "38"]),
+            0,
+            1,
+        ),
+        (
+            "/fights/fight_40.json",
+            serde_json::json!({"Data":{"101":{"Id":101}}}),
+            0,
+            1,
+        ),
+        (
+            "/fights/fight_39.json",
+            serde_json::json!({"Data":{"101":{"Id":101}}}),
+            15,
+            1,
+        ),
+        ("/fights/fight_38.json", serde_json::json!({}), 0, 0),
+    ] {
+        Mock::given(path(route))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(body)
+                    .set_delay(Duration::from_secs(delay)),
+            )
+            .expect(calls)
+            .mount(&stb)
+            .await;
+    }
+    let mut cfg = fx.config();
+    cfg.api.upstream = Some(bax_batrace::client::UpstreamConfig {
+        api_url: stb.uri(),
+        reports_url: stb.uri(),
+    });
+    let engine = fx.start_with(cfg);
+    assert!(engine.sync_player_fights(id, 0).await.is_err());
+    assert!(engine.sync_player_fights(id, 101).await.is_err());
+    assert!(
+        engine
+            .player_fights(id)
+            .await
+            .expect("读取未查询的归档")
+            .last_queried_at
+            .is_none()
+    );
+    let stop = async {
+        loop {
+            if stb
+                .received_requests()
+                .await
+                .expect("request log")
+                .iter()
+                .any(|r| r.url.path() == "/fights/fight_39.json")
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(engine.sync_player_fights(id, 1).await.is_err());
+        engine.stop_player_fights(id);
+    };
+    let (status, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+        tokio::join!(engine.sync_player_fights(id, 3), stop)
+    })
+    .await
+    .expect("stop cancels the in-flight HTTP wait");
+    assert!(status.expect("stopped").contains("已停止"));
+    let partial = engine.player_fights(id).await.expect("partial archive");
+    assert_eq!(partial.fights.len(), 1);
+    assert!(partial.last_queried_at.is_some());
+    assert!(
+        engine
+            .sync_player_fights(id, 1)
+            .await
+            .expect("restart")
+            .contains("已有 1 场")
+    );
     engine.shutdown().await;
 }

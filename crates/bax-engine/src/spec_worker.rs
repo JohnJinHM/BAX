@@ -36,7 +36,7 @@ fn targets(snapshot: &Snapshot) -> Vec<(PlayerId, MatchId)> {
                     && p.team != Some(team)
                     && !p.is_self
             })
-            .filter_map(|p| Some((p.id, p.profile.as_ref()?.recent_match_id?)))
+            .filter_map(|p| Some((p.id, p.profile.as_ref()?.recent_matches.first().copied()?)))
             .filter(|(_, id)| *id != m.match_id)
             .collect()
     } else {
@@ -55,7 +55,7 @@ fn targets(snapshot: &Snapshot) -> Vec<(PlayerId, MatchId)> {
             .filter(|p| !p.ambiguous)
             .filter_map(|p| {
                 let c = p.candidates.first()?;
-                Some((c.id, c.profile.as_ref()?.recent_match_id?))
+                Some((c.id, c.profile.as_ref()?.recent_matches.first().copied()?))
             })
             .filter(|(_, id)| *id != m.match_id)
             .collect()
@@ -188,6 +188,7 @@ mod tests {
             })
             .collect();
         s.current = Some(MatchView {
+            labels: Default::default(),
             mode: crate::MatchMode::Unknown,
             pregame: Default::default(),
             match_id: MatchId(900001),
@@ -231,6 +232,7 @@ mod tests {
                     observed: crate::pregame::Observation {
                         side: "right".into(),
                         row: n,
+                        country: None,
                         friendly: Some(false),
                         name: "Raven".into(),
                         level: 50,
@@ -311,7 +313,7 @@ mod tests {
         .expect("client");
         let mut s = snapshot();
         for p in &mut s.current.as_mut().expect("match").players {
-            p.profile.as_mut().expect("profile").recent_match_id = Some(MatchId(900100));
+            p.profile.as_mut().expect("profile").recent_matches = vec![MatchId(900100)];
         }
         let (tx, rx) = watch::channel(Arc::new(s));
         let (events, mut observed) = mpsc::unbounded_channel();

@@ -76,6 +76,7 @@ pub(crate) fn enrich(profile: &mut ProfileSummary, store: &Store, id: PlayerId) 
     profile.favorite_specs.clear();
     profile.favorite_spec_pairs.clear();
     profile.last_specs.clear();
+    profile.country_specs.clear();
     profile.last_spec_match = reports.first().map(|r| r.0);
     profile.spec_sample_matches = reports.len() as u32;
     profile.spec_identified_matches = 0;
@@ -84,6 +85,12 @@ pub(crate) fn enrich(profile: &mut ProfileSummary, store: &Store, id: PlayerId) 
             continue;
         };
         profile.spec_identified_matches += 1;
+        if let Some(&country) = CATALOG.countries.get(&pair[0]) {
+            profile
+                .country_specs
+                .entry(country as u8)
+                .or_insert_with(|| pair.iter().map(|&id| entry(vec![id], 1)).collect());
+        }
         if index == 0 {
             profile.last_specs = pair.iter().map(|&id| entry(vec![id], 1)).collect();
         }
@@ -113,6 +120,7 @@ pub(crate) fn from_store(raw: Option<&str>, store: &Store, id: PlayerId) -> Opti
 pub(crate) fn copy_usage(old: &ProfileSummary, new: &mut ProfileSummary) {
     new.favorite_specs = old.favorite_specs.clone();
     new.favorite_spec_pairs = old.favorite_spec_pairs.clone();
+    new.country_specs.clone_from(&old.country_specs);
     new.last_specs = old.last_specs.clone();
     new.last_spec_match = old.last_spec_match;
     new.spec_sample_matches = old.spec_sample_matches;
@@ -214,6 +222,14 @@ mod tests {
         assert_eq!(summary.favorite_specs[0].ids, vec![12]);
         assert_eq!(summary.favorite_specs[0].games, 2);
         assert!(summary.last_specs.is_empty());
+        assert_eq!(
+            summary.country_specs[&1]
+                .iter()
+                .map(|s| s.ids[0])
+                .collect::<Vec<_>>(),
+            vec![8, 12]
+        );
+        assert!(!summary.country_specs.contains_key(&2));
         assert_eq!(summary.last_spec_match, Some(MatchId(900003)));
         assert_eq!(
             store

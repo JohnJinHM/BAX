@@ -4,4 +4,4 @@ export type Observation = { side: string, row: number,
 /**
  * 由画面队伍标题颜色判定；未知时不发起 OCR 网络查询。
  */
-friendly: boolean | null, name: string, level: number, alternatives: Array<string>, };
+friendly: boolean | null, country: number | null, name: string, level: number, alternatives: Array<string>, };

@@ -186,6 +186,7 @@ pub(crate) struct Parts {
 }
 
 pub(crate) struct Session {
+    labels: crate::labels::Labels,
     pregame: crate::pregame::PregameView,
     pregame_cutoff: u64,
     config: EngineConfig,
@@ -255,6 +256,7 @@ impl Session {
         // 先放一个空的接收端，马上由 start_log_thread 换成真正的
         let (_, log_rx) = mpsc::channel(1);
         let mut session = Session {
+            labels: Default::default(),
             pregame: Default::default(),
             pregame_cutoff: 0,
             config,
@@ -320,6 +322,10 @@ impl Session {
         let _ocr_guard = OcrGuard(ocr_task);
         #[cfg(not(feature = "ocr"))]
         drop(ocr_tx);
+        let (label_tx, mut label_rx) = mpsc::unbounded_channel();
+        let mut label_tasks = tokio::task::JoinSet::new();
+        let mut label_key = None;
+        let mut label_seq = 0;
         let mut trace_tasks = tokio::task::JoinSet::new();
         let mut trace_ticket = None;
         // 缺项为尚未查询，Some 为暂时失败后的补查时间，None 为本局已查完。
@@ -333,6 +339,8 @@ impl Session {
                 },
                 Some(msg) = self.log_rx.recv() => Input::Log(msg),
                 Some(result) = self.fetch_rx.recv() => Input::Fetched(Box::new(result)),
+                Some(update) = label_rx.recv() => Input::Labels(update),
+                Some(_) = label_tasks.join_next(), if !label_tasks.is_empty() => Input::Tick,
                 Some(event) = self.report_rx.recv() => Input::Report(event),
                 Some(message) = ocr_rx.recv() => Input::Pregame(message),
                 Some(Ok((key, id, at, count))) = trace_tasks.join_next(), if !trace_tasks.is_empty() =>
@@ -343,6 +351,15 @@ impl Session {
             let span = self.match_span.clone();
             let _entered = span.enter();
             match input {
+                Input::Labels(crate::label_worker::Update::Archived(event)) => {
+                    self.on_report_event(event)
+                }
+                Input::Labels(crate::label_worker::Update::Labels(seq, labels)) => {
+                    if seq == label_seq && self.labels != labels {
+                        self.labels = labels;
+                        self.dirty = true;
+                    }
+                }
                 Input::Pregame(message) => self.on_pregame(message),
                 Input::PregameTrace(key, id, at, result) => {
                     if trace_ticket.as_ref() == Some(&key)
@@ -381,6 +398,25 @@ impl Session {
                 Input::Tick => self.on_tick(),
             }
             let snapshot = self.build_snapshot();
+            let next_key = crate::label_worker::Request::from_snapshot(&snapshot);
+            if label_key != next_key {
+                label_tasks.abort_all();
+                label_seq += 1;
+                self.labels.clear();
+                self.dirty = true;
+                if let Some(key) = next_key.clone() {
+                    label_tasks.spawn(crate::label_worker::scan(
+                        self.config.store_path.clone(),
+                        self.client.clone(),
+                        self.clock.clone(),
+                        key,
+                        label_seq,
+                        label_tx.clone(),
+                        self.config.api.upstream.is_some(),
+                    ));
+                }
+                label_key = next_key;
+            }
             let ticket = crate::pregame::trace_ticket(&snapshot);
             if ticket != trace_ticket {
                 trace_tasks.abort_all();
@@ -1539,6 +1575,7 @@ impl Session {
                 .map(|team| TeamSummary::of(team, &players))
                 .collect();
             MatchView {
+                labels: self.labels.clone(),
                 mode: crate::match_mode::live_mode(
                     m.scenario.as_deref(),
                     m.has_ai,
@@ -1642,6 +1679,7 @@ fn profile_update(id: PlayerId, fetched: &Fetched<PlayerInfoResponse>) -> Profil
 
 /// 会话循环一次处理的输入。
 enum Input {
+    Labels(crate::label_worker::Update),
     Pregame(crate::pregame::Message),
     PregameTrace(
         crate::pregame::Ticket,

@@ -1,6 +1,6 @@
 # ADR-0002：首阶段排除作弊与异常行为判定
 
-- 状态：已采纳
+- 状态：相关范围被 [ADR-0016](0016-player-labels-and-stb-history.md) 取代
 - 日期：2026-11-16
 - 相关：[项目规划·已确定事项](../planning/project-plan.md#已确定事项)
 
