@@ -10,7 +10,7 @@ Dev / Portable 可检查，但通过“打开发布页”手动下载。便携�
 
 ## 签名配置
 
-当前稳定版见 [GitHub Latest](https://github.com/JohnJinHM/BAX/releases/latest)。[0.3.0 发布验收](../validation/release-0.3.0.md)记录分支核对、战报统计和分发验证。历史记录见 [0.2.6](../validation/release-0.2.6.md)、 [0.2.5](../validation/release-0.2.5.md)、[0.2.4](../validation/release-0.2.4.md)、[0.2.3](../validation/release-0.2.3.md)、[0.2.2](../validation/release-0.2.2.md)、[0.2.1](../validation/release-0.2.1.md) 与 [0.2.0](../validation/release-0.2.0.md)。后续发布前查看最新验收记录，Release 说明列明本次覆盖的范围与剩余项目。
+当前稳定版见 [GitHub Latest](https://github.com/JohnJinHM/BAX/releases/latest)。[0.3.1 发布验收](../validation/release-0.3.1.md)记录自定义战报、数据库升级和分发验证。历史记录见 [0.3.0](../validation/release-0.3.0.md)、[0.2.6](../validation/release-0.2.6.md)、[0.2.5](../validation/release-0.2.5.md)、[0.2.4](../validation/release-0.2.4.md)、[0.2.3](../validation/release-0.2.3.md)、[0.2.2](../validation/release-0.2.2.md)、[0.2.1](../validation/release-0.2.1.md) 与 [0.2.0](../validation/release-0.2.0.md)。
 
 公钥已写入 `src-tauri/tauri.conf.json`。对应私钥在维护者本机仓库外的 `$HOME/.tauri/bax-updater.key`，不要提交到 Git。备份该文件；后续发布必须使用同一私钥，否则已有安装无法验证更新。
 
