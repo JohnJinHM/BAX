@@ -319,11 +319,17 @@ export function fixtureReport(id: number): MatchReportView | null {
         kills: 0,
         damage: 0,
         value: 0,
-        deployedScore: 0,
+        metrics: { buildings:0, damageReceived:0, friendlyDamageDealt:0, friendlyDamageReceived:0, selfDamage:0, selfDestroyed:0, supply:0, airdropped:0 },
+        transferred:0, lastSpawnSecs:s.spawnSecs, deployedScore:0,
         firstSpawnSecs: s.spawnSecs,
       };
       r.count++;
       r.deployedScore += s.cost;
+      r.metrics.supply += s.unitId%31+7;
+      r.metrics.damageReceived += s.deathSecs == null ? 8 : 150;
+      r.metrics.airdropped += Number(s.airdropped);
+      r.transferred += Number(s.transferredTo != null);
+      r.lastSpawnSecs = Math.max(r.lastSpawnSecs ?? s.spawnSecs, s.spawnSecs);
       r.refunded += s.refunded ? 1 : 0;
       r.dead += s.deathSecs != null ? 1 : 0;
       r.kills += s.kills;
@@ -390,7 +396,8 @@ export function fixtureReport(id: number): MatchReportView | null {
     supply: reports.map(p => ({
       id:p.id, name:p.name ?? String(p.id), team:p.team!, consumed:p.supplyConsumed ?? 0,
       fromAllies:p.supplyFromAllies ?? 0, byAllies:p.supplyByAllies ?? 0,
-      models:p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class, thumbnail:u.thumbnail, points:u.count*(u.unitId%31+7)})),
+      models:p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class, thumbnail:u.thumbnail, points:u.metrics.supply,
+        activity:{count:u.count, dead:u.dead, refunded:u.refunded, kills:u.kills, damage:u.damage, metrics:u.metrics}})),
     })),
     analysis: {
       matchId: id,

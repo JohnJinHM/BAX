@@ -188,9 +188,38 @@ pub struct UnitAppearance {
     pub thumbnail: Option<String>,
 }
 
+/// 同类实例的附加统计。转交只改变归属，每条实例只累加一次。
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct UnitMetrics {
+    pub buildings: i64,
+    pub damage_received: f64,
+    pub friendly_damage_dealt: f64,
+    pub friendly_damage_received: f64,
+    pub self_damage: f64,
+    pub self_destroyed: u32,
+    pub supply: i64,
+    pub airdropped: u32,
+}
+
+impl std::ops::AddAssign<&Self> for UnitMetrics {
+    fn add_assign(&mut self, other: &Self) {
+        self.buildings += other.buildings;
+        self.damage_received += other.damage_received;
+        self.friendly_damage_dealt += other.friendly_damage_dealt;
+        self.friendly_damage_received += other.friendly_damage_received;
+        self.self_damage += other.self_damage;
+        self.self_destroyed += other.self_destroyed;
+        self.supply += other.supply;
+        self.airdropped += other.airdropped;
+    }
+}
+
 /// 一个单位实例。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UnitInput {
+    pub metrics: UnitMetrics,
     pub option_ids: Vec<i64>,
     pub appearance: Option<UnitAppearance>,
     /// 实例在 `UnitData` 里的键，一场比赛内唯一。
@@ -316,6 +345,9 @@ pub struct ClassShare {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UnitRow {
+    pub metrics: UnitMetrics,
+    pub transferred: u32,
+    pub last_spawn_secs: Option<i64>,
     /// 含回收的累计估算出兵分数。
     pub deployed_score: i64,
     pub variant_key: String,
@@ -515,6 +547,9 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
             }
 
             let row = units.entry(variant_key.clone()).or_insert(UnitRow {
+                metrics: UnitMetrics::default(),
+                transferred: 0,
+                last_spawn_secs: None,
                 deployed_score: 0,
                 variant_key: variant_key.clone(),
                 unit_name: unit_name.clone(),
@@ -530,6 +565,9 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
                 first_spawn_secs: None,
             });
             row.deployed_score += cost;
+            row.metrics += &u.metrics;
+            row.transferred += u32::from(transferred_to.is_some());
+            row.last_spawn_secs = row.last_spawn_secs.max(spawn_secs);
             row.count += 1;
             row.refunded += u32::from(u.refunded);
             row.dead += u32::from(u.death_time.is_some());

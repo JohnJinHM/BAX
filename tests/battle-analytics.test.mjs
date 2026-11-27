@@ -41,3 +41,27 @@ test('radars average player-games, count only supplies given to allies and omit 
   assert.equal(preferredModels(fights,true).top[0].games,1);
   assert.equal(preferredModels(fights,false).top[0].games,2);
 });
+
+test('model details merge variants without mutating source records or losing timing', async () => {
+  const { deploymentModels } = await moduleFrom('deployment-models.ts');
+  const first = {unitId:5,unitName:'Scout',variantKey:'one',count:2,kills:1,dead:1,refunded:0,
+    deployedScore:80,value:80,damage:36.5,transferred:1,firstSpawnSecs:null,lastSpawnSecs:null,
+    metrics:{supply:17,buildings:1,airdropped:0}};
+  const other = {...first, variantKey:'two',count:1,refunded:1,firstSpawnSecs:0,lastSpawnSecs:73};
+  const rows = deploymentModels([first,other,{...other,unitName:'Scout B'}]);
+  assert.equal(rows.size,2);
+  const merged = [...rows.values()][0];
+  assert.deepEqual([merged.count,merged.kills,merged.refunded,merged.deployedScore,merged.damage,merged.metrics.supply], [3,2,1,160,73,34]);
+  assert.equal(merged.firstSpawnSecs,0);
+  assert.equal(merged.lastSpawnSecs,73);
+  assert.equal(first.metrics.supply,17);
+});
+
+test('radar axes keep defaults for absent and invalid overrides and preserve valid per-axis settings', async () => {
+  const {calibratedAxes,combatAxes,preferenceAxes} = await moduleFrom('player-analysis.ts');
+  const saved = {kills:48.25,objectives:0,survival:101,alliedSupply:'broken',recon:15.5,jet:Infinity};
+  assert.deepEqual(calibratedAxes(combatAxes,saved).map(a=>a.base),[48.25,2.44,48.129,2030.05]);
+  assert.equal(calibratedAxes(preferenceAxes,saved)[0].base,15.5);
+  assert.equal(calibratedAxes(preferenceAxes,saved).at(-1).base,11.947);
+  assert.deepEqual(calibratedAxes(combatAxes,{}),combatAxes);
+});

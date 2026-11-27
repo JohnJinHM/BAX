@@ -20,6 +20,7 @@ import { commands, errorText, useAppStatus, useSnapshot, type SourceCheck } from
 import { type DiagSettings, saveSetting, useSetting } from "../shared/settings";
 import { appearanceRevision } from "../shared/skin";
 import { type SkinId, skins } from "../shared/skins";
+import RadarBaselineSettings from "./RadarBaselineSettings.vue";
 import LogDirectory from "./LogDirectory.vue";
 
 const sourceChecks = ref<SourceCheck[] | null>(null);
@@ -401,6 +402,8 @@ async function exportDiag() {
     </div>
     <p v-for="error in status?.hotkeyErrors ?? []" :key="error" class="error">{{ error }}</p>
   </section>
+
+  <RadarBaselineSettings />
 
   <section class="card">
     <h2>数据</h2>

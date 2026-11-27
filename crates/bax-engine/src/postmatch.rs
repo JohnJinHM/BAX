@@ -84,6 +84,20 @@ pub(crate) fn report_meta(info: &MatchInfo) -> ReportMeta {
     }
 }
 
+fn unit_metrics(unit: &bax_batrace::model::UnitInstance) -> report::UnitMetrics {
+    let damage = |v: Option<f64>| v.unwrap_or_default().max(0.0);
+    report::UnitMetrics {
+        buildings: unit.building_destroyed_count.unwrap_or_default().max(0),
+        damage_received: damage(unit.total_damage_received),
+        friendly_damage_dealt: damage(unit.total_damage_friendly_fire_dealt),
+        friendly_damage_received: damage(unit.total_damage_received_by_friendly_fire),
+        self_damage: damage(unit.total_self_damage_dealt),
+        self_destroyed: u32::from(unit.self_destruction.unwrap_or_default()),
+        airdropped: u32::from(unit.was_airdropped.unwrap_or_default()),
+        supply: unit.total_supply_points_consumed.unwrap_or_default().max(0),
+    }
+}
+
 pub(crate) fn report_input(id: MatchId, info: &MatchInfo) -> ReportInput {
     let players = info
         .players()
@@ -112,6 +126,7 @@ pub(crate) fn report_input(id: MatchId, info: &MatchInfo) -> ReportInput {
                 .iter()
                 .filter_map(|(key, u)| {
                     Some(UnitInput {
+                        metrics: unit_metrics(u),
                         key: key.clone(),
                         option_ids: u.option_ids.clone(),
                         appearance: crate::variants::resolve(u.id?, &u.option_ids),
@@ -301,7 +316,11 @@ mod tests {
         let raw = serde_json::json!({"matchInfo":{"Data":{
             "11":{"TransferredUnits":{"a":{"Id":3}}},
             "22":{"SupplyPointsConsumed":90,"SupplyPointsConsumedFromAllies":15,
-                  "SupplyPointsConsumedByAllies":12,"UnitData":{"a":{"Id":3,"TotalSupplyPointsConsumed":80}}},
+                  "SupplyPointsConsumedByAllies":12,"UnitData":{
+                      "a":{"Id":3,"TotalSupplyPointsConsumed":60,"KilledCount":3,"WasRefunded":true,
+                           "WasAirdropped":true,"BuildingDestroyedCount":2,"TotalDamageReceived":23.75},
+                      "b":{"Id":3,"TotalSupplyPointsConsumed":20,"DeathTime":1040,"TotalDamageReceived":-1},
+                      "c":{"Id":3,"KilledCount":5}}},
             "-1":{"TeamId":1,"UnitData":{"b":{"Id":3,"TotalSupplyPointsConsumed":35}}},
             "33":{"TeamId":100,"SupplyPointsConsumed":99}
         }}}).to_string();
@@ -319,13 +338,46 @@ mod tests {
         assert_eq!((by_id[&11].consumed, by_id[&-1].consumed), (0, 35));
         let p = by_id[&22];
         assert_eq!((p.consumed, p.from_allies, p.by_allies), (90, 15, 12));
+        let model = p.models.iter().find(|m| m.id == Some(3)).expect("具体型号");
+        assert_eq!(model.points, 80);
+        let usage = model.activity.as_ref().expect("参与消耗的实例");
         assert_eq!(
+            (usage.count, usage.kills, usage.refunded, usage.dead),
+            (2, 3, 1, 1)
+        );
+        assert_eq!(usage.metrics.damage_received, 23.75);
+        assert_eq!(
+            (
+                usage.metrics.buildings,
+                usage.metrics.airdropped,
+                usage.metrics.supply
+            ),
+            (2, 1, 80)
+        );
+        let sender = view
+            .analysis
+            .players
+            .iter()
+            .find(|p| p.id.get() == 11)
+            .expect("原出兵者");
+        let sent = &sender.units[0];
+        assert_eq!(
+            (
+                sent.count,
+                sent.transferred,
+                sent.kills,
+                sent.refunded,
+                sent.metrics.supply
+            ),
+            (1, 1, 3, 1, 60)
+        );
+        assert!(
             p.models
                 .iter()
-                .find(|m| m.id == Some(3))
-                .expect("具体型号")
-                .points,
-            80
+                .find(|m| m.id.is_none())
+                .expect("未归类")
+                .activity
+                .is_none()
         );
         assert_eq!(
             p.models

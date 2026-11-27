@@ -3,16 +3,25 @@ import type { OpeningUnit } from "../shared/bindings/OpeningUnit";
 import type { UnitClass } from "../shared/bindings/UnitClass";
 
 // 本机 786 份战报、7,311 个有出兵的玩家场次。各轴独立标定，口径见 battle-analytics.md。
-export const combatAxes = [
-  {label:"击毁", base:32.895, unit:"个"}, {label:"占领", base:2.44, unit:"次"},
-  {label:"存活", base:48.129, unit:"%"}, {label:"补给", base:2030.05, unit:"点"},
+export interface RadarAxis { key:string; label:string; base:number; unit:string }
+export const combatAxes: RadarAxis[] = [
+  {key:"kills", label:"击毁", base:32.895, unit:"个"}, {key:"objectives", label:"占领", base:2.44, unit:"次"},
+  {key:"survival", label:"存活", base:48.129, unit:"%"}, {key:"alliedSupply", label:"补给", base:2030.05, unit:"点"},
 ];
-export const preferenceAxes: {kind: UnitClass; label: string; base: number; unit: string}[] = [
-  {kind:"recon", label:"侦察", base:20.039, unit:"%"}, {kind:"infantry", label:"步兵", base:28.549, unit:"%"},
-  {kind:"ifv", label:"步战", base:6.8, unit:"%"}, {kind:"tank", label:"装甲", base:8.564, unit:"%"},
-  {kind:"artillery", label:"火炮", base:5.904, unit:"%"}, {kind:"airDefense", label:"防空", base:7.692, unit:"%"},
-  {kind:"helicopter", label:"直升机", base:10.505, unit:"%"}, {kind:"jet", label:"固定翼", base:11.947, unit:"%"},
+export const preferenceAxes: (RadarAxis & {key:UnitClass})[] = [
+  {key:"recon", label:"侦察", base:20.039, unit:"%"}, {key:"infantry", label:"步兵", base:28.549, unit:"%"},
+  {key:"ifv", label:"步战", base:6.8, unit:"%"}, {key:"tank", label:"装甲", base:8.564, unit:"%"},
+  {key:"artillery", label:"火炮", base:5.904, unit:"%"}, {key:"airDefense", label:"防空", base:7.692, unit:"%"},
+  {key:"helicopter", label:"直升机", base:10.505, unit:"%"}, {key:"jet", label:"固定翼", base:11.947, unit:"%"},
 ];
+export function validRadarBase(axis: RadarAxis, value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 &&
+    Number.isFinite(Number.MAX_SAFE_INTEGER / value) && (axis.unit !== "%" || value <= 100);
+}
+
+export function calibratedAxes(axes: RadarAxis[], saved: Record<string, number>) {
+  return axes.map(axis => ({...axis, base:validRadarBase(axis,saved[axis.key]) ? saved[axis.key] : axis.base}));
+}
 const playing = (f: PlayerFight) => f.team === "alpha" || f.team === "bravo";
 export function playerAverages(fights: PlayerFight[]) {
   const combat = combatAxes.map(() => 0);
@@ -27,7 +36,7 @@ export function playerAverages(fights: PlayerFight[]) {
     combat[1] += perf.objectives;
     combat[2] += 100*Math.max(0,1-perf.losses/total);
     combat[3] += perf.suppliedAllies;
-    const counts = preferenceAxes.map(a => f.composition.find(c => c.class === a.kind)?.count ?? 0);
+    const counts = preferenceAxes.map(a => f.composition.find(c => c.class === a.key)?.count ?? 0);
     const eligible = counts.reduce((a,b) => a+b,0);
     if (eligible) {
       preferenceGames++;

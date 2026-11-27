@@ -21,9 +21,9 @@ const sides = computed(() => {
   </span>
 </template>
 <style scoped>
-.rosters {grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;padding:6px 0 0;border-top:1px solid var(--bax-divider);}
+.rosters {grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:6px 0 0;border-top:1px solid var(--bax-divider);}
 .side {display:flex;align-items:baseline;gap:8px;min-width:0;}.side>b {flex:none;font-size:calc(12px * var(--bax-font-scale));color:var(--bax-muted);}
-.members {display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 9px;font-size:calc(12px * var(--bax-font-scale));color:var(--bax-soft);}
-.members span {overflow-wrap:anywhere;}.current {font-weight:700;color:var(--bax-fg);text-decoration:underline;text-decoration-color:var(--bax-accent);text-underline-offset:3px;}
-@container (max-width:560px) {.rosters {grid-template-columns:1fr;}}
+.members {display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-size:calc(12px * var(--bax-font-scale));color:var(--bax-soft);}
+.members span {padding:2px 6px;line-height:1.35;border:1px solid var(--bax-faint);border-radius:var(--bax-radius-xs);overflow-wrap:anywhere;max-width:100%;}
+.members .current {font-weight:700;color:var(--bax-fg);border-color:var(--bax-accent);background:color-mix(in srgb,var(--bax-accent) 15%,transparent);}
 </style>

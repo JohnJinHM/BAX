@@ -166,7 +166,7 @@ async function refresh() {
     <PlayerRadar title="作战效能" :axes="combatAxes" :values="averages.combat" :games="averages.games" />
     <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" />
     </div>
-    <p v-if="detail" class="hint radar-note">虚线为本机归档场均。存活按损失占出兵次数的比例反算，补给只计队友使用的点数。单位偏好按八类出兵次数占比计算。</p>
+    <p v-if="detail" class="hint radar-note">虚线为参考基准，可在设置中调整。存活按损失占出兵次数的比例反算，补给只计队友使用的点数。单位偏好按八类出兵次数占比计算。</p>
     <p v-else-if="loading" class="hint">正在读取…</p>
 
     <template v-if="detail">

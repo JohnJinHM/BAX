@@ -48,6 +48,7 @@ export interface DiagSettings {
 export type SkinSettings = Appearance;
 
 interface Settings {
+  "ui.radarBaselines": Record<string, number>;
   "ui.skin": SkinSettings;
   "ui.sortie": { height: number };
   "ui.ocr": { enabled: boolean };
@@ -58,6 +59,7 @@ interface Settings {
 }
 
 export const defaults: Settings = {
+  "ui.radarBaselines": {},
   "ui.skin": defaultAppearance,
   "ui.sortie": { height: 600 },
   "ui.ocr": { enabled: true },

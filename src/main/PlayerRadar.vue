@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps<{title:string; axes:{label:string; base:number; unit:string}[]; values:number[]; games:number}>();
-const max = computed(() => Math.max(2, Math.ceil(Math.max(...props.values.map((n,i) => n/props.axes[i].base)))));
+import { useSetting } from "../shared/settings";
+import { useSnapshot } from "../shared/engine";
+import { calibratedAxes, type RadarAxis } from "./player-analysis";
+
+const props = defineProps<{title:string; axes:RadarAxis[]; values:number[]; games:number}>();
+const baselines = useSetting(useSnapshot(), "ui.radarBaselines");
+const axes = computed(() => calibratedAxes(props.axes, baselines.value));
+const max = computed(() => Math.max(2, Math.ceil(Math.max(...props.values.map((n,i) => n/axes.value[i].base)))));
 const position = (i:number, r:number) => {
   const a = 2*Math.PI*i/props.axes.length;
   return {x:150+Math.sin(a)*r, y:106-Math.cos(a)*r};
@@ -11,13 +17,13 @@ const ring = (radii:number[]) => radii.map((r,i) => {
   const p=position(i,r); return p.x+","+p.y;
 }).join(" ");
 const grid = (r:number) => ring(props.axes.map(() => r));
-const shape = computed(() => ring(props.values.map((v,i) => 68*v/props.axes[i].base/max.value)));
+const shape = computed(() => ring(props.values.map((v,i) => 68*v/axes.value[i].base/max.value)));
 const format = (v:number) => v.toLocaleString("zh-CN",{maximumFractionDigits:1});
 </script>
 <template>
   <section class="radar" :aria-label="title">
     <header><h4>{{ title }}</h4><small>{{ games }} 场</small></header>
-    <svg viewBox="0 0 300 218" role="img" :aria-label="title + '，实线为玩家场均，虚线为本机基准'">
+    <svg viewBox="0 0 300 218" role="img" :aria-label="title + '，实线为玩家场均，虚线为参考基准'">
       <polygon v-for="fraction in [0.5,1]" :key="fraction" :points="grid(68*fraction)" class="grid" />
       <line v-for="(axis,i) in axes" :key="axis.label" x1="150" y1="106" :x2="position(i,68).x" :y2="position(i,68).y" class="grid" />
       <polygon :points="grid(68/max)" class="benchmark" />
@@ -30,7 +36,7 @@ const format = (v:number) => v.toLocaleString("zh-CN",{maximumFractionDigits:1})
         </text>
       </g>
     </svg>
-    <span class="legend"><i />玩家场均 <i class="base" />本机基准</span>
+    <span class="legend"><i />玩家场均 <i class="base" />参考基准</span>
   </section>
 </template>
 <style scoped>
