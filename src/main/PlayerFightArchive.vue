@@ -10,7 +10,8 @@ const messages = reactive(new Map<number, string>());
 import { computed, ref, watch, onBeforeUnmount } from "vue";
 import type { PlayerFight } from "../shared/bindings/PlayerFight";
 import { commands, errorText, useSnapshot } from "../shared/engine";
-import { compositionGroups, mmss } from "../shared/format";
+import { mmss } from "../shared/format";
+import FightRoster from "./FightRoster.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 import MatchTag from "../shared/MatchTag.vue";
 
@@ -19,7 +20,7 @@ const emit = defineEmits<{preview: [value: {id: number; map: string | null}]}>()
 const snapshot = useSnapshot();
 const limit = ref<number | string>(20);
 const validLimit = computed(() => typeof limit.value === "number" && Number.isInteger(limit.value) && limit.value >= 1 && limit.value <= 100);
-const fights = ref<PlayerFight[]>([]);
+const fights = defineModel<PlayerFight[]>("fights", {required:true});
 const lastQueriedAt = ref<number | null>(null);
 const query = ref("");
 const page = ref(0);
@@ -39,22 +40,7 @@ const filtered = computed(() => {
   const q = query.value.trim().toLowerCase();
   return !q ? fights.value : fights.value.filter(f =>
     [f.map ?? "地图待识别", outcomeTerms[outcome(f)], f.hasLocalLog ? "本地" : "", f.playedTogether ? "同场" : "",
-      ...f.specs.map(s => s.name)].join(" ").toLowerCase().includes(q));
-});
-const metric = ref<"value" | "count">("value");
-function shares(f: PlayerFight) {
-  const values = compositionGroups.map(group => ({
-    ...group, amount: f.composition.reduce((sum, c) => sum + (group.classes.includes(c.class) ? c[metric.value] : 0), 0),
-  })).filter(g => g.amount > 0);
-  const total = values.reduce((sum, g) => sum + g.amount, 0);
-  return values.map(g => ({ ...g, percent: 100 * g.amount / total }));
-}
-const opening = computed(() => {
-  const recent = filtered.value.filter(f => f.team !== "spectators").slice(0, 20);
-  const samples = recent.filter(f => f.opening != null);
-  const counts = new Map<string, number>();
-  for (const f of samples) for (const unit of f.opening ?? []) counts.set(unit, (counts.get(unit) ?? 0) + 1);
-  return { n: samples.length, total: recent.length, top: [...counts].sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,5) };
+      ...f.roster.map(p => p.name), ...f.specs.map(s => s.name)].join(" ").toLowerCase().includes(q));
 });
 const pages = computed(() => Math.ceil(filtered.value.length / pageSize));
 const visible = computed(() => filtered.value.slice(page.value * pageSize, (page.value + 1) * pageSize));
@@ -134,12 +120,6 @@ async function stop() {
     <p v-if="active.has(id) || messages.has(id)" class="hint" role="status">{{ messages.get(id) ?? '正在查询 STB 并收录战报…' }}</p>
     <p v-if="failure" class="error">{{ failure }}</p>
     <input v-if="fights.length" v-model="query" class="filter" type="search" placeholder="筛选地图、标签或专精" aria-label="筛选已归档战报" />
-    <section v-if="opening.total" class="openings">
-      <h4>开局偏好 <small>前 3 分钟 · 最近 {{ opening.total }} 场中 {{ opening.n }} 场有时间记录</small></h4>
-      <ul v-if="opening.top.length"><li v-for="[unit, games] in opening.top" :key="unit">{{ unit }} <strong>{{ games }}/{{ opening.n }} 场</strong></li></ul>
-      <small v-else>暂无可统计的开局单位</small>
-    </section>
-    <label v-if="visible.length">逐局兵种构成 <select v-model="metric"><option value="value">估算基础价值占比</option><option value="count">出兵次数占比</option></select></label>
     <ul v-if="visible.length" class="reports">
       <li v-for="f in visible" :key="f.matchId">
         <button class="fight" type="button" @click="emit('preview', {id:f.matchId, map:f.map})">
@@ -153,11 +133,8 @@ async function stop() {
             <small>{{ f.start == null ? "开局时间未知" : time.format(f.start) }}</small>
           </span>
           <span class="specs"><span v-for="s in f.specs" :key="s.ids[0]"><SpecIcon :id="s.ids[0]!" :label="s.name" />{{ s.name }}</span><small v-if="!f.specs.length">专精未识别</small></span>
-          <span class="numbers"><span>{{ f.durationSecs == null ? "时长未知" : mmss(f.durationSecs * 1000) }}</span><small v-if="f.ratingDelta != null">ELO {{ f.ratingDelta > 0 ? '+' : '' }}{{ Number(f.ratingDelta.toFixed(1)) }}</small></span>
-          <span class="mix" v-if="f.team !== 'spectators'">
-            <span class="stack" aria-hidden="true"><i v-for="g in shares(f)" :key="g.key" :style="{width:g.percent+'%', background:g.color}" /></span>
-            <small>{{ shares(f).map(g => g.name + ' ' + Math.round(g.percent) + '%').join(' · ') || '暂无构成数据' }}</small>
-          </span>
+          <span class="numbers"><span>{{ f.durationSecs == null ? "时长未知" : mmss(f.durationSecs * 1000) }}</span><small v-if="f.ratingDelta != null" :class="{gain:f.ratingDelta > 0, loss:f.ratingDelta < 0}">ELO {{ f.ratingDelta > 0 ? '+' : '' }}{{ Number(f.ratingDelta.toFixed(1)) }}</small></span>
+          <FightRoster :fight="f" :player-id="id" />
           <span class="chevron" aria-hidden="true">›</span>
         </button>
       </li>
@@ -188,13 +165,10 @@ form input:invalid { border-color:var(--bax-warn); }
 .specs > span { display:flex; align-items:center; gap:5px; }.specs :deep(.spec-icon) { width:18px; height:18px; }
 .numbers { text-align:right; }.chevron { font-size:1.4em; } nav { justify-content:flex-end; margin-top:10px; }
 select { color-scheme:dark; color:var(--bax-fg); background:var(--bax-surface-2); border:1px solid var(--bax-border); border-radius:var(--bax-radius-xs); padding:4px 6px; font:inherit; }
-.openings h4 { margin:12px 0 6px; }.openings small {font-weight:400;}
-.openings ul {list-style:none;display:flex;flex-wrap:wrap;gap:5px 16px;padding:0;margin:0 0 14px;}
-.openings strong {color:var(--bax-muted);font-weight:normal;}
-.mix {grid-column:1/-1;grid-row:2;display:grid;gap:4px;}.stack {display:flex;overflow:hidden;border-radius:3px;height:6px;}
+.gain {color:var(--bax-good);} .loss {color:var(--bax-bad);}
 .chevron {grid-row:1;grid-column:5;}
 @container (max-width: 450px) {
   .fight { grid-template-columns:auto minmax(0,1fr) auto; gap:4px 8px; }
-  .mix {grid-row:3;}.specs { grid-column:2; display:flex; flex-wrap:wrap; }.numbers { grid-column:3; grid-row:1/3; }.chevron { display:none; }
+  .specs { grid-column:2; display:flex; flex-wrap:wrap; }.numbers { grid-column:3; grid-row:1/3; }.chevron { display:none; }
 }
 </style>

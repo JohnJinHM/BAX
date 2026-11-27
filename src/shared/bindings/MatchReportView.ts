@@ -4,13 +4,14 @@ import type { MatchMode } from "./MatchMode";
 import type { PlayerId } from "./PlayerId";
 import type { ReportSpectator } from "./ReportSpectator";
 import type { SpecPreference } from "./SpecPreference";
+import type { SupplyPlayer } from "./SupplyPlayer";
 import type { Team } from "./Team";
 import type { Timestamp } from "./Timestamp";
 
 /**
  * 一场比赛的战后分析，界面按需读取。
  */
-export type MatchReportView = { mode: MatchMode, spectators: Array<ReportSpectator>, aiPlayers: [number, number], 
+export type MatchReportView = { supply: Array<SupplyPlayer>, mode: MatchMode, spectators: Array<ReportSpectator>, aiPlayers: [number, number], 
 /**
  * 仅由这一场战报推导出的专精。
  */

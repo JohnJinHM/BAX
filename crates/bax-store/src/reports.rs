@@ -129,8 +129,29 @@ pub(crate) fn backfill_player_units(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct FightMember {
+    pub id: PlayerId,
+    pub name: Option<String>,
+    pub team: Option<Team>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct FightPerformance {
+    pub kills: i64,
+    pub losses: i64,
+    pub objectives: i64,
+    pub supplied_allies: i64,
+}
+
 #[derive(Debug)]
 pub struct StoredPlayerFight {
+    pub roster: Vec<FightMember>,
+    pub winner: Option<Team>,
+    pub performance: FightPerformance,
     /// Unit id, original deployment count, earliest Unix spawn second.
     pub deployment: Vec<(i64, u32, Option<i64>)>,
     pub id: MatchId,
@@ -181,7 +202,15 @@ impl Store {
                         EXISTS (SELECT 1 FROM report_player_units p WHERE p.match_id=i.match_id
                                 AND p.player_id=COALESCE(m.self_id, ?2))
                         OR EXISTS (SELECT 1 FROM match_players p WHERE p.match_id=i.match_id
-                                   AND p.player_id=COALESCE(m.self_id, ?2))), i.deployment
+                                   AND p.player_id=COALESCE(m.self_id, ?2))), i.deployment,
+                    i.kills, i.losses, i.objectives, i.supplied_allies,
+                    (SELECT json_group_array(json_object('id', s.player_id,
+                             'name', COALESCE(s.report_name, log.log_name, profile.name, profile.last_log_name),
+                             'team', COALESCE(log.team, CASE s.team_id WHEN 0 THEN 'alpha'
+                                      WHEN 1 THEN 'bravo' WHEN 100 THEN 'spectators' END)))
+                     FROM report_player_units s
+                     LEFT JOIN match_players log ON log.match_id=s.match_id AND log.player_id=s.player_id
+                     LEFT JOIN players profile ON profile.id=s.player_id WHERE s.match_id=i.match_id)
              FROM report_player_units i JOIN match_reports r USING(match_id)
              LEFT JOIN matches m ON m.id=i.match_id
              LEFT JOIN match_players mp ON mp.match_id=i.match_id AND mp.player_id=i.player_id
@@ -208,11 +237,20 @@ impl Store {
                 .zip(winner)
                 .map(|(a, b)| a == b);
             fights.push(StoredPlayerFight {
+                winner,
+                roster: serde_json::from_str(&row.get::<_, String>(16)?)
+                    .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
+                performance: FightPerformance {
+                    kills: row.get(12)?,
+                    losses: row.get(13)?,
+                    objectives: row.get(14)?,
+                    supplied_allies: row.get(15)?,
+                },
                 deployment: serde_json::from_str(&row.get::<_, String>(11)?)
                     .map_err(|e| crate::StoreError::Corrupt(e.to_string()))?,
                 id: MatchId(id_from_db(row.get(0)?)),
                 has_local_log: row.get(9)?,
-                played_together: row.get(10)?,
+                played_together: row.get::<_, Option<bool>>(10)?.unwrap_or(false),
                 units: indexed_units(row)?,
                 start: row.get::<_, Option<i64>>(2)?.map(Timestamp::from_millis),
                 duration_secs: row.get(3)?,

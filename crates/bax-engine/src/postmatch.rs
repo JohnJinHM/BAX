@@ -8,6 +8,8 @@ use bax_core::{MatchId, PlayerId, Team, Timestamp};
 use bax_store::{ReportMeta, Store};
 use serde::Serialize;
 
+mod supply;
+
 /// 参考数据里单位目录的键。
 pub(crate) const UNITS_KEY: &str = "batrace.units";
 
@@ -16,6 +18,7 @@ pub(crate) const UNITS_KEY: &str = "batrace.units";
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct MatchReportView {
+    pub supply: Vec<supply::SupplyPlayer>,
     pub mode: crate::MatchMode,
     pub spectators: Vec<ReportSpectator>,
     pub ai_players: [u32; 2],
@@ -268,6 +271,7 @@ pub(crate) fn load_view(store: &Store, id: MatchId) -> Result<Option<MatchReport
         }
     }
     Ok(Some(MatchReportView {
+        supply: supply::consumption(&info, &analysis, &kinds),
         mode,
         spectators: spectators
             .into_iter()
@@ -290,6 +294,48 @@ mod tests {
 
     const REPORT: &str = include_str!("../../../fixtures/batrace/match_report.json");
     const UNITS: &str = include_str!("../../../fixtures/batrace/units.json");
+
+    #[test]
+    fn supplies_follow_the_consumer_even_without_a_spawn_time() {
+        let mut store = Store::open_in_memory().expect("库");
+        let raw = serde_json::json!({"matchInfo":{"Data":{
+            "11":{"TransferredUnits":{"a":{"Id":3}}},
+            "22":{"SupplyPointsConsumed":90,"SupplyPointsConsumedFromAllies":15,
+                  "SupplyPointsConsumedByAllies":12,"UnitData":{"a":{"Id":3,"TotalSupplyPointsConsumed":80}}},
+            "-1":{"TeamId":1,"UnitData":{"b":{"Id":3,"TotalSupplyPointsConsumed":35}}},
+            "33":{"TeamId":100,"SupplyPointsConsumed":99}
+        }}}).to_string();
+        store
+            .save_report(
+                MatchId(77),
+                &raw,
+                Default::default(),
+                Timestamp::from_secs(10),
+            )
+            .expect("归档");
+        let view = load_view(&store, MatchId(77)).expect("读取").expect("战报");
+        let by_id: BTreeMap<_, _> = view.supply.iter().map(|p| (p.id, p)).collect();
+        assert_eq!(by_id.len(), 3);
+        assert_eq!((by_id[&11].consumed, by_id[&-1].consumed), (0, 35));
+        let p = by_id[&22];
+        assert_eq!((p.consumed, p.from_allies, p.by_allies), (90, 15, 12));
+        assert_eq!(
+            p.models
+                .iter()
+                .find(|m| m.id == Some(3))
+                .expect("具体型号")
+                .points,
+            80
+        );
+        assert_eq!(
+            p.models
+                .iter()
+                .find(|m| m.id.is_none())
+                .expect("未归类")
+                .points,
+            10
+        );
+    }
 
     #[test]
     fn custom_reports_separate_spectators_and_keep_small_teams() {

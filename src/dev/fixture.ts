@@ -317,9 +317,11 @@ export function fixtureReport(id: number): MatchReportView | null {
         kills: 0,
         damage: 0,
         value: 0,
+        deployedScore: 0,
         firstSpawnSecs: s.spawnSecs,
       };
       r.count++;
+      r.deployedScore += s.cost;
       r.refunded += s.refunded ? 1 : 0;
       r.dead += s.deathSecs != null ? 1 : 0;
       r.kills += s.kills;
@@ -345,7 +347,7 @@ export function fixtureReport(id: number): MatchReportView | null {
       damageDealt: Math.round(rand() * 40000),
       damageReceived: Math.round(rand() * 30000),
       objectives: Math.floor(rand() * 6),
-      supplyConsumed: Math.floor(rand() * 3000),
+      supplyConsumed: [...units.values()].reduce((n,u) => n+u.count*(u.unitId%31+7),0),
       supplyFromAllies: Math.floor(rand() * 500),
       supplyByAllies: Math.floor(rand() * 500),
       supplyCaptured: Math.floor(rand() * 400),
@@ -383,6 +385,11 @@ export function fixtureReport(id: number): MatchReportView | null {
     };
   };
   return {
+    supply: reports.map(p => ({
+      id:p.id, name:p.name ?? String(p.id), team:p.team!, consumed:p.supplyConsumed ?? 0,
+      fromAllies:p.supplyFromAllies ?? 0, byAllies:p.supplyByAllies ?? 0,
+      models:p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class, thumbnail:u.thumbnail, points:u.count*(u.unitId%31+7)})),
+    })),
     analysis: {
       matchId: id,
       startTime: row.at + 90_000,

@@ -8,6 +8,7 @@ import { clusterNearby, unitTiles, lifeMinimum, fitMark, inRange, netValue, pack
 import type { Entry } from "./sortie-layout";
 import { keysInBox, selectionBox, selectKeys } from "./sortie-selection";
 import type { Point, SelectionBox, SelectionMark } from "./sortie-selection";
+import DeploymentTreemap from "./DeploymentTreemap.vue";
 import UnitIcon from "./UnitIcon.vue";
 import ReturnBadge from "./ReturnBadge.vue";
 import CheckFilter from "./CheckFilter.vue";
@@ -16,7 +17,7 @@ import { useSetting, saveSetting } from "../shared/settings";
 
 const props = defineProps<{ analysis: MatchAnalysis; players: PlayerReport[]; teams: Team[]; teamLabel: (team: Team) => string; teamColor: (team: Team | null) => string }>();
 const emit = defineEmits<{ range: [start: number, end: number] }>();
-const mode = ref<"players" | "teams" | "life">("players");
+const mode = ref<"tree" | "players" | "life">("tree");
 const team = ref("");
 const selectedPlayers = ref<(string | number)[]>([]);
 const selectedKinds = ref<(string | number)[]>(Object.keys(unitClassNames));
@@ -30,8 +31,6 @@ const start = ref(0);
 const end = ref(1);
 const selected = ref<number[]>([]);
 const selectedSet = computed(() => new Set(selected.value));
-const metric = ref<"count" | "value">("count");
-const expandedTeam = ref<Team | null>(null);
 const plot = ref<HTMLElement | null>(null);
 const selectionSurface = ref<HTMLElement | null>(null);
 const box = ref<SelectionBox | null>(null);
@@ -81,7 +80,6 @@ const scoped = computed(() => filtered.value.filter((s) => inRange(s, scopeStart
 const visiblePlayers = computed(() => props.players.filter((p) => (!team.value || p.team === team.value) && selectedPlayers.value.includes(p.id)));
 const detail = computed(() => entries.value.filter((s) => selectedSet.value.has(s.key)));
 const ticks = computed(() => Array.from({ length: 5 }, (_, i) => start.value + span.value * i / 4));
-const binStep = computed(() => span.value > 1200 ? 120 : span.value > 300 ? 60 : 15);
 const summaries = computed(() => props.teams.map((t) => {
   const units = scoped.value.filter((s) => owners.value.get(s.player)?.team === t);
   const classes = Object.entries(unitClassNames).map(([cls, label]) => {
@@ -92,10 +90,7 @@ const summaries = computed(() => props.teams.map((t) => {
 }));
 const overview = computed(() => timeBins(filtered.value, 0, fullEnd.value, fullEnd.value / 80));
 const overviewMax = computed(() => Math.max(1, ...overview.value.map((b) => b.entries.length)));
-const teamBins = computed(() => summaries.value.map((s) => ({ ...s, bins: timeBins(s.entries, start.value, end.value, binStep.value) })));
-const binValue = (b: { entries: Entry[] }) => metric.value === "count" ? b.entries.length : netValue(b.entries);
-const maxBin = computed(() => Math.max(1, ...teamBins.value.flatMap((t) => t.bins.map(binValue))));
-const rows = computed(() => visiblePlayers.value.filter((p) => filtered.value.length && (mode.value !== "teams" || p.team === expandedTeam.value)).map((p) => {
+const rows = computed(() => visiblePlayers.value.filter(() => filtered.value.length && mode.value !== "tree").map((p) => {
   const units = filtered.value.filter((s) => s.player === p.id && (mode.value === "life"
     ? s.spawnSecs <= end.value && (s.refunded ? s.spawnSecs >= start.value : (s.deathSecs ?? recordEnd.value) >= start.value)
     : inRange(s, start.value, end.value)));
@@ -234,6 +229,10 @@ onMounted(() => {
   });
   if (plot.value) observer.observe(plot.value);
 });
+watch(plot, (current, previous) => {
+  if (previous) observer?.unobserve(previous);
+  if (current) observer?.observe(current);
+});
 onBeforeUnmount(() => { observer?.disconnect(); cancelAnimationFrame(resizeFrame); closeSelection(true); });
 watch(() => props.analysis.matchId, () => { start.value = 0; end.value = fullEnd.value; selected.value = []; resetFilters(); }, { immediate: true });
 watch([scopeStart, scopeEnd], () => emit("range", scopeStart.value, scopeEnd.value), { immediate: true });
@@ -244,10 +243,11 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 <template>
   <section class="explorer" aria-label="出兵分析">
     <div class="explorer-controls">
-    <div class="heading"><h3>出兵分析</h3><span class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
+    <div class="heading"><h3>出兵分析</h3><span v-if="mode !== 'tree'" class="muted">{{ count(scoped.length) }} 次 · {{ time(scopeStart) }}–{{ time(scopeEnd) }}</span></div>
     <div class="modes" role="group" aria-label="分析视图">
-      <button v-for="item in ([['players', '按玩家'], ['life', '存续时间'], ['teams', '双方合并']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
+      <button v-for="item in ([['tree', '出兵分布'], ['life', '存续时间'], ['players', '出兵批次']] as const)" :key="item[0]" :aria-pressed="mode === item[0]" @click="mode = item[0]">{{ item[1] }}</button>
     </div>
+    <template v-if="mode !== 'tree'">
     <div class="filters">
       <label>队伍<select v-model="team" class="dropdown-trigger"><option value="">双方队伍</option><option v-for="t in teams" :key="t" :value="t">{{ teamLabel(t) }}</option></select></label>
       <CheckFilter v-model="selectedPlayers" label="玩家" :options="playerOptions" />
@@ -262,7 +262,6 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
         <button :disabled="start === 0" @click="pan(-1)">前移</button><button :disabled="end === fullEnd" @click="pan(1)">后移</button>
         <button @click="setRange(0, fullEnd)">全局</button>
         <label v-if="mode === 'players'">批次<select v-model.number="batch"><option :value="0">自动密度</option><option :value="5">5 秒</option><option :value="15">15 秒</option><option :value="30">30 秒</option></select></label>
-        <label v-if="mode === 'teams'">统计<select v-model="metric"><option value="count">出兵数量</option><option value="value">净估算价值</option></select></label>
       </div>
       <div class="navigator">
         <svg class="overview" viewBox="0 0 800 40" preserveAspectRatio="none" aria-label="全局出兵密度，拖动选择时间范围" @pointerdown="beginDrag" @pointermove="drag" @pointerup="finishDrag" @pointercancel="dragAnchor = null">
@@ -274,17 +273,13 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
 
       <p v-if="mode === 'life'" class="selection-help muted">空白处拖动框选；Shift + 点击增减选择，Shift + 框选追加。Esc 取消框选。</p>
       <div class="axis" :style="{ width: `${plotWidth + 164}px` }"><span>玩家 / 队伍</span><div><span v-for="tick in ticks" :key="tick">{{ time(tick) }}</span></div></div>
+    </template>
     </div>
+    <DeploymentTreemap v-if="mode === 'tree'" :players="players" :teams="teams" :team-label="teamLabel" :team-color="teamColor" />
+    <template v-else>
     <div ref="plot" class="plot" :style="{ height: `${plotHeight}px` }" @scroll="moveSelection()">
         <Transition name="analysis-view" mode="out-in"><div :key="mode" ref="selectionSurface" class="plot-content" :class="{ selecting: box }" :tabindex="mode === 'life' ? 0 : undefined" :aria-label="mode === 'life' ? '存续时间单位选择' : undefined" @pointerdown="beginSelection" @pointermove="moveSelection" @pointerup="finishSelection" @pointercancel="closeSelection(true)" @lostpointercapture="closeSelection(true)" @keydown="escapeSelection">
-        <template v-if="mode === 'teams'">
-          <div v-for="t in teamBins.filter((t) => !team || team === t.team)" :key="t.team" class="timeline-row team-row">
-            <button class="owner" :style="{ color: teamColor(t.team) }" :aria-expanded="expandedTeam === t.team" @click="expandedTeam = expandedTeam === t.team ? null : t.team">{{ teamLabel(t.team) }}<small>{{ expandedTeam === t.team ? '收起玩家' : '展开玩家' }}</small></button>
-            <div class="histogram"><button v-for="(b, i) in t.bins" :key="i" :disabled="!b.entries.length" :title="`${time(b.start)}–${time(b.end)} · ${count(binValue(b))}`" :aria-label="`${teamLabel(t.team)} ${time(b.start)}，${count(binValue(b))}${metric === 'count' ? '次' : '净估算价值'}`" @click="select(b.entries, $event)"><span :style="{ height: `${binValue(b) / maxBin * 68}px`, background: teamColor(t.team) }" /></button></div>
-          </div>
-          <p class="muted">每格 {{ binStep }} 秒；双方共用刻度。点击柱条查看该批单位，点击队伍展开玩家。</p>
-        </template>
-        <div v-for="row in rows" v-show="mode !== 'teams' || expandedTeam" :key="row.player.id" class="timeline-row" :style="{ minHeight: `${row.height}px` }">
+        <div v-for="row in rows" :key="row.player.id" class="timeline-row" :style="{ minHeight: `${row.height}px` }">
           <button class="owner" :style="{ color: teamColor(row.player.team) }" @click="selectedPlayers = [row.player.id]">{{ playerName(row.player.id) }}<small>{{ mode === 'life' ? '记录存续' : `${row.marks.reduce((n, m) => n + m.entries.length, 0)} 次出兵` }}</small></button>
           <div class="lane" :style="{ height: `${row.height}px` }">
             <i v-for="n in 5" :key="n" class="gridline" :style="{ left: `${(n - 1) * 25}%` }" />
@@ -327,10 +322,11 @@ watch(mode, async () => { await nextTick(); if (plot.value) plot.value.scrollTop
       </section>
       <section class="detail" aria-label="选中单位详情" aria-live="polite">
         <div class="heading"><h4>单位详情 <span v-if="detail.length" class="muted">{{ detail.length }} 次出兵</span></h4><button v-if="detail.length" @click="selected = []">取消选择</button></div>
-        <p v-if="!detail.length" class="muted">点击时间线或队伍柱条，详情固定在这里。</p>
+        <p v-if="!detail.length" class="muted">点击时间线上的单位，详情固定在这里。</p>
         <div v-else class="detail-list"><article v-for="s in detail" :key="s.key"><div class="unit-title"><UnitIcon unit-only :id="s.unitId" :thumbnail="s.thumbnail" :name="s.unitName" :kind="s.class" /><button class="text-button" @click="query = s.unitName">{{ s.unitName }}</button><span class="muted">{{ unitClassNames[s.class] }}</span><ReturnBadge v-if="s.refunded" /></div><p>{{ playerName(s.player) }} · {{ time(s.spawnSecs) }} 出兵<br />{{ s.refunded ? '已回收，时间未知' : s.deathSecs != null ? `${time(s.deathSecs)} 阵亡 · 存续 ${time(Math.max(0, s.deathSecs - s.spawnSecs))}` : '未记录阵亡' }}<br />估算成本 {{ count(s.cost) }} · 击毁 {{ s.kills }}<span v-if="s.airdropped"> · 空投</span><span v-if="s.transferredTo != null"><br />转交给 {{ playerName(s.transferredTo) }}</span></p></article></div>
       </section>
     </div>
+    </template>
   </section>
 </template>
 
@@ -391,7 +387,6 @@ select, input[type="search"] { min-height: 32px; padding: 4px 8px; border: 1px s
 .batch-unit :deep(.unit-icon) { width: 44px; height: 24px; flex-shrink: 0; }
 .batch-unit b { position: absolute; left: 46px; top: 4px; margin: 0; padding: 0; font-size: 11px; line-height: 12px; white-space: nowrap; /* 固定尺寸框，字号不缩放 */ }
 .mark .batch-unit .refund-corner { left: 46px; right: auto; bottom: 4px; }
-.histogram { height: 92px; display: flex; gap: 2px; align-items: end; padding: 8px 0; }.histogram button { padding: 0; flex: 1; height: 76px; min-width: 3px; border: 0; border-radius: 0; background: transparent; display: flex; align-items: end; }.histogram button span { width: 100%; min-height: 1px; }.histogram button:hover span { opacity: .75; }
 .legend { margin: 10px 0 18px; line-height: 1.7; }.empty { padding: 24px 0; text-align: center; color: var(--bax-soft); }
 .analysis-bottom { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--bax-border); gap: 24px; padding-top: 16px; }.analysis-bottom > section { min-width: 0; }.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }.comparison p { font-size: calc(12px * var(--bax-font-scale)); }.comparison b { font-size: calc(16px * var(--bax-font-scale)); font-weight: 500; }.stat-line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: calc(12px * var(--bax-font-scale)); }.stat-line > span:last-child { white-space: nowrap; }.detail-list { max-height: 270px; overflow-y: auto; margin-top: 8px; }.detail-list article { padding: 10px 0; border-bottom: 1px solid var(--bax-border); }.detail-list p { margin: 4px 0; font-size: calc(12px * var(--bax-font-scale)); line-height: 1.8; }.unit-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }.text-button { border: 0; background: transparent; padding: 0; text-align: left; color: var(--bax-accent); }.text-button:hover { text-decoration: underline; }details { margin-top: 12px; }summary { cursor: pointer; color: var(--bax-soft); }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--bax-accent); outline-offset: 3px; }

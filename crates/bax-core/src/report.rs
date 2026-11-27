@@ -316,6 +316,8 @@ pub struct ClassShare {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UnitRow {
+    /// 含回收的累计估算出兵分数。
+    pub deployed_score: i64,
     pub variant_key: String,
     pub unit_name: String,
     pub thumbnail: Option<String>,
@@ -513,6 +515,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
             }
 
             let row = units.entry(variant_key.clone()).or_insert(UnitRow {
+                deployed_score: 0,
                 variant_key: variant_key.clone(),
                 unit_name: unit_name.clone(),
                 thumbnail: thumbnail.clone(),
@@ -526,6 +529,7 @@ pub fn analyze(input: &ReportInput, catalog: &HashMap<i64, UnitKind>) -> MatchAn
                 value: 0,
                 first_spawn_secs: None,
             });
+            row.deployed_score += cost;
             row.count += 1;
             row.refunded += u32::from(u.refunded);
             row.dead += u32::from(u.death_time.is_some());

@@ -145,15 +145,25 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
         const id = Number((args as {id:number}).id);
         const player = fixtureDetail(id);
         const at = localStorage.getItem(`bax.dev.fightQuery.${id}`);
-        const fights = fixtureMatches.filter(m => m.report.state === "ready").map((m,i) => ({
-          hasLocalLog: fixtureHistory.some(local => local.matchId === m.matchId),
-          playedTogether: id !== fixtureSnapshot.selfId && !!player?.matches.some(row => row.matchId === m.matchId),
-          matchId:m.matchId, start:m.at, durationSecs:m.durationMs == null ? null : m.durationMs/1000,
-          map:["煤山","黑海岸","死亡中心"][i%3], team:"alpha", won:i%2===0, ratingDelta:i%2===0 ? 18 : -12,
-          composition: fixtureReport(m.matchId)?.analysis.players.find(p => p.id === id)?.composition ?? [],
-          opening: [...new Set(fixtureReport(m.matchId)?.analysis.sorties.filter(s => s.player === id && s.spawnSecs < 180).map(s => s.unitName))],
-          specs:player?.profile?.lastSpecs ?? [],
-        }));
+        const fights = fixtureMatches.flatMap(m => {
+          const report = fixtureReport(m.matchId);
+          const p = report?.analysis.players.find(row => row.id === id);
+          if (!p || !report) return [];
+          const winner = report.analysis.winner;
+          const deployedUnits = p.units.map(u => ({id:u.unitId, name:u.unitName, class:u.class}));
+          return [{
+            hasLocalLog: fixtureHistory.some(local => local.matchId === m.matchId),
+            playedTogether: id !== fixtureSnapshot.selfId && !!player?.matches.some(row => row.matchId === m.matchId),
+            matchId:m.matchId, start:m.at, durationSecs:report.analysis.durationSecs, map:m.map,
+            team:p.team, won:winner == null ? null : p.team === winner, winner,
+            ratingDelta:p.newRating == null || p.oldRating == null ? null : p.newRating-p.oldRating,
+            roster:report.analysis.players.map(({id,name,team}) => ({id,name,team})),
+            performance:{kills:p.destruction ?? 0, losses:p.losses ?? 0, objectives:p.objectives ?? 0, suppliedAllies:p.supplyByAllies ?? 0},
+            composition:p.composition, deployedUnits,
+            opening:deployedUnits.filter((_,i) => (p.units[i].firstSpawnSecs ?? Infinity) < 180),
+            specs:report.specs[id] ?? [],
+          }];
+        });
         return { lastQueriedAt: at == null ? null : Number(at), fights };
       }
       case "stop_player_fights": return null;

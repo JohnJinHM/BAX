@@ -152,6 +152,12 @@ const MIGRATIONS: &[&str] = &[
         queried_at INTEGER NOT NULL
     ) STRICT;",
     "ALTER TABLE report_player_units ADD COLUMN deployment TEXT NOT NULL DEFAULT '[]';",
+    // 归档列表和雷达图只读取小索引，保留战报当时的昵称与官方计数。
+    "ALTER TABLE report_player_units ADD COLUMN report_name TEXT;
+     ALTER TABLE report_player_units ADD COLUMN kills INTEGER NOT NULL DEFAULT 0;
+     ALTER TABLE report_player_units ADD COLUMN losses INTEGER NOT NULL DEFAULT 0;
+     ALTER TABLE report_player_units ADD COLUMN objectives INTEGER NOT NULL DEFAULT 0;
+     ALTER TABLE report_player_units ADD COLUMN supplied_allies INTEGER NOT NULL DEFAULT 0;",
 ];
 
 /// 从接口取得的一份玩家资料，准备写入长期库。
@@ -275,7 +281,8 @@ impl Store {
 
     fn open_at(path: Option<&Path>) -> Result<Store> {
         let conn = db::open_with_data_migrations(path, MIGRATIONS, true, |conn, version| {
-            if version == 10 {
+            // 在完整索引结构就绪后统一回填，包括已经使用第 10 版的库。
+            if version == 11 {
                 crate::reports::backfill_player_units(conn)?;
             }
             Ok(())

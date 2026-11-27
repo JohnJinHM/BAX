@@ -1057,6 +1057,41 @@ fn version_four_migrates_to_five_and_existing_five_reopens_without_data_loss() {
 }
 
 #[test]
+fn version_ten_backfills_archive_statistics_and_match_names() {
+    let dir = tempfile::tempdir().expect("临时库");
+    let path = dir.path().join("bax.db");
+    let old = db::open(Some(&path), &MIGRATIONS[..10], false).expect("v10");
+    let raw = r#"{"matchInfo":{"Data":{"11":{"Name":"Ash","Destruction":4,"Losses":2,"ObjectivesCaptured":1,"SupplyPointsConsumedByAllies":57},"22":{"TeamId":1,"Name":"Birch"}}}}"#;
+    old.execute(
+        "INSERT INTO match_reports(match_id, raw, fetched_at, winner) VALUES (7, ?1, 20, 'bravo')",
+        [raw],
+    )
+    .expect("原文");
+    old.execute(
+        "INSERT INTO report_player_units(match_id,player_id,unit_ids) VALUES (7,11,'[]')",
+        [],
+    )
+    .expect("旧索引");
+    drop(old);
+    let store = Store::open(&path).expect("升级");
+    let rows = store.player_fights(PlayerId(11), None).expect("归档");
+    let f = &rows[0];
+    assert_eq!(f.winner, Some(Team::Bravo));
+    assert_eq!(
+        (
+            f.performance.kills,
+            f.performance.losses,
+            f.performance.objectives,
+            f.performance.supplied_allies
+        ),
+        (4, 2, 1, 57)
+    );
+    assert!(f.roster.iter().any(|m| m.id == PlayerId(22)
+        && m.name.as_deref() == Some("Birch")
+        && m.team == Some(Team::Bravo)));
+}
+
+#[test]
 fn version_six_indexes_existing_reports_and_replaces_old_participants_atomically() {
     let dir = tempfile::tempdir().expect("临时目录");
     let path = dir.path().join("bax.db");

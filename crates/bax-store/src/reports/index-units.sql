@@ -23,13 +23,20 @@ WITH players AS MATERIALIZED (
     SELECT owner, json_group_array(unit) AS ids,
            json_group_array(json_array(unit, n, first_spawn)) AS deployment FROM types GROUP BY owner
 )
-INSERT INTO report_player_units(match_id, player_id, start_time, unit_ids, team_id, rating_delta, deployment)
+INSERT INTO report_player_units(match_id, player_id, start_time, unit_ids, team_id, rating_delta, deployment,
+                              report_name, kills, losses, objectives, supplied_allies)
 SELECT ?1, p.id, ?2, COALESCE(u.ids, '[]'),
        CASE WHEN json_type(p.data, '$.TeamId') IS NULL THEN 0
             WHEN json_type(p.data, '$.TeamId') = 'integer' THEN p.data ->> '$.TeamId' END,
        CASE WHEN json_type(p.data, '$.OldRating') IN ('real','integer')
               AND json_type(p.data, '$.NewRating') IN ('real','integer')
-            THEN (p.data ->> '$.NewRating') - (p.data ->> '$.OldRating') END, COALESCE(u.deployment, '[]') FROM players p LEFT JOIN units u USING (owner)
+            THEN (p.data ->> '$.NewRating') - (p.data ->> '$.OldRating') END, COALESCE(u.deployment, '[]'),
+       NULLIF(TRIM(p.data ->> '$.Name'), ''), COALESCE(p.data ->> '$.Destruction', 0),
+       COALESCE(p.data ->> '$.Losses', 0), COALESCE(p.data ->> '$.ObjectivesCaptured', 0),
+       COALESCE(p.data ->> '$.SupplyPointsConsumedByAllies', 0)
+FROM players p LEFT JOIN units u USING (owner)
 WHERE typeof(p.id) = 'integer' AND p.id >= 0
   AND (p.data ->> '$.Id' IS NOT NULL OR CAST(p.id AS TEXT) = trim(p.owner))
-ON CONFLICT(match_id, player_id) DO UPDATE SET team_id = excluded.team_id, rating_delta = excluded.rating_delta, deployment = excluded.deployment
+ON CONFLICT(match_id, player_id) DO UPDATE SET team_id = excluded.team_id,
+    rating_delta = excluded.rating_delta, deployment = excluded.deployment, report_name = excluded.report_name,
+    kills = excluded.kills, losses = excluded.losses, objectives = excluded.objectives, supplied_allies = excluded.supplied_allies

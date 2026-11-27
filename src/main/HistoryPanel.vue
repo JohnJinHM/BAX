@@ -248,4 +248,9 @@ ul {
   .layout { grid-template-columns: calc(240px * var(--bax-font-scale)) minmax(380px, 1fr); }
   .list { padding: calc(10px * var(--bax-density)); }
 }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .list { position: static; max-height: min(210px, 32vh); overflow: auto; }
+}
 </style>

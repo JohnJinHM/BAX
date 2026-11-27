@@ -6,6 +6,10 @@ import type { Relation } from "../shared/bindings/Relation";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { ago, minutes, mmss, percent, phaseNames, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
+import type { PlayerFight } from "../shared/bindings/PlayerFight";
+import { playerAverages, combatAxes, preferenceAxes } from "./player-analysis";
+import PlayerRadar from "./PlayerRadar.vue";
+import PlayerUnitPreferences from "./PlayerUnitPreferences.vue";
 import PlayerFightArchive from "./PlayerFightArchive.vue";
 import PlayerReportPreview from "./PlayerReportPreview.vue";
 import PlayerBadges from "../shared/PlayerBadges.vue";
@@ -14,6 +18,8 @@ import SpecIcon from "../shared/SpecIcon.vue";
 
 const props = defineProps<{ id: number }>();
 
+const fights = ref<PlayerFight[]>([]);
+const averages = computed(() => playerAverages(fights.value));
 const now = useNow(60_000);
 const detail = ref<PlayerDetail | null>(null);
 const loading = ref(false);
@@ -58,6 +64,7 @@ watch(
   () => {
     noteMessage.value = null;
     detail.value = null;
+    fights.value = [];
     preview.value = null;
     void load();
   },
@@ -141,7 +148,8 @@ async function refresh() {
     <p v-if="failure" class="error">{{ failure }}</p>
     <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 STB 查一次。</p>
 
-    <div v-if="detail" class="stats">
+    <div v-if="detail" class="overview">
+    <div class="stats">
       <div><label>ELO</label><span class="num big">{{ rating(detail.profile?.rating) }}</span></div>
       <div><label>等级</label><span class="num">{{ detail.profile?.level ?? "–" }}</span></div>
       <div v-if="detail.traceCount != null && detail.traceCount > 0" :title="detail.traceCheckedAt != null ? `标记查询时间 ${date(detail.traceCheckedAt)}` : undefined"><label>BATrace 标记</label><span class="num">{{ detail.traceCount }} 次</span></div>
@@ -154,28 +162,13 @@ async function refresh() {
       <div><label>场均时长</label><span class="num">{{ minutes(detail.profile?.ranked?.averageMinutes) }}</span></div>
       <div><label>资料时间</label><span>{{ ago(detail.fetchedAt, now) }}</span></div>
     </div>
+    <PlayerRadar title="作战效能" :axes="combatAxes" :values="averages.combat" :games="averages.games" />
+    <PlayerRadar title="单位偏好" :axes="preferenceAxes" :values="averages.preferences" :games="averages.preferenceGames" />
+    </div>
+    <p v-if="detail" class="hint radar-note">虚线为本机归档场均。存活按损失占出兵次数的比例反算，补给只计队友使用的点数。单位偏好按八类出兵次数占比计算。</p>
     <p v-else-if="loading" class="hint">正在读取…</p>
 
-    <PlayerFightArchive :id="id" @preview="preview = $event" />
-    <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
-
     <template v-if="detail">
-      <h3>专精使用</h3>
-      <div v-if="detail.profile?.lastSpecs.length" class="last-specs">
-        <span class="hint">上次专精</span>
-        <span v-for="spec in detail.profile.lastSpecs" :key="spec.ids[0]"><SpecIcon :id="spec.ids[0]!" :label="spec.name" /> {{ spec.name }}</span>
-      </div>
-      <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
-      <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
-        <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`" class="reading-row">
-          <SpecIcon :id="spec.ids[0]!" :label="spec.name" />
-          <span class="spec-name">{{ spec.name }}</span>
-          <span class="spec-track" aria-hidden="true"><span :style="{ width: `${spec.games / maxSpecGames * 100}%` }" /></span>
-          <span class="num spec-count">{{ spec.games }} 场</span>
-        </li>
-      </ul>
-      <p v-else class="hint">暂无可识别的专精战报。</p>
-
       <h3>备注</h3>
       <textarea
         v-model="noteDraft"
@@ -192,6 +185,24 @@ async function refresh() {
         <span v-if="detail.note && !noteDirty" class="hint">更新于 {{ ago(detail.note.updatedAt, now) }}</span>
         <span v-if="noteMessage" :class="noteMessage.ok ? 'ok' : 'error'">{{ noteMessage.text }}</span>
       </div>
+
+      <h3>专精使用</h3>
+      <div v-if="detail.profile?.lastSpecs.length" class="last-specs">
+        <span class="hint">上次专精</span>
+        <span v-for="spec in detail.profile.lastSpecs" :key="spec.ids[0]"><SpecIcon :id="spec.ids[0]!" :label="spec.name" /> {{ spec.name }}</span>
+      </div>
+      <p v-if="detail.profile?.specSampleMatches" class="hint">最近已有 {{ detail.profile.specSampleMatches }} 场战报 · 已识别 {{ detail.profile.specIdentifiedMatches }} 场</p>
+      <ul v-if="detail.profile?.favoriteSpecs.length" class="spec-chart" aria-label="专精使用场次">
+        <li v-for="spec in detail.profile.favoriteSpecs" :key="spec.ids[0]" :aria-label="`${spec.name}：${spec.games} 场`" class="reading-row">
+          <SpecIcon :id="spec.ids[0]!" :label="spec.name" />
+          <span class="spec-name">{{ spec.name }}</span>
+          <span class="spec-track" aria-hidden="true"><span :style="{ width: `${spec.games / maxSpecGames * 100}%` }" /></span>
+          <span class="num spec-count">{{ spec.games }} 场</span>
+        </li>
+      </ul>
+      <p v-else class="hint">暂无可识别的专精战报。</p>
+
+      <PlayerUnitPreferences :fights="fights" />
 
       <h3>ELO 变化</h3>
       <Sparkline :points="historyPoints" />
@@ -225,6 +236,9 @@ async function refresh() {
       </table>
       <p v-else class="hint">还没有同场记录。</p>
     </template>
+    <PlayerFightArchive v-model:fights="fights" :id="id" @preview="preview = $event" />
+    <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
+
   </section>
 </template>
 
@@ -254,11 +268,16 @@ async function refresh() {
   margin-left: auto;
 }
 
+.detail {container-type:inline-size;}
+.overview {display:grid;grid-template-columns:minmax(185px,1fr) repeat(2,minmax(0,1fr));align-items:start;gap:16px;margin:20px 0 8px;}
+.radar-note {margin:8px 0 16px;}
+@container (max-width:760px) {.overview {grid-template-columns:repeat(2,minmax(0,1fr));}.overview .stats {grid-column:1/-1;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));}}
+@container (max-width:470px) {.overview {grid-template-columns:1fr;}.overview .radar {width:100%;}}
 .stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: calc(12px * var(--bax-density));
-  margin-top: calc(16px * var(--bax-density));
+  margin-top: 0;
 }
 
 .stats div {

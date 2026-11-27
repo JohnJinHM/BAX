@@ -18,6 +18,7 @@ import {
   unitClassNames,
 } from "../shared/format";
 import EChart from "./EChart.vue";
+import SupplyAnalysis from "./SupplyAnalysis.vue";
 import SortieExplorer from "./SortieExplorer.vue";
 import { openPlayer } from "./navigation";
 import { matchModeNames } from "../shared/match-presentation";
@@ -418,6 +419,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
       <ul v-if="selectedLosses.length"><li v-for="(l,i) in selectedLosses" :key="i">{{ teamLabel(l.team) }} · {{ l.owner }} · {{ l.unit }} · {{ count(l.cost) }}</li></ul>
       <p v-if="!lossMinutes.length" class="hint">暂无带阵亡时间的单位记录。</p>
       <SortieExplorer :key="view.analysis.matchId" :analysis="view.analysis" :players="players" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" @range="(start, end) => { selectedRange = [start, end]; lossMinute = null; }" />
+      <SupplyAnalysis :key="'supply-'+view.analysis.matchId" :players="view.supply" :teams="teamOrder" :team-label="teamLabel" :team-color="teamColor" />
 
       <div class="row composition-head"><h3>兵种构成</h3><label>统计 <select v-model="compositionMetric"><option v-for="metric in compositionOptions" :key="metric.value" :value="metric.value">{{ metric.label }}</option></select></label><button @click="visibleComposition = compositionGroups.map(g => g.key)">全选类型</button><button @click="visibleComposition = []">清空类型</button></div>
       <p class="hint">{{ compositionMetrics[compositionMetric].hint }}点击类型排除或恢复，点击柱条只看该类型。</p>
@@ -452,7 +454,7 @@ function pendingText(row: HistoryRow | null | undefined): string {
                 <span v-if="p.deserter" class="flag" title="游戏记录的离场">离场</span>
               </td>
               <td class="num">
-                {{ rating(p.oldRating) }}<span v-if="eloDelta(p)" class="delta" :class="eloDelta(p).startsWith('+') ? 'up' : 'down'"> {{ eloDelta(p) }}</span>
+                {{ rating(p.oldRating) }}<span v-if="eloDelta(p)" class="delta" :class="{ up:Number(eloDelta(p)) > 0, down:Number(eloDelta(p)) < 0 }"> {{ eloDelta(p) }}</span>
               </td>
               <td class="num strong">{{ count(p.deployedValue) }}</td>
               <td class="num">{{ count(p.destructionScore) }}</td>

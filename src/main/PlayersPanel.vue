@@ -179,4 +179,9 @@ li.active {
   display: flex;
   gap: 10px;
 }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .list { position: static; max-height: min(210px, 32vh); overflow: auto; }
+}
 </style>

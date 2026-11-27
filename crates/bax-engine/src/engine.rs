@@ -66,10 +66,23 @@ pub struct FightClass {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct OpeningUnit {
+    pub id: i64,
+    pub name: String,
+    pub class: bax_core::report::UnitClass,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlayerFight {
+    pub roster: Vec<bax_store::FightMember>,
+    pub winner: Option<bax_core::Team>,
+    pub performance: bax_store::FightPerformance,
+    pub deployed_units: Vec<OpeningUnit>,
     pub composition: Vec<FightClass>,
     /// Distinct opening units, or None when timing or deployments are unavailable.
-    pub opening: Option<Vec<String>>,
+    pub opening: Option<Vec<OpeningUnit>>,
     pub match_id: MatchId,
     pub has_local_log: bool,
     pub played_together: bool,
@@ -406,7 +419,8 @@ impl Engine {
                         .map(|id| crate::specs::entry(vec![id], 1))
                         .collect();
                     let mut composition = BTreeMap::new();
-                    let mut opening = std::collections::BTreeSet::new();
+                    let mut opening = Vec::new();
+                    let mut deployed_units = Vec::new();
                     let start = row.start.map(|s| s.as_millis() / 1000);
                     let mut timed = false;
                     for (unit, n, spawned) in row.deployment {
@@ -422,19 +436,28 @@ impl Engine {
                         share.count += n;
                         share.value +=
                             i64::from(n) * kind.and_then(|k| k.base_cost).unwrap_or(0).max(0);
+                        let model = OpeningUnit {
+                            id: unit,
+                            class,
+                            name: kind
+                                .and_then(|k| k.name.clone())
+                                .unwrap_or_else(|| format!("单位 #{unit}")),
+                        };
                         if let Some((at, begin)) = spawned.zip(start) {
                             timed = true;
                             if at < begin + 180 {
-                                opening.insert(
-                                    kind.and_then(|k| k.name.clone())
-                                        .unwrap_or_else(|| format!("单位 #{unit}")),
-                                );
+                                opening.push(model.clone());
                             }
                         }
+                        deployed_units.push(model);
                     }
                     PlayerFight {
                         composition: composition.into_values().collect(),
-                        opening: timed.then(|| opening.into_iter().collect()),
+                        opening: timed.then_some(opening),
+                        deployed_units,
+                        performance: row.performance,
+                        winner: row.winner,
+                        roster: row.roster,
                         match_id: row.id,
                         has_local_log: row.has_local_log,
                         played_together: row.played_together,
