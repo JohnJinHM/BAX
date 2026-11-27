@@ -305,7 +305,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bax-app"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "bax-core",
@@ -327,7 +327,7 @@ dependencies = [
 
 [[package]]
 name = "bax-batrace"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "bax-core",
  "reqwest 0.13.5",
@@ -342,7 +342,7 @@ dependencies = [
 
 [[package]]
 name = "bax-cli"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bax-batrace",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "bax-core"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "bax-engine"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "bax-batrace",
  "bax-core",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "bax-gamelog"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "bax-core",
  "chrono",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "bax-store"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "bax-core",
  "rusqlite",
