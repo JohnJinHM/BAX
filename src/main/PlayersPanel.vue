@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
 
 import type { PlayerHit } from "../shared/bindings/PlayerHit";
+import type { PlayerSearchHit } from "../shared/bindings/PlayerSearchHit";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { currentRelations } from "../shared/roster";
 import { ago, rating } from "../shared/format";
 import { useNow } from "../shared/useNow";
-import { selectedPlayer } from "./navigation";
+import { playerSource, selectedPlayer } from "./navigation";
+import BatracePlayerSearch from "./BatracePlayerSearch.vue";
 import PlayerDetailView from "./PlayerDetailView.vue";
 
 const now = useNow(60_000);
@@ -14,13 +16,14 @@ const query = ref("");
 const snapshot = useSnapshot();
 const relations = computed(() => currentRelations(snapshot.value?.current));
 const sort = ref("recent");
-const savingFavorites = reactive(new Set<number>());
 const filter = ref("all");
-const busy = ref(false);
+const busy = ref(true);
 const more = ref(false);
 const PAGE = 80;
 const hits = ref<PlayerHit[]>([]);
 const failure = ref<string | null>(null);
+const selectedHit = ref<PlayerSearchHit | null>(null);
+const emptyArchive = computed(() => !busy.value && !failure.value && !hits.value.length && !query.value.trim() && filter.value === "all");
 let timer: number | undefined;
 let latest = 0;
 
@@ -62,17 +65,15 @@ watch([() => snapshot.value?.selfId, () => snapshot.value?.current?.matchId,
 onMounted(() => void search());
 onBeforeUnmount(() => { ++latest; window.clearTimeout(timer); });
 
-async function toggleFavorite(hit: PlayerHit) {
-  if (savingFavorites.has(hit.id)) return;
-  savingFavorites.add(hit.id);
-  try {
-    await commands.setPlayerFavorite(hit.id, !hit.isFavorite);
-    await search(false, Math.max(PAGE, Math.ceil(hits.value.length / PAGE) * PAGE));
-  } catch (error) {
-    failure.value = errorText(error);
-  } finally {
-    savingFavorites.delete(hit.id);
-  }
+function selectOnline(hit: PlayerSearchHit) {
+  selectedHit.value = { ...hit };
+  selectedPlayer.value = hit.id;
+}
+
+watch(playerSource, () => { selectedHit.value = null; });
+
+function reloadList() {
+  void search(false, Math.max(PAGE, Math.ceil(hits.value.length / PAGE) * PAGE));
 }
 
 function title(hit: PlayerHit): string {
@@ -83,49 +84,65 @@ function title(hit: PlayerHit): string {
 <template>
   <div class="layout">
     <section class="card list">
-      <input v-model="query" type="text" class="search" aria-label="按名字或 ID 查找" placeholder="按名字或 ID 查找" />
-      <div class="list-controls">
-        <label>筛选<select v-model="filter"><option value="all">全部玩家</option><option value="noted">有备注</option><option value="encountered">有同场记录</option><option value="rated">有 ELO</option></select></label>
-        <label>排序<select v-model="sort"><option value="recent">最近见过</option><option value="encounters">同场最多</option><option value="ratingDesc">ELO 从高到低</option><option value="ratingAsc">ELO 从低到高</option><option value="name">名字</option></select></label>
+      <div class="sources" role="group" aria-label="玩家搜索范围">
+        <button :aria-pressed="playerSource === 'local'" @click="playerSource = 'local'">本地档案</button>
+        <button :aria-pressed="playerSource === 'batrace'" @click="playerSource = 'batrace'">BATrace 搜索</button>
       </div>
-      <p v-if="failure" class="error">{{ failure }}</p>
-      <p class="hint" role="status">{{ busy ? '正在查询…' : `已显示 ${hits.length} 人` }}</p>
-      <ul>
-        <li
-          v-for="hit in hits"
-          :key="hit.id"
-          :class="{ active: hit.id === selectedPlayer, teammate: relations.get(hit.id) === '队友', opponent: relations.get(hit.id) === '对手' }"
-          tabindex="0"
-          @keydown.enter.self="selectedPlayer = hit.id"
-          @keydown.space.self.prevent="selectedPlayer = hit.id"
-          @click="selectedPlayer = hit.id"
-        >
-          <div class="row-top">
-            <span class="player-identity"><span class="name" :title="title(hit)">{{ title(hit) }}</span>
-            <button type="button" class="favorite" :aria-pressed="hit.isFavorite" :disabled="savingFavorites.has(hit.id)"
-              :aria-label="`收藏 ${title(hit)}`" :title="hit.isFavorite ? '取消收藏' : '收藏玩家'" @click.stop="toggleFavorite(hit)">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9Z" />
-              </svg>
-            </button></span>
-            <span v-if="hit.id === snapshot?.selfId" class="self-mark">本机</span>
-            <span v-if="relations.has(hit.id)" class="relation">本局{{ relations.get(hit.id) }}</span>
-            <span v-if="hit.hasNote" class="note-mark" title="有备注">✎</span>
-            <span class="elo num">{{ rating(hit.rating) }}</span>
-          </div>
-          <div class="row-sub hint">
-            <span>ID {{ hit.id }}</span>
-            <span v-if="hit.encounters > 0">同场 {{ hit.encounters }} 次</span>
-            <span>{{ ago(hit.lastSeenAt, now) }}</span>
-          </div>
-        </li>
-      </ul>
-      <button v-if="more" class="more" :disabled="busy" @click="search(true)">加载更多</button>
-      <p v-if="!hits.length && !failure" class="hint">没有找到。导入历史日志（bax logs import）后可以找到更多玩家。</p>
+      <BatracePlayerSearch v-if="playerSource === 'batrace'" :initial-query="query" :selected="selectedPlayer" @select="selectOnline" />
+      <template v-else>
+        <input v-model="query" type="text" class="search" aria-label="按名字或 ID 查找" placeholder="按名字或 ID 查找" />
+        <div class="list-controls">
+          <label>筛选<select v-model="filter">
+            <option value="all">全部玩家</option>
+            <option value="favorite">已收藏</option>
+            <option value="noted">有备注</option>
+            <option value="encountered">有同场记录</option>
+            <option value="rated">有 ELO</option>
+          </select></label>
+          <label>排序<select v-model="sort"><option value="recent">最近见过</option><option value="encounters">同场最多</option><option value="ratingDesc">ELO 从高到低</option><option value="ratingAsc">ELO 从低到高</option><option value="name">名字</option></select></label>
+        </div>
+        <p v-if="failure" class="error">{{ failure }}</p>
+        <p class="hint" role="status">{{ busy ? '正在查询…' : `已显示 ${hits.length} 人` }}</p>
+        <ul>
+          <li
+            v-for="hit in hits"
+            :key="hit.id"
+            :class="{ active: hit.id === selectedPlayer, teammate: relations.get(hit.id) === '队友', opponent: relations.get(hit.id) === '对手' }"
+            tabindex="0"
+            @keydown.enter.self="selectedPlayer = hit.id"
+            @keydown.space.self.prevent="selectedPlayer = hit.id"
+            @click="selectedPlayer = hit.id"
+          >
+            <div class="row-top">
+              <span class="name" :title="title(hit)">{{ title(hit) }}</span>
+              <span v-if="hit.id === snapshot?.selfId" class="self-mark">本机</span>
+              <span v-if="relations.has(hit.id)" class="relation">本局{{ relations.get(hit.id) }}</span>
+              <span v-if="hit.hasNote" class="note-mark" title="有备注">✎</span>
+              <span class="elo num">{{ rating(hit.rating) }}</span>
+            </div>
+            <div class="row-sub hint">
+              <span>ID {{ hit.id }}</span>
+              <span v-if="hit.encounters > 0">同场 {{ hit.encounters }} 次</span>
+              <span>{{ ago(hit.lastSeenAt, now) }}</span>
+            </div>
+          </li>
+        </ul>
+        <button v-if="more" class="more" :disabled="busy" @click="search(true)">加载更多</button>
+        <p v-if="!busy && !hits.length && !failure && !emptyArchive" class="hint">
+          {{ filter === 'favorite' && !query.trim() ? '暂无收藏。点击玩家档案昵称旁的星标即可收藏。' : '没有符合条件的本地玩家。' }}
+        </p>
+      </template>
     </section>
-    <PlayerDetailView v-if="selectedPlayer != null" :id="selectedPlayer" />
-    <section v-else class="card empty">
-      <p class="hint">从左边选一名玩家，或者在“当前对局”里点玩家的名字。</p>
+    <PlayerDetailView v-if="selectedPlayer != null" :id="selectedPlayer"
+      :search-hit="selectedHit?.id === selectedPlayer ? selectedHit : null" @profile-saved="reloadList" />
+    <section v-else-if="playerSource === 'local' && emptyArchive" class="card">
+      <h2>还没有玩家档案</h2>
+      <p>可以先搜索玩家，或启动《断箭》并进入对局，BAX 会自动记录同场玩家。</p>
+      <button @click="playerSource = 'batrace'">搜索 BATrace 玩家</button>
+    </section>
+    <section v-else-if="playerSource === 'batrace' || hits.length" class="card">
+      <h2>玩家档案</h2>
+      <p class="hint">{{ playerSource === 'batrace' ? '选择搜索结果即可查看玩家资料和比赛记录。' : '从列表中选择一名玩家，或者在“当前对局”里点玩家的名字。' }}</p>
     </section>
   </div>
 </template>
@@ -148,6 +165,9 @@ function title(hit: PlayerHit): string {
 .search {
   width: 100%;
 }
+.sources { display: flex; gap: 4px; margin-bottom: 12px; }
+.sources button { flex: 1; color: var(--bax-muted); background: transparent; }
+.sources button[aria-pressed="true"] { color: var(--bax-fg); background: var(--bax-selected-bg); border-color: var(--bax-selected-edge); }
 .list-controls { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; margin-top: 10px; }
 .list-controls label { display: grid; gap: 4px; color: var(--bax-muted); font-size: calc(12px * var(--bax-font-scale)); min-width: 0; }
 .list-controls select { width: 100%; padding: 6px 3px; border: 1px solid var(--bax-border); border-radius: var(--bax-radius-xs); background: var(--bax-surface-2); color: var(--bax-fg); }
@@ -187,25 +207,6 @@ li.active {
   gap: 4px;
 }
 
-.player-identity {display:inline-flex;align-items:center;min-width:0;gap:0;}
-.favorite {
-  position: relative;
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 1.25em;
-  height: 1.5em;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  color: var(--bax-muted);
-}
-.favorite::before {content:"";position:absolute;inset:50% auto auto 50%;width:24px;height:24px;transform:translate(-50%,-50%);}
-.favorite svg {display:block;width:1em;height:1em;}
-.favorite path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
-.favorite:hover, .favorite[aria-pressed="true"] { color: var(--bax-accent); }
-.favorite[aria-pressed="true"] path { fill: currentColor; }
-.favorite:focus-visible { outline: 2px solid var(--bax-accent); }
 .name {
   line-height: 1.5;
   min-width: 0;

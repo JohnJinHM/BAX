@@ -9,6 +9,8 @@ import type { ImportSummary } from "./bindings/ImportSummary";
 import type { MatchReportView } from "./bindings/MatchReportView";
 import type { PlayerDetail } from "./bindings/PlayerDetail";
 import type { PlayerHit } from "./bindings/PlayerHit";
+import type { PlayerSearchResponse } from "./bindings/PlayerSearchResponse";
+import type { PlayerSearchHit } from "./bindings/PlayerSearchHit";
 import type { ReminderRule } from "./bindings/ReminderRule";
 import type { JsonValue } from "./bindings/serde_json/JsonValue";
 import type { Snapshot } from "./bindings/Snapshot";
@@ -120,6 +122,8 @@ export const commands = {
   playerDetail: (id: number) => invoke<PlayerDetail | null>("player_detail", { id }),
   /** 默认本机优先，然后按同场次数排序；筛选在分页前执行。 */
   searchPlayers: (query: string, limit = 50, sort = "recent", filter = "all", offset = 0) => invoke<PlayerHit[]>("search_players", { query, limit, sort, filter, offset }),
+  searchBatracePlayers: (query: string) => invoke<PlayerSearchResponse>("search_batrace_players", { query }),
+  saveBatracePlayer: (hit: PlayerSearchHit) => invoke<void>("save_batrace_player", { hit }),
   /** 内容为空时删除备注。 */
   setPlayerFavorite: (id: number, favorite: boolean) => invoke<void>("set_player_favorite", { id, favorite }),
   setNote: (id: number, body: string) => invoke<void>("set_note", { id, body }),

@@ -315,6 +315,25 @@ impl Store {
 
     // ------------------------------------------------------------ 玩家
 
+    /// 搜索摘要只补充身份，不覆盖完整资料或产生同场记录。
+    pub fn save_player_identity(
+        &self,
+        id: PlayerId,
+        name: &str,
+        steam_id: Option<&str>,
+        level: Option<i64>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO players(id, name, steam_id, level) VALUES (?1, NULLIF(?2, ''), NULLIF(?3, ''), ?4)
+             ON CONFLICT(id) DO UPDATE SET
+                name = COALESCE(players.name, excluded.name),
+                steam_id = COALESCE(players.steam_id, excluded.steam_id),
+                level = COALESCE(players.level, excluded.level)",
+            params![id_to_db(id.get()), name, steam_id, level],
+        )?;
+        Ok(())
+    }
+
     pub fn player(&self, id: PlayerId) -> Result<Option<PlayerRecord>> {
         Ok(self
             .conn

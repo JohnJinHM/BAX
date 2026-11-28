@@ -25,6 +25,15 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
   mockWindows("main");
   const params = new URLSearchParams(location.search);
   const reportMode = params.has("pve") ? "pve" : params.has("custom") ? "custom" : "ranked";
+  const emptyPlayers = params.has("emptyPlayers");
+  const fetchedPlayers = new Set<number>();
+  if (emptyPlayers) {
+    fixtureSnapshot.current = null;
+    fixtureSnapshot.selfId = null;
+    fixtureSnapshot.api = { inFlight: 0, queued: 0, pausedUntil: null, lastError: null };
+    fixtureSnapshot.archive = { pending: 0, lastArchived: null, seq: 0 };
+    fixtureSnapshot.alert = null;
+  }
   const previewLogDir = fixtureSnapshot.log.dir;
   if (params.has("missingLog")) {
     fixtureSnapshot.current = null;
@@ -167,14 +176,26 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
             specs:reportMode === "ranked" ? report.specs[id] ?? [] : [],
           }];
         });
-        return { lastQueriedAt: at == null ? null : Number(at), fights };
+        return { hasSyncedFights: at != null, lastQueriedAt: at == null ? null : Number(at), fights };
       }
       case "stop_player_fights": return null;
       case "sync_player_fights":
         localStorage.setItem(`bax.dev.fightQuery.${(args as {id:number}).id}`, String(Date.now()));
         return "查询完成 · 预览战报已收录";
-      case "player_detail":
-        return fixtureDetail(Number((args as { id?: number } | undefined)?.id));
+      case "refresh_player": {
+        fetchedPlayers.add((args as { id: number }).id);
+        return null;
+      }
+      case "save_batrace_player": {
+        fetchedPlayers.add((args as { hit: { id: number } }).hit.id);
+        return null;
+      }
+      case "player_detail": {
+        const { id } = args as { id: number };
+        const detail = fixtureDetail(id);
+        if (!emptyPlayers || !detail) return detail;
+        return fetchedPlayers.has(id) ? { ...detail, firstSeenAt: null, lastSeenAt: null, logName: null } : null;
+      }
       case "match_history": {
         const { query = "", player, limit = 100, offset = 0 } = args as { query?: string; player?: number; limit?: number; offset?: number };
         const q = query.trim().toLowerCase();
@@ -212,7 +233,16 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
       }
       case "search_players": {
         const { query = "", sort = "recent", filter = "all", limit = 80, offset = 0 } = args as { query?: string; sort?: string; filter?: string; limit?: number; offset?: number };
-        const hits = fixtureHits(query).filter(p => filter === "noted" ? p.hasNote : filter === "rated" ? p.rating != null : filter === "encountered" ? p.encounters > 0 : true);
+        const hits = fixtureHits(query).filter(p => !emptyPlayers || fetchedPlayers.has(p.id))
+          .filter(p => {
+            switch (filter) {
+              case "favorite": return p.isFavorite;
+              case "noted": return p.hasNote;
+              case "rated": return p.rating != null;
+              case "encountered": return p.encounters > 0;
+              default: return true;
+            }
+          });
         const relations = currentRelations(fixtureSnapshot.current);
         const tier = (p: (typeof hits)[number]) => {
           if (p.id === fixtureSnapshot.selfId) return 0;
@@ -232,6 +262,13 @@ export function installMock(options: { locked?: boolean; collapsed?: boolean } =
           return Number(b.id === fixtureSnapshot.selfId) - Number(a.id === fixtureSnapshot.selfId) || b.encounters - a.encounters;
         });
         return hits.slice(offset, offset + limit);
+      }
+      case "search_batrace_players": {
+        const query = (args as { query: string }).query.trim().toLowerCase();
+        const players = fixtureHits("").map(hit => ({
+          id: hit.id, name: hit.name ?? "", level: hit.level, steam_id: fixtureDetail(hit.id)?.steamId ?? null,
+        })).filter(p => query && (p.name.toLowerCase().includes(query) || String(p.id) === query || p.steam_id === query));
+        return { players, count: players.length };
       }
       default:
         // 事件订阅、窗口大小等调用一律当作成功

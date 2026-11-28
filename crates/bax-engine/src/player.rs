@@ -50,6 +50,7 @@ pub struct PlayerDetail {
     pub matches: Vec<EncounterRow>,
     /// 这是本机玩家自己。
     pub is_self: bool,
+    pub is_favorite: bool,
     pub trace_count: Option<u32>,
     pub trace_checked_at: Option<Timestamp>,
 }

@@ -101,6 +101,7 @@ pub struct PlayerFight {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlayerFightArchive {
+    pub has_synced_fights: bool,
     pub last_queried_at: Option<bax_core::Timestamp>,
     pub fights: Vec<PlayerFight>,
 }
@@ -140,6 +141,42 @@ pub struct Engine {
 impl Engine {
     pub async fn check_data_sources(&self) -> Vec<bax_batrace::client::SourceCheck> {
         self.client.check_sources().await
+    }
+
+    pub async fn search_batrace_players(
+        &self,
+        query: &str,
+    ) -> Result<bax_batrace::model::PlayerSearchResponse, CommandError> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Ok(Default::default());
+        }
+        self.client
+            .search_players(query)
+            .await
+            .map(|response| response.data)
+            .map_err(|error| CommandError::Rejected(error.to_string()))
+    }
+
+    /// 保存已打开的搜索结果，即使后续 STB 刷新失败也能从本地重试。
+    pub async fn save_batrace_player(
+        &self,
+        hit: crate::PlayerSearchHit,
+    ) -> Result<(), CommandError> {
+        if hit.id == 0 {
+            return Err(CommandError::Rejected("玩家 ID 无效".into()));
+        }
+        self.read(move |store| {
+            store
+                .save_player_identity(
+                    PlayerId(hit.id),
+                    &hit.name,
+                    hit.steam_id.as_deref(),
+                    hit.level,
+                )
+                .map_err(|err| err.to_string())
+        })
+        .await
     }
 
     /// 打开长期库并启动引擎。必须在 tokio 运行时里调用。
@@ -490,6 +527,10 @@ impl Engine {
                 })
                 .collect();
             Ok(PlayerFightArchive {
+                has_synced_fights: last_queried_at.is_some()
+                    && !store
+                        .first_fight_query_pending(id)
+                        .map_err(|e| e.to_string())?,
                 last_queried_at,
                 fights,
             })
@@ -596,6 +637,10 @@ impl Engine {
                 _=stop.changed()=>break,
                 _=tokio::time::sleep(std::time::Duration::from_millis(120))=>{},
             }
+        }
+        if saved + reused > 0 || (total == 0 && !*stop.borrow()) {
+            self.read(move |store| store.confirm_fight_query(id).map_err(|e| e.to_string()))
+                .await?;
         }
         let finished = if *stop.borrow() {
             "已停止"

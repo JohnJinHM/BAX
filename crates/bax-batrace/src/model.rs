@@ -409,18 +409,21 @@ pub struct UnitCountry {
     pub ui_name: Option<String>,
 }
 
-/// 按昵称查询的候选，字段来自搜索接口的 snake_case 响应。
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+/// BATrace 网站搜索的结果，输入可以是昵称、玩家 ID 或 Steam64。
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct PlayerSearchResponse {
     pub players: Vec<PlayerSearchHit>,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct PlayerSearchHit {
     pub id: u64,
     pub name: String,
     pub level: Option<i64>,
+    pub steam_id: Option<String>,
 }

@@ -38,7 +38,7 @@ BAX 现在优先查询 `https://api.brokenarrowgame.tech/user/{id}` 获取基础
 
 | 路径 | 内容 | 空结果的含义 |
 |---|---|---|
-| `/api/players/search?q=昵称&limit=50` | 昵称候选，含 `players[].id/name/level` 与 `count`；可能是子串匹配，结果不保证身份唯一 | 没有候选；保留画面名字 |
+| `/api/players/search?q=查询词&limit=50` | 网站玩家搜索。支持昵称、游戏内玩家 ID、Steam64，返回 `players[].id/name/steam_id/level` 与 `count`。Steam64 以字符串传递，昵称可能匹配多人 | 没有匹配的玩家 |
 | `/api/players/info?stbid=玩家ID` | 玩家资料、累计统计、近期比赛 ID | `info` 为空：站点没有这名玩家 |
 | `/api/players/{玩家ID}/trace` | Trace Express 的 `traceCount`，表示玩家当前收到的社区标记次数 | 明确返回 0 时记录为 0，界面只展示正数。请求失败或计数无效时保留上次记录 |
 | `/api/players/matches?stbid=玩家ID&offset=N&limit=N` | 比赛摘要，新的在前，分页 | — |

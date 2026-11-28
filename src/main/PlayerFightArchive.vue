@@ -17,6 +17,7 @@ const limit = ref<number | string>(DEFAULT_FIGHT_LIMIT);
 const validLimit = computed(() => typeof limit.value === "number" && Number.isInteger(limit.value) && limit.value >= 1 && limit.value <= 100);
 const fights = defineModel<PlayerFight[]>("fights", {required:true});
 const ready = defineModel<boolean>("ready", {required:true});
+const hasSynced = defineModel<boolean>("hasSynced", {required:true});
 const lastQueriedAt = ref<number | null>(null);
 const query = ref("");
 const page = ref(0);
@@ -80,6 +81,7 @@ async function load() {
       fights.value = archive.fights;
       ready.value = true;
       lastQueriedAt.value = archive.lastQueriedAt;
+      hasSynced.value = archive.hasSyncedFights;
       failure.value = "";
     }
   } catch (e) {

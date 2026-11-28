@@ -939,6 +939,66 @@ async fn invalid_reminder_rules_are_rejected_and_nothing_changes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn batrace_search_works_before_the_first_game_and_preserves_steam64()
+-> Result<(), CommandError> {
+    let fx = Fixture::new().await;
+    let steam = "76561190000000201";
+    for query in ["桜 & Dune", "201", steam] {
+        Mock::given(method("GET"))
+            .and(path("/api/players/search"))
+            .and(query_param("q", query))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "players": [{"id": 201, "name": "桜 & Dune", "steam_id": steam, "level": 42}],
+                "count": 1
+            })))
+            .expect(1)
+            .mount(&fx.server)
+            .await;
+    }
+    fx.serve_profiles().await;
+    let engine = fx.start();
+    for query in [" 桜 & Dune ", "201"] {
+        let result = engine.search_batrace_players(query).await?;
+        assert_eq!(result.count, 1);
+        assert_eq!(result.players[0].id, 201);
+        assert_eq!(result.players[0].steam_id.as_deref(), Some(steam));
+    }
+    assert!(
+        engine
+            .search_batrace_players("  ")
+            .await?
+            .players
+            .is_empty()
+    );
+    let hit = engine
+        .search_batrace_players(steam)
+        .await?
+        .players
+        .remove(0);
+    assert!(engine.search_players("", 10).await?.is_empty());
+    engine.save_batrace_player(hit.clone()).await?;
+    engine.shutdown().await;
+    let engine = fx.start();
+    let selected = engine
+        .player_detail(PlayerId(201))
+        .await?
+        .expect("已保存打开的玩家");
+    assert_eq!(selected.steam_id.as_deref(), Some(steam));
+    assert_eq!(selected.name.as_deref(), Some("桜 & Dune"));
+    assert_eq!(selected.first_seen_at, None);
+    assert_eq!(selected.fetched_at, None);
+    engine.refresh_player(PlayerId(201)).await?;
+    engine.save_batrace_player(hit).await?;
+    let hits = engine.search_players("", 10).await?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].id, PlayerId(201));
+    assert_eq!(hits[0].name.as_deref(), Some("API-201"));
+    assert_eq!(hits[0].encounters, 0);
+    engine.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn favorites_survive_restart_and_can_be_removed() {
     let fx = Fixture::new().await;
     fx.serve_profiles().await;
@@ -957,6 +1017,14 @@ async fn favorites_survive_restart_and_can_be_removed() {
     let engine = fx.start();
     wait_for(&engine, "重新就绪", |s| s.log.ready).await;
     let rows = engine.search_players("", 2).await.expect("默认排序");
+    assert!(
+        engine
+            .player_detail(PlayerId(101))
+            .await
+            .expect("查询")
+            .expect("档案")
+            .is_favorite
+    );
     assert_eq!(rows[0].id, engine.snapshot().self_id.expect("本机"));
     assert_eq!(rows[1].id, PlayerId(101));
     assert!(rows[1].is_favorite);
@@ -1423,6 +1491,7 @@ async fn stb_player_history_archives_once_and_keeps_partial_results_after_restar
         .await
         .expect("other side");
     assert_eq!(losing.last_queried_at, None);
+    assert!(!losing.has_synced_fights);
     assert_eq!(losing.fights[0].won, Some(false));
     let spectators = engine
         .player_fights(PlayerId(103))
@@ -1544,6 +1613,7 @@ async fn archive_search_can_stop_an_inflight_report_and_restart_with_a_limit() {
     let partial = engine.player_fights(id).await.expect("partial archive");
     assert_eq!(partial.fights.len(), 1);
     assert!(partial.last_queried_at.is_some());
+    assert!(partial.has_synced_fights);
     assert!(
         engine
             .sync_player_fights(id, 1)

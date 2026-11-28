@@ -194,14 +194,36 @@ pub struct StoredPlayerFight {
     pub units: BTreeSet<i64>,
 }
 
+fn first_fight_query_key(id: PlayerId) -> String {
+    format!("players.firstFightQueryPending.{}", id.get())
+}
+
 impl Store {
-    pub fn record_fight_query(&self, id: PlayerId, at: Timestamp) -> Result<()> {
-        self.conn.execute(
+    pub fn record_fight_query(&mut self, id: PlayerId, at: Timestamp) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        // 已有查询记录沿用原状态。首次查询若断网或中断，保留资料页的提示。
+        tx.execute(
+            "INSERT OR IGNORE INTO settings(key, value)
+             SELECT ?1, 'true' WHERE NOT EXISTS (SELECT 1 FROM player_fight_queries WHERE player_id = ?2)",
+            params![first_fight_query_key(id), id_to_db(id.get())],
+        )?;
+        tx.execute(
             "INSERT INTO player_fight_queries(player_id, queried_at) VALUES (?1, ?2)
              ON CONFLICT(player_id) DO UPDATE SET queried_at = MAX(queried_at, excluded.queried_at)",
             params![id_to_db(id.get()), at.as_millis()],
         )?;
+        tx.commit()?;
         Ok(())
+    }
+
+    pub fn first_fight_query_pending(&self, id: PlayerId) -> Result<bool> {
+        Ok(self
+            .setting::<bool>(&first_fight_query_key(id))?
+            .unwrap_or(false))
+    }
+
+    pub fn confirm_fight_query(&mut self, id: PlayerId) -> Result<()> {
+        self.remove_setting(&first_fight_query_key(id)).map(|_| ())
     }
 
     pub fn last_fight_query(&self, id: PlayerId) -> Result<Option<Timestamp>> {

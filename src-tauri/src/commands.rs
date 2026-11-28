@@ -228,6 +228,30 @@ pub async fn search_players(
 }
 
 #[tauri::command]
+pub async fn search_batrace_players(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<bax_engine::PlayerSearchResponse, String> {
+    state
+        .engine
+        .search_batrace_players(&query)
+        .await
+        .map_err(rejected("search_batrace_players"))
+}
+
+#[tauri::command]
+pub async fn save_batrace_player(
+    state: State<'_, AppState>,
+    hit: bax_engine::PlayerSearchHit,
+) -> CommandResult {
+    state
+        .engine
+        .save_batrace_player(hit)
+        .await
+        .map_err(rejected("save_batrace_player"))
+}
+
+#[tauri::command]
 pub async fn set_player_favorite(
     state: State<'_, AppState>,
     id: u64,

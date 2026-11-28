@@ -11,6 +11,7 @@ const requestedPlayer = Number(params.get("player"));
 const requestedMatch = Number(params.get("match"));
 
 export const currentTab = ref<Tab>(tabs.find((t) => t === params.get("tab")) ?? "match");
+export const playerSource = ref<"local" | "batrace">("local");
 export const selectedPlayer = ref<number | null>(Number.isFinite(requestedPlayer) && requestedPlayer > 0 ? requestedPlayer : null);
 
 export const selectedMatch = ref<number | null>(Number.isFinite(requestedMatch) && requestedMatch > 0 ? requestedMatch : null);
@@ -30,6 +31,13 @@ export function openMatch(id: number) {
 }
 
 export function openPlayer(id: number) {
+  playerSource.value = "local";
   selectedPlayer.value = id;
+  currentTab.value = "players";
+}
+
+export function openPlayerSearch() {
+  selectedPlayer.value = null;
+  playerSource.value = "batrace";
   currentTab.value = "players";
 }

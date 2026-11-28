@@ -39,6 +39,7 @@ mod snapshot;
 mod spec_worker;
 mod specs;
 
+pub use bax_batrace::model::{PlayerSearchHit, PlayerSearchResponse};
 pub use bax_core::report::{
     ClassShare, MatchAnalysis, PlayerReport, Sortie, TeamReport, UnitClass, UnitRow,
 };

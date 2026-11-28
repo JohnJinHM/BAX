@@ -235,6 +235,8 @@ stateDiagram-v2
 | `open_diag_dir`、`export_diag` | 打开诊断日志目录；导出脱敏后的诊断包，返回文件路径 | 0.2 |
 | `search_players` | 按名字或 ID 查找。默认按最近见过排序，依次列出本机、本局队友和对手、收藏及其他玩家，每组内按时间倒序；精确 ID 命中优先 | 0.3 |
 | `set_player_favorite` | 按玩家 ID 设置或取消收藏，保存在长期库的 `settings` 表中 | 0.3 |
+| `search_batrace_players` | 按昵称、玩家 ID 或 Steam64 在 BATrace 搜索候选 | 0.3 |
+| `save_batrace_player` | 打开搜索结果时保存所选玩家的身份，随后刷新资料并同步近期战报 | 0.3 |
 | `player_detail` | 一名玩家的完整档案：资料、备注、ELO 变化、同场比赛 | 0.3 |
 | `set_note` | 保存备注；内容为空时删除 | 0.3 |
 | `refresh_player` | 立即从接口取一次这名玩家的资料，不管他在不在当前比赛 | 0.3 |

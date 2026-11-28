@@ -7,6 +7,25 @@ fn t(secs: i64) -> Timestamp {
     Timestamp::from_secs(secs)
 }
 
+#[test]
+fn first_fight_query_stays_pending_across_failure_and_restart() -> Result<()> {
+    let dir = tempfile::tempdir().expect("临时目录");
+    let path = dir.path().join("bax.db");
+    let id = PlayerId(201);
+    let mut store = Store::open(&path)?;
+    store.record_fight_query(id, t(100))?;
+    drop(store);
+    let mut store = Store::open(&path)?;
+    assert_eq!(store.last_fight_query(id)?, Some(t(100)));
+    assert!(store.first_fight_query_pending(id)?);
+    store.record_fight_query(id, t(101))?;
+    assert!(store.first_fight_query_pending(id)?);
+    store.confirm_fight_query(id)?;
+    store.record_fight_query(id, t(102))?;
+    assert!(!store.first_fight_query_pending(id)?);
+    Ok(())
+}
+
 fn entry(id: u64, name: &str, team: Team) -> RosterEntry {
     RosterEntry {
         id: PlayerId(id),

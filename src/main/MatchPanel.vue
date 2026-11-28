@@ -12,7 +12,7 @@ import {
   ratio,
 } from "../shared/format";
 import { useNow } from "../shared/useNow";
-import { openMatch, openPlayer } from "./navigation";
+import { openMatch, openPlayer, openPlayerSearch } from "./navigation";
 import SpecIcon from "../shared/SpecIcon.vue";
 import PlayerBadges from "../shared/PlayerBadges.vue";
 import { useCurrentReport } from "../shared/useCurrentReport";
@@ -155,11 +155,16 @@ async function refresh() {
   </section>
   <section v-else class="card">
     <h2>当前对局</h2>
+    <template v-if="snapshot">
+      <p>启动《断箭》并进入对局后，这里会显示玩家名单。也可以先在 BATrace 上查找玩家。</p>
+      <button class="player-search" @click="openPlayerSearch">搜索玩家</button>
+    </template>
     <LogDirectory />
   </section>
 </template>
 
 <style scoped>
+.player-search { margin-bottom: 12px; }
 .head h2 {
   margin: 0;
 }

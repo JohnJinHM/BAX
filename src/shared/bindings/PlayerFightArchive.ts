@@ -2,4 +2,4 @@
 import type { PlayerFight } from "./PlayerFight";
 import type { Timestamp } from "./Timestamp";
 
-export type PlayerFightArchive = { lastQueriedAt: Timestamp | null, fights: Array<PlayerFight>, };
+export type PlayerFightArchive = { hasSyncedFights: boolean, lastQueriedAt: Timestamp | null, fights: Array<PlayerFight>, };

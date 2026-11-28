@@ -129,6 +129,12 @@ impl Store {
         Ok(())
     }
 
+    pub fn is_player_favorite(&self, player: PlayerId) -> Result<bool> {
+        Ok(self
+            .setting::<bool>(&format!("players.favorite.{}", id_to_db(player.get())))?
+            .unwrap_or(false))
+    }
+
     /// 收藏是本机的个人设置，每个玩家单独写入，取消时删除对应键。
     pub fn set_player_favorite(&mut self, player: PlayerId, favorite: bool) -> Result<()> {
         let key = format!("players.favorite.{}", id_to_db(player.get()));
@@ -189,6 +195,7 @@ impl Store {
             ),
         };
         let condition = match filter {
+            "favorite" => "is_favorite = 1",
             "noted" => "has_note = 1",
             "encountered" => "encounters > 0",
             "rated" => "rating IS NOT NULL",
@@ -549,6 +556,17 @@ mod tests {
             [(301, false), (201, true)]
         );
         assert_eq!(page(&store, None, "name", 0), [(301, false), (101, false)]);
+        let favorites = |store: &Store, query| {
+            store
+                .search_players_filtered(query, 1, 0, "recent", "favorite", Some(PlayerId(500)))
+                .expect("筛选收藏")
+                .into_iter()
+                .map(|p| p.id.get())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(favorites(&store, ""), [201]);
+        assert_eq!(favorites(&store, "201"), [201]);
+        assert!(favorites(&store, "101").is_empty());
         for _ in 0..2 {
             store
                 .set_player_favorite(PlayerId(201), false)
@@ -562,6 +580,7 @@ mod tests {
             page(&store, None, "recent", 2),
             [(301, false), (201, false)]
         );
+        assert!(favorites(&store, "").is_empty());
     }
 
     #[test]

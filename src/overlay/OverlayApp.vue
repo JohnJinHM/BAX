@@ -341,8 +341,8 @@ watch(appearance, () => requestAnimationFrame(relayout));
             <span class="met num">{{ p.encounters.total > 0 ? `遇${p.encounters.total}` : "" }}</span>
             <span class="name">
               <span class="name-line">
-                <a v-if="p.id != null" class="nickname" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" title="在浏览器中打开 BATrace 玩家页面" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
-                <span v-else class="nickname">{{ p.name }}</span>
+                <a v-if="p.id != null" class="nickname" :href="`https://dash.batrace.top/player/${p.id}`" target="_blank" rel="noopener noreferrer" :title="`${p.name} · 在浏览器中打开 BATrace 玩家页面`" @click.prevent="run(() => commands.openBatracePlayer(p.id!))">{{ p.name }}</a>
+                <span v-else class="nickname" :title="p.name">{{ p.name }}</span>
                 <PlayerBadges :row="p" />
               </span>
               <span v-if="p.note" class="note" :title="p.note">{{ p.note }}</span>
@@ -682,10 +682,12 @@ li.stale .elo {
   white-space: nowrap;
 }
 
-.name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
-.nickname, .note { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.note { display: block; }
+.name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 3px; }
+.nickname, .note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 先按短昵称给标签排位，昵称再使用本行剩余宽度，短名后的标签仍然紧贴。 */
+.nickname { flex: 1 1 2.5em; max-width: max-content; }
 .note {
+  display: block;
   color: var(--bax-warn);
   font-size: 11px;
 }

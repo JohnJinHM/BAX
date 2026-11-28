@@ -191,15 +191,15 @@ impl BatraceClient {
         Ok(response.data.trace_count)
     }
 
-    /// 名称搜索；URL 编码后复用统一错误分类，不记录查询文本。
+    /// 与网站共用的搜索接口，原样传递昵称、玩家 ID 或 Steam64。
     pub async fn search_players(
         &self,
-        name: &str,
+        query: &str,
     ) -> Result<Fetched<crate::model::PlayerSearchResponse>, ApiError> {
         let mut url = reqwest::Url::parse("https://localhost/api/players/search")
             .map_err(|_| ApiError::Config("无效搜索地址".into()))?;
         url.query_pairs_mut()
-            .append_pair("q", name)
+            .append_pair("q", query)
             .append_pair("limit", "50");
         let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
         self.get("players.search", &path, Some(self.player_info_timeout))

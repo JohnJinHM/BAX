@@ -38,4 +38,4 @@ matches: Array<EncounterRow>,
 /**
  * 这是本机玩家自己。
  */
-isSelf: boolean, traceCount: number | null, traceCheckedAt: Timestamp | null, };
+isSelf: boolean, isFavorite: boolean, traceCount: number | null, traceCheckedAt: Timestamp | null, };

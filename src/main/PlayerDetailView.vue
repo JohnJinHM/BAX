@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from "vue";
 
 import type { PlayerDetail } from "../shared/bindings/PlayerDetail";
+import type { PlayerSearchHit } from "../shared/bindings/PlayerSearchHit";
 import { commands, errorText, useSnapshot } from "../shared/engine";
 import { ago, minutes, percent, rating, ratio } from "../shared/format";
 import { useNow } from "../shared/useNow";
@@ -18,9 +19,11 @@ import { countries } from "../../crates/bax-engine/src/spec-units.json";
 import Sparkline from "./Sparkline.vue";
 import SpecIcon from "../shared/SpecIcon.vue";
 
-const props = defineProps<{ id: number }>();
+const props = defineProps<{ id: number; searchHit?: PlayerSearchHit | null }>();
+const emit = defineEmits<{ profileSaved: [] }>();
 
 const archiveReady = ref(false);
+const hasSyncedFights = ref(false);
 const fights = ref<PlayerFight[]>([]);
 const averages = computed(() => playerAverages(fights.value));
 const now = useNow(60_000);
@@ -30,6 +33,7 @@ const missing = ref(false);
 const failure = ref<string | null>(null);
 const drafts = reactive(new Map<number, string>());
 const pendingSaves = reactive(new Set<number>());
+const savingFavorites = reactive(new Set<number>());
 const noteDirty = computed(() => drafts.has(props.id));
 const savingNote = computed(() => pendingSaves.has(props.id));
 const noteMessage = ref<{ ok: boolean; text: string } | null>(null);
@@ -53,9 +57,10 @@ async function load() {
   failure.value = null;
   try {
     const result = await commands.playerDetail(requestedId);
-    if (sequence !== loadSequence || requestedId !== props.id) return;
-    detail.value = result;
-    missing.value = result == null;
+    if (sequence === loadSequence && requestedId === props.id) {
+      detail.value = result;
+      missing.value = result == null;
+    }
   } catch (error) {
     if (sequence === loadSequence) failure.value = errorText(error);
   } finally {
@@ -63,18 +68,29 @@ async function load() {
   }
 }
 
-watch(
-  () => props.id,
-  () => {
-    noteMessage.value = null;
-    detail.value = null;
-    fights.value = [];
-    archiveReady.value = false;
-    preview.value = null;
-    void load();
-  },
-  { immediate: true },
-);
+watch(() => props.id, () => {
+  noteMessage.value = null;
+  detail.value = null;
+  missing.value = false;
+  fights.value = [];
+  archiveReady.value = false;
+  hasSyncedFights.value = false;
+  preview.value = null;
+  void load();
+}, { immediate: true });
+
+watch(() => props.searchHit, async hit => {
+  if (!hit) return;
+  try {
+    await commands.saveBatracePlayer(hit);
+  } catch (error) {
+    if (props.id === hit.id) failure.value = `保存玩家失败：${errorText(error)}`;
+    return;
+  }
+  emit("profileSaved");
+  if (props.id === hit.id) void load();
+  await refresh(hit.id);
+}, { immediate: true });
 watch(() => snapshot.value?.archive.seq, (next, previous) => {
   if (previous != null && next !== previous) void load();
 });
@@ -88,7 +104,7 @@ watch(() => {
 
 const title = computed(() => {
   const d = detail.value;
-  return d?.name ?? d?.logName ?? `ID ${props.id}`;
+  return d?.name ?? d?.logName ?? props.searchHit?.name ?? `ID ${props.id}`;
 });
 
 const historyPoints = computed(() =>
@@ -129,14 +145,32 @@ async function saveNote() {
   }
 }
 
-async function refresh() {
+async function toggleFavorite() {
   const id = props.id;
+  if (!detail.value || savingFavorites.has(id)) return;
+  savingFavorites.add(id);
+  try {
+    await commands.setPlayerFavorite(id, !detail.value.isFavorite);
+    emit("profileSaved");
+    if (props.id === id) await load();
+  } catch (error) {
+    if (props.id === id) failure.value = errorText(error);
+  } finally {
+    savingFavorites.delete(id);
+  }
+}
+
+async function refresh(id: number) {
   if (refreshingPlayers.has(id)) return;
   refreshingPlayers.add(id);
-  failure.value = null;
+  if (props.id === id) failure.value = null;
   try {
     // A failed profile lookup must still allow the archive request to finish.
-    const [profile, archive] = await Promise.allSettled([commands.refreshPlayer(id), syncFights(id)]);
+    const profileRequest = commands.refreshPlayer(id).then(async () => {
+      emit("profileSaved");
+      if (props.id === id) await load();
+    });
+    const [profile, archive] = await Promise.allSettled([profileRequest, syncFights(id)]);
     if (props.id === id) {
       await load();
       if (props.id === id) {
@@ -156,16 +190,30 @@ async function refresh() {
 <template>
   <section class="card detail">
     <div class="row head">
-      <h2>{{ title }}</h2>
+      <div class="identity">
+        <h2>{{ title }}</h2>
+        <button v-if="detail" type="button" class="favorite" :aria-pressed="detail.isFavorite"
+          :disabled="savingFavorites.has(id)" aria-label="收藏玩家" :title="detail.isFavorite ? '取消收藏' : '收藏玩家'" @click="toggleFavorite">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9Z" />
+          </svg>
+        </button>
+      </div>
       <PlayerBadges v-if="detail" :row="{ profile: detail.profile, traceCount: detail.traceCount, labels: playerLabels(detail.id, snapshot?.current?.labels) }" />
       <span v-if="detail?.isSelf" class="tag">本机</span>
       <span class="hint">ID {{ id }}</span>
       <span v-if="detail?.logName && detail.logName !== detail.name" class="hint">日志名 {{ detail.logName }}</span>
-      <span v-if="detail?.steamId" class="hint">Steam {{ detail.steamId }}</span>
-      <button class="refresh" title="刷新玩家资料和最近 20 场对局" :disabled="refreshing" @click="refresh">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
+      <span v-if="detail?.steamId || searchHit?.steam_id" class="hint">Steam64 {{ detail?.steamId ?? searchHit?.steam_id }}</span>
+      <div class="refresh">
+        <small v-if="detail?.firstSeenAt != null && archiveReady && !hasSyncedFights && !refreshing" class="hint first-sync">
+          尚未查询近期战局，当前统计仅基于本地战报。
+        </small>
+        <button title="刷新玩家资料和最近 20 场对局" :disabled="refreshing" @click="refresh(id)">{{ refreshing ? "正在刷新…" : "刷新资料" }}</button>
+      </div>
     </div>
     <p v-if="failure" class="error">{{ failure }}</p>
-    <p v-if="missing" class="hint">长期库里还没有这名玩家。可以点“刷新资料”从 STB 查一次。</p>
+    <p v-if="missing && refreshing" class="hint" role="status">正在获取玩家资料…</p>
+    <p v-else-if="missing" class="hint">本地还没有这名玩家的资料。点击“刷新资料”可从 STB 获取。</p>
 
     <div v-if="detail" class="overview">
     <div class="stats">
@@ -236,7 +284,7 @@ async function refresh() {
 
     </template>
 
-    <PlayerFightArchive v-model:fights="fights" v-model:ready="archiveReady" :id="id" :encounters="detail?.isSelf ? [] : (detail?.matches ?? [])" @preview="preview = $event" />
+    <PlayerFightArchive v-model:fights="fights" v-model:ready="archiveReady" v-model:has-synced="hasSyncedFights" :id="id" :encounters="detail?.isSelf ? [] : (detail?.matches ?? [])" @preview="preview = $event" />
     <PlayerReportPreview v-if="preview" :match-id="preview.id" :map="preview.map" :player-id="id" :player-name="title" @close="preview = null" />
 
   </section>
@@ -267,9 +315,15 @@ async function refresh() {
   font-size: calc(12px * var(--bax-font-scale));
 }
 
-.refresh {
-  margin-left: auto;
-}
+.identity { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.identity h2 { overflow-wrap: anywhere; }
+.favorite { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; background: transparent; border: 0; color: var(--bax-muted); }
+.favorite path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.favorite:hover, .favorite[aria-pressed="true"] { color: var(--bax-accent); }
+.favorite[aria-pressed="true"] path { fill: currentColor; }
+.favorite:focus-visible { outline: 2px solid var(--bax-accent); }
+.refresh { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.first-sync { color: var(--bax-warn); }
 
 .detail {container-type:inline-size;}
 .overview {display:grid;grid-template-columns:minmax(185px,1fr) minmax(0,2fr);align-items:start;gap:16px;margin:20px 0 8px;}

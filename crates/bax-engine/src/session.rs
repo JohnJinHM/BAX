@@ -679,6 +679,7 @@ impl Session {
             history: self.store.rating_history(id)?,
             matches: self.store.encounter_list(id, DETAIL_MATCH_LIMIT)?,
             is_self: self_id == Some(id),
+            is_favorite: self.store.is_player_favorite(id)?,
         }))
     }
 

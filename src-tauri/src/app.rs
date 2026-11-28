@@ -117,6 +117,8 @@ pub fn run() {
             commands::sync_player_fights,
             commands::stop_player_fights,
             commands::search_players,
+            commands::search_batrace_players,
+            commands::save_batrace_player,
             commands::set_player_favorite,
             commands::set_note,
             commands::refresh_player,

@@ -181,7 +181,7 @@ export function fixtureDetail(id: number): PlayerDetail | null {
     id: p.id,
     name: p.name,
     logName: p.logName,
-    steamId: "76561190000000201",
+    steamId: `76561190000000${String(p.id).padStart(3, "0")}`,
     traceCount: p.traceCount,
     traceCheckedAt: p.traceCount == null ? null : now - 30_000,
     profile: p.profile,
@@ -193,6 +193,7 @@ export function fixtureDetail(id: number): PlayerDetail | null {
     history,
     matches,
     isSelf: p.isSelf,
+    isFavorite: localStorage.getItem(`bax.dev.favorite.${id}`) === "1",
   };
 }
 
